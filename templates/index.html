@@ -1,61 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="网易云音乐工具箱 - 支持歌曲搜索、解析、下载等功能">
+    <meta name="author" content="Suxiaoqingx">
     <title>网易云音乐工具箱</title>
     <link href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/aplayer/1.10.1/APlayer.min.css">
     <style>
-        body {
-            background-color: #f8f9fa;
-            color: #333;
+        :root {
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-bg: #f8f9fa;
+            --text-color: #333;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.07);
         }
+        
+        body {
+            background-color: var(--light-bg);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
         .container {
             max-width: 800px;
         }
-        .form-group {
-            margin-bottom: 15px;
+        
+        header h1 {
+            font-weight: 700;
+            margin-bottom: 1rem;
         }
+        
+        .card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .form-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .btn {
+            transition: all 0.3s ease;
+        }
+        
         .btn-primary {
-            margin-top: 20px;
-            background-color: #007bff;
-            border-color: #007bff;
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
         }
+        
         .btn-primary:hover {
             background-color: #0056b3;
             border-color: #004085;
         }
+        
         .btn-success {
-            margin-top: 20px;
-            background-color: #28a745;
-            border-color: #28a745;
+            background-color: var(--success-color);
+            border-color: var(--success-color);
         }
+        
         .btn-success:hover {
             background-color: #218838;
             border-color: #1e7e34;
         }
+        
         .btn-warning {
-            margin-top: 20px;
-            background-color: #ffc107;
-            border-color: #ffc107;
+            background-color: var(--warning-color);
+            border-color: var(--warning-color);
         }
+        
         .btn-warning:hover {
             background-color: #e0a800;
             border-color: #d39e00;
         }
-        #song-info {
-            margin-top: 20px;
+        
+        .btn-info {
+            background-color: var(--info-color);
+            border-color: var(--info-color);
         }
-        #song-info img {
-            max-width: 100%;
-            border-radius: 8px;
+        
+        .btn-info:hover {
+            background-color: #138496;
+            border-color: #117a8b;
         }
-        .alert-info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border-color: #bee5eb;
-        }
+        
         /* 歌曲/歌单标题过长自动省略号 */
         .song-title, .playlist-title {
             display: inline-block;
@@ -65,11 +100,13 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        
         /* 歌单列表按钮不换行 */
         .list-group-item .select-song {
             flex-shrink: 0;
             margin-left: 10px;
         }
+        
         /* 歌词区域美化 */
         .lyric-box {
             max-height: 180px;
@@ -83,196 +120,272 @@
             line-height: 1.7;
             margin-bottom: 0;
         }
+        
+        /* 结果展示区域 */
+        .result-card {
+            box-shadow: var(--shadow-sm);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 576px) {
+            .song-title, .playlist-title {
+                max-width: 120px;
+            }
+            
+            .lyric-box {
+                max-height: 150px;
+                font-size: 14px;
+            }
+        }
+        
+        /* 加载动画 */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 平滑滚动 */
+        html {
+            scroll-behavior: smooth;
+        }
     </style>
 </head>
 <body>
     <div class="container mt-5">
-        <h1 class="text-center mb-4">网易云音乐工具箱</h1>
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <form id="main-form">
-                    <div class="mb-3">
-                        <label class="form-label">功能选择</label>
-                        <select id="mode-select" class="form-select">
-                            <option value="search">歌曲搜索</option>
-                            <option value="parse">单曲解析</option>
-                            <option value="playlist">歌单解析</option>
-                            <option value="album">专辑解析</option>
-                            <option value="download">音乐下载</option>
-                        </select>
-                    </div>
-                    <div id="search-area">
-                        <div class="mb-3">
-                            <label for="search_keywords" class="form-label">搜索关键词</label>
-                            <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索">
-                        </div>
-                        <div class="mb-3">
-                            <label for="search_limit" class="form-label">返回数量</label>
-                            <input type="number" id="search_limit" class="form-control" value="10" min="1" max="50">
-                        </div>
-                        <div class="text-center">
-                            <button type="button" id="search-btn" class="btn btn-success w-50">搜索</button>
-                        </div>
-                    </div>
-                    <div id="parse-area" style="display:none;">
-                        <div class="mb-3">
-                            <label for="song_ids" class="form-label">歌曲ID或URL</label>
-                            <input type="text" id="song_ids" class="form-control" placeholder="输入歌曲ID或URL">
-                        </div>
-                        <div class="mb-3">
-                            <label for="level" class="form-label">音质选择</label>
-                            <select id="level" class="form-select">
-                                <option value="standard">标准音质</option>
-                                <option value="exhigh">极高音质</option>
-                                <option value="lossless">无损音质</option>
-                                <option value="hires">Hires音质</option>
-                                <option value="sky">沉浸环绕声</option>
-                                <option value="jyeffect">高清环绕声</option>
-                                <option value="jymaster">超清母带</option>
+        <header class="text-center mb-5">
+            <h1>网易云音乐工具箱</h1>
+            <p class="text-muted">便捷的网易云音乐搜索、解析与下载工具</p>
+        </header>
+        
+        <main>
+            <section class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <form id="main-form">
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">功能选择</label>
+                            <select id="mode-select" class="form-select">
+                                <option value="search">歌曲搜索</option>
+                                <option value="parse">单曲解析</option>
+                                <option value="playlist">歌单解析</option>
+                                <option value="album">专辑解析</option>
+                                <option value="download">音乐下载</option>
                             </select>
                         </div>
-                        <div class="text-center">
-                            <button type="button" id="parse-btn" class="btn btn-primary w-50">解析</button>
-                        </div>
-                    </div>
-                    <div id="playlist-area" style="display:none;">
-                        <div class="mb-3">
-                            <label for="playlist_id" class="form-label">歌单ID或链接</label>
-                            <input type="text" id="playlist_id" class="form-control" placeholder="输入歌单ID或网易云歌单链接">
-                        </div>
-                        <div class="text-center">
-                            <button type="button" id="playlist-btn" class="btn btn-warning w-50">解析歌单</button>
-                        </div>
-                    </div>
-                    <div id="album-area" style="display:none;">
-                        <div class="mb-3">
-                            <label for="album_id" class="form-label">专辑ID或链接</label>
-                            <input type="text" id="album_id" class="form-control" placeholder="输入专辑ID或网易云专辑链接">
-                        </div>
-                        <div class="text-center">
-                            <button type="button" id="album-btn" class="btn btn-info w-50">解析专辑</button>
-                        </div>
-                    </div>
-                    <div id="download-area" style="display:none;">
-                        <div class="mb-3">
-                            <label for="download_id" class="form-label">音乐ID或URL</label>
-                            <input type="text" id="download_id" class="form-control" placeholder="输入音乐ID或网易云音乐链接">
-                        </div>
-                        <div class="mb-3">
-                            <label for="download_quality" class="form-label">下载音质</label>
-                            <select id="download_quality" class="form-select">
-                                <option value="standard">标准音质</option>
-                                <option value="exhigh">极高音质</option>
-                                <option value="lossless" selected>无损音质</option>
-                                <option value="hires">Hires音质</option>
-                                <option value="sky">沉浸环绕声</option>
-                                <option value="jyeffect">高清环绕声</option>
-                                <option value="jymaster">超清母带</option>
-                                <option value="dolby">杜比全景声</option>
-                            </select>
-                        </div>
-                        <div class="text-center">
-                            <button type="button" id="download-btn" class="btn btn-success w-50">下载音乐</button>
-                        </div>
-                        <div id="download-progress" class="mt-3 d-none">
-                            <div class="progress">
-                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                        
+                        <!-- 搜索功能区域 -->
+                        <div id="search-area" class="form-section">
+                            <div class="mb-3">
+                                <label for="search_keywords" class="form-label">搜索关键词</label>
+                                <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索" required>
                             </div>
-                            <div class="text-center mt-2">
-                                <small class="text-muted">正在下载并写入元信息...</small>
+                            <div class="mb-3">
+                                <label for="search_limit" class="form-label">返回数量</label>
+                                <input type="number" id="search_limit" class="form-control" value="10" min="1" max="50">
+                            </div>
+                            <div class="text-center">
+                                <button type="button" id="search-btn" class="btn btn-success w-50">
+                                    <span>搜索</span>
+                                </button>
                             </div>
                         </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <!-- 搜索结果列表 -->
-        <div id="search-result" class="mt-4 d-none">
-            <h5>搜索结果：</h5>
-            <ul class="list-group" id="search-list"></ul>
-        </div>
-        <!-- 结果展示区域 -->
-        <div id="song-info" class="alert alert-info d-none mt-4 p-0 border-0" style="box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-            <div class="row g-0 align-items-stretch">
-                <div class="col-md-8 p-3 d-flex flex-column justify-content-between">
-                    <h4 class="mb-2" id="song_name" style="font-weight:700;"></h4>
-                    <div class="mb-2"><span class="badge bg-primary me-2">歌手</span><span id="artist_names"></span></div>
-                    <div class="mb-2"><span class="badge bg-secondary me-2">专辑</span><span id="song_alname"></span></div>
-                    <div class="mb-2"><span class="badge bg-success me-2">音质</span><span id="song_level"></span></div>
-                    <div class="mb-2"><span class="badge bg-warning text-dark me-2">大小</span><span id="song_size"></span></div>
-                    <div class="mb-2">
-                        <button id="show-big-pic" type="button" class="btn btn-outline-info btn-sm me-2" style="vertical-align:middle;">显示大图</button>
-                    </div>
-                    <div class="mb-2"><span class="badge bg-info text-dark me-2">链接</span><a id="song_url" href="" target="_blank">点击下载</a></div>
-                    <div class="mb-2"><span class="badge bg-dark me-2">歌词</span></div>
-                    <div class="lyric-box" id="lyric"></div>
-                </div>
-            </div>
-            <div class="row g-0">
-                <div class="col-12 p-3 pt-0">
-                    <div id="aplayer"></div>
-                </div>
-            </div>
-        </div>
-        <!-- 歌单解析结果 -->
-        <div id="playlist-result" class="mt-4 d-none">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex align-items-center mb-3">
-                        <img id="playlist-cover" src="" alt="cover" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-right:15px;">
-                        <div>
-                            <h5 id="playlist-name" class="mb-1"></h5>
-                            <div class="text-muted" id="playlist-creator"></div>
+                        
+                        <!-- 单曲解析区域 -->
+                        <div id="parse-area" class="form-section" style="display:none;">
+                            <div class="mb-3">
+                                <label for="song_ids" class="form-label">歌曲ID或URL</label>
+                                <input type="text" id="song_ids" class="form-control" placeholder="输入歌曲ID或URL" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="level" class="form-label">音质选择</label>
+                                <select id="level" class="form-select">
+                                    <option value="standard">标准音质</option>
+                                    <option value="exhigh">极高音质</option>
+                                    <option value="lossless">无损音质</option>
+                                    <option value="hires">Hires音质</option>
+                                    <option value="sky">沉浸环绕声</option>
+                                    <option value="jyeffect">高清环绕声</option>
+                                    <option value="jymaster">超清母带</option>
+                                </select>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" id="parse-btn" class="btn btn-primary w-50">解析</button>
+                            </div>
                         </div>
-                    </div>
-                    <div id="playlist-desc" class="mb-2 text-secondary small"></div>
-                    <div>共 <span id="playlist-count"></span> 首歌</div>
-                </div>
-            </div>
-            <ul class="list-group mt-3" id="playlist-tracks"></ul>
-        </div>
-        <!-- 专辑解析结果 -->
-        <div id="album-result" class="mt-4 d-none">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex align-items-center mb-3">
-                        <img id="album-cover" src="" alt="cover" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-right:15px;">
-                        <div>
-                            <h5 id="album-name" class="mb-1"></h5>
-                            <div class="text-muted" id="album-artist"></div>
+                        
+                        <!-- 歌单解析区域 -->
+                        <div id="playlist-area" class="form-section" style="display:none;">
+                            <div class="mb-3">
+                                <label for="playlist_id" class="form-label">歌单ID或链接</label>
+                                <input type="text" id="playlist_id" class="form-control" placeholder="输入歌单ID或网易云歌单链接" required>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" id="playlist-btn" class="btn btn-warning w-50">解析歌单</button>
+                            </div>
                         </div>
+                        
+                        <!-- 专辑解析区域 -->
+                        <div id="album-area" class="form-section" style="display:none;">
+                            <div class="mb-3">
+                                <label for="album_id" class="form-label">专辑ID或链接</label>
+                                <input type="text" id="album_id" class="form-control" placeholder="输入专辑ID或网易云专辑链接" required>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" id="album-btn" class="btn btn-info w-50">解析专辑</button>
+                            </div>
+                        </div>
+                        
+                        <!-- 音乐下载区域 -->
+                        <div id="download-area" class="form-section" style="display:none;">
+                            <div class="mb-3">
+                                <label for="download_id" class="form-label">音乐ID或URL</label>
+                                <input type="text" id="download_id" class="form-control" placeholder="输入音乐ID或网易云音乐链接" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="download_quality" class="form-label">下载音质</label>
+                                <select id="download_quality" class="form-select">
+                                    <option value="standard">标准音质</option>
+                                    <option value="exhigh">极高音质</option>
+                                    <option value="lossless" selected>无损音质</option>
+                                    <option value="hires">Hires音质</option>
+                                    <option value="sky">沉浸环绕声</option>
+                                    <option value="jyeffect">高清环绕声</option>
+                                    <option value="jymaster">超清母带</option>
+                                    <option value="dolby">杜比全景声</option>
+                                </select>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" id="download-btn" class="btn btn-success w-50">下载音乐</button>
+                            </div>
+                            <div id="download-progress" class="mt-3 d-none">
+                                <div class="progress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                                </div>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">正在下载并写入元信息...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            
+            <!-- 搜索结果列表 -->
+            <section id="search-result" class="mt-4 d-none">
+                <h5 class="mb-2">搜索结果：</h5>
+                <ul class="list-group" id="search-list"></ul>
+            </section>
+            
+            <!-- 结果展示区域 -->
+            <section id="song-info" class="result-card d-none mt-4">
+                <div class="row g-0 align-items-stretch">
+                    <div class="col-md-8 p-3 d-flex flex-column justify-content-between">
+                        <h4 class="mb-2" id="song_name" style="font-weight:700;"></h4>
+                        <div class="mb-2"><span class="badge bg-primary me-2">歌手</span><span id="artist_names"></span></div>
+                        <div class="mb-2"><span class="badge bg-secondary me-2">专辑</span><span id="song_alname"></span></div>
+                        <div class="mb-2"><span class="badge bg-success me-2">音质</span><span id="song_level"></span></div>
+                        <div class="mb-2"><span class="badge bg-warning text-dark me-2">大小</span><span id="song_size"></span></div>
+                        <div class="mb-2">
+                            <button id="show-big-pic" type="button" class="btn btn-outline-info btn-sm me-2">显示大图</button>
+                        </div>
+                        <div class="mb-2"><span class="badge bg-info text-dark me-2">链接</span><a id="song_url" href="" target="_blank">点击下载</a></div>
+                        <div class="mb-2"><span class="badge bg-dark me-2">歌词</span></div>
+                        <div class="lyric-box" id="lyric"></div>
                     </div>
-                    <div id="album-desc" class="mb-2 text-secondary small"></div>
-                    <div>共 <span id="album-count"></span> 首歌</div>
+                </div>
+                <div class="row g-0">
+                    <div class="col-12 p-3 pt-0">
+                        <div id="aplayer"></div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 歌单解析结果 -->
+            <section id="playlist-result" class="mt-4 d-none">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <img id="playlist-cover" src="" alt="cover" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-right:15px;">
+                            <div>
+                                <h5 id="playlist-name" class="mb-1"></h5>
+                                <div class="text-muted" id="playlist-creator"></div>
+                            </div>
+                        </div>
+                        <div id="playlist-desc" class="mb-2 text-secondary small"></div>
+                        <div>共 <span id="playlist-count"></span> 首歌</div>
+                    </div>
+                </div>
+                <ul class="list-group mt-3" id="playlist-tracks"></ul>
+            </section>
+            
+            <!-- 专辑解析结果 -->
+            <section id="album-result" class="mt-4 d-none">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <img id="album-cover" src="" alt="cover" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-right:15px;">
+                            <div>
+                                <h5 id="album-name" class="mb-1"></h5>
+                                <div class="text-muted" id="album-artist"></div>
+                            </div>
+                        </div>
+                        <div id="album-desc" class="mb-2 text-secondary small"></div>
+                        <div>共 <span id="album-count"></span> 首歌</div>
+                    </div>
+                </div>
+                <ul class="list-group mt-3" id="album-tracks"></ul>
+            </section>
+        </main>
+        
+        <!-- Modal for big picture -->
+        <div class="modal fade" id="bigPicModal" tabindex="-1" aria-labelledby="bigPicModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="bigPicModalLabel">大图预览</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img id="big-pic-img" src="" alt="大图" style="max-width:100%;max-height:60vh;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+                    </div>
                 </div>
             </div>
-            <ul class="list-group mt-3" id="album-tracks"></ul>
         </div>
     </div>
-    <!-- Modal for big picture -->
-    <div class="modal fade" id="bigPicModal" tabindex="-1" aria-labelledby="bigPicModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="bigPicModalLabel">大图预览</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body text-center">
-                    <img id="big-pic-img" src="" alt="大图" style="max-width:100%;max-height:60vh;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
-                </div>
-            </div>
-        </div>
-    </div>
+    
     <footer class="footer mt-5 py-3 bg-light border-top">
         <div class="container text-center text-muted small">
-            <span>网易云音乐工具箱 &copy; 2025 | Powered by Suxiaoqingx &amp; Bootstrap | <a href="https://github.com/Suxiaoqinx/Netease_url" target="_blank">GitHub</a></span>
+            <span>网易云音乐工具箱 &copy; 2026 | Powered by Suxiaoqingx &amp; Bootstrap | <a href="https://github.com/Suxiaoqinx/Netease_url" target="_blank" rel="noopener noreferrer">GitHub</a></span>
         </div>
     </footer>
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/aplayer/1.10.1/APlayer.min.js"></script>
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <!-- jQuery 备用方案 -->
     <script>
-        $(document).ready(function() {
+        if (typeof $ === 'undefined') {
+            document.write('<script src="https://code.jquery.com/jquery-3.7.1.min.js"><\/script>');
+        }
+    </script>
+    <!-- APlayer -->
+    <script src="https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.js"></script>
+    <!-- Bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 确保jQuery加载完成
+        if (typeof $ === 'undefined') {
+            alert('jQuery加载失败，请检查网络连接后刷新页面');
+        } else {
+            $(document).ready(function() {
             function lrctrim(lyrics) {
                 const lines = lyrics.split('\n');
                 const data = [];
@@ -358,60 +471,51 @@
                 }
             }
 
-            // 切换功能区
-            $('#mode-select').on('change', function() {
-                if ($(this).val() === 'search') {
-                    $('#search-area').show();
-                    $('#parse-area').hide();
-                    $('#playlist-area').hide();
-                    $('#album-area').hide();
-                    $('#download-area').hide();
-                    $('#song-info').addClass('d-none');
-                    $('#playlist-result').addClass('d-none');
-                    $('#album-result').addClass('d-none');
-                } else if ($(this).val() === 'parse') {
-                    $('#search-area').hide();
-                    $('#parse-area').show();
-                    $('#playlist-area').hide();
-                    $('#album-area').hide();
-                    $('#download-area').hide();
-                    $('#search-result').addClass('d-none');
-                    $('#playlist-result').addClass('d-none');
-                    $('#album-result').addClass('d-none');
-                } else if ($(this).val() === 'playlist') {
-                    $('#search-area').hide();
-                    $('#parse-area').hide();
-                    $('#playlist-area').show();
-                    $('#album-area').hide();
-                    $('#download-area').hide();
-                    $('#search-result').addClass('d-none');
-                    $('#song-info').addClass('d-none');
-                    $('#album-result').addClass('d-none');
-                } else if ($(this).val() === 'album') {
-                    $('#search-area').hide();
-                    $('#parse-area').hide();
-                    $('#playlist-area').hide();
-                    $('#album-area').show();
-                    $('#download-area').hide();
-                    $('#search-result').addClass('d-none');
-                    $('#song-info').addClass('d-none');
-                    $('#playlist-result').addClass('d-none');
-                    $('#album-result').addClass('d-none');
-                } else if ($(this).val() === 'download') {
-                    $('#search-area').hide();
-                    $('#parse-area').hide();
-                    $('#playlist-area').hide();
-                    $('#album-area').hide();
-                    $('#download-area').show();
-                    $('#search-result').addClass('d-none');
-                    $('#song-info').addClass('d-none');
-                    $('#playlist-result').addClass('d-none');
-                    $('#album-result').addClass('d-none');
+            // 加载状态管理
+            function showLoading(element) {
+                const originalText = element.text();
+                element.data('original-text', originalText);
+                element.html('<span class="spinner-border spinner-border-sm me-2"></span> 处理中...').prop('disabled', true);
+            }
+
+            function hideLoading(element) {
+                const originalText = element.data('original-text');
+                if (originalText) {
+                    element.text(originalText).prop('disabled', false);
                 } else {
-                    $('#album-area').hide();
-                    $('#download-area').hide();
-                    $('#album-result').addClass('d-none');
+                    element.text('处理完成').prop('disabled', false);
                 }
+            }
+
+            // 切换功能区
+            function switchMode(mode) {
+                // 隐藏所有功能区
+                $('#search-area, #parse-area, #playlist-area, #album-area, #download-area').hide();
+                // 隐藏所有结果区
+                $('#search-result, #song-info, #playlist-result, #album-result').addClass('d-none');
+                
+                // 显示当前模式对应的功能区
+                switch (mode) {
+                    case 'search':
+                        $('#search-area').show();
+                        break;
+                    case 'parse':
+                        $('#parse-area').show();
+                        break;
+                    case 'playlist':
+                        $('#playlist-area').show();
+                        break;
+                    case 'album':
+                        $('#album-area').show();
+                        break;
+                    case 'download':
+                        $('#download-area').show();
+                        break;
+                }
+            }
+            
+            $('#mode-select').on('change', function() {
+                switchMode($(this).val());
             });
 
             // 搜索功能
@@ -422,6 +526,10 @@
                     alert('请输入搜索关键词');
                     return;
                 }
+                
+                const $btn = $(this);
+                showLoading($btn);
+                
                 $.ajax({
                     url: '/Search',
                     method: 'POST',
@@ -452,6 +560,9 @@
                     error: function() {
                         $('#search-list').html('<li class="list-group-item">搜索失败，请重试</li>');
                         $('#search-result').removeClass('d-none');
+                    },
+                    complete: function() {
+                        hideLoading($btn);
                     }
                 });
             });
@@ -472,6 +583,10 @@
                     alert('请输入歌曲ID或URL');
                     return;
                 }
+                
+                const $btn = $(this);
+                showLoading($btn);
+                
                 $.post('/Song_V1', { url: songIds, level: level, type:'json' }, function(data) {
                     if (data.status === 200) {
                         $('#song_name').text(data.data.name);
@@ -501,7 +616,11 @@
                     } else {
                         alert(data.data.msg);
                     }
-                }, 'json');
+                }, 'json').fail(function() {
+                    alert('解析失败，请检查网络连接或稍后重试');
+                }).always(function() {
+                    hideLoading($btn);
+                });
             });
 
             // 显示大图按钮事件
@@ -519,9 +638,14 @@
                     alert('请输入歌单ID或链接');
                     return;
                 }
+                
+                const $btn = $(this);
+                showLoading($btn);
+                
                 // 支持直接粘贴歌单链接
                 const idMatch = pid.match(/playlist\?id=(\d+)/);
                 if (idMatch) pid = idMatch[1];
+                
                 $.get('/Playlist', { id: pid }, function(data) {
                     if (data.status === 200) {
                         const pl = data.data.playlist;
@@ -549,7 +673,12 @@
                         $('#playlist-result').removeClass('d-none');
                         $('#playlist-tracks').html('<li class="list-group-item">歌单解析失败：'+data.data.msg+'</li>');
                     }
-                }, 'json');
+                }, 'json').fail(function() {
+                    $('#playlist-result').removeClass('d-none');
+                    $('#playlist-tracks').html('<li class="list-group-item">歌单解析失败，请检查网络连接或稍后重试</li>');
+                }).always(function() {
+                    hideLoading($btn);
+                });
             });
 
             // 专辑解析
@@ -559,9 +688,14 @@
                     alert('请输入专辑ID或链接');
                     return;
                 }
+                
+                const $btn = $(this);
+                showLoading($btn);
+                
                 // 支持直接粘贴专辑链接
                 const idMatch = aid.match(/album\?id=(\d+)/);
                 if (idMatch) aid = idMatch[1];
+                
                 $.get('/Album', { id: aid }, function(data) {
                     if (data.status === 200) {
                         const al = data.data.album;
@@ -589,7 +723,12 @@
                         $('#album-result').removeClass('d-none');
                         $('#album-tracks').html('<li class="list-group-item">专辑解析失败：'+data.data.msg+'</li>');
                     }
-                }, 'json');
+                }, 'json').fail(function() {
+                    $('#album-result').removeClass('d-none');
+                    $('#album-tracks').html('<li class="list-group-item">专辑解析失败，请检查网络连接或稍后重试</li>');
+                }).always(function() {
+                    hideLoading($btn);
+                });
             });
 
             // 音乐下载功能
@@ -602,6 +741,9 @@
                     return;
                 }
                 
+                const $btn = $(this);
+                showLoading($btn);
+                
                 // 提取ID（支持URL格式）
                 let processedId = musicId;
                 const idMatch = musicId.match(/song\?id=(\d+)/);
@@ -611,7 +753,6 @@
                 
                 // 显示进度条
                 $('#download-progress').removeClass('d-none');
-                $('#download-btn').prop('disabled', true).text('下载中...');
                 
                 // 使用XMLHttpRequest来处理下载并获取响应头
                 const xhr = new XMLHttpRequest();
@@ -649,13 +790,13 @@
                     
                     // 重置按钮状态
                     $('#download-progress').addClass('d-none');
-                    $('#download-btn').prop('disabled', false).text('下载音乐');
+                    hideLoading($btn);
                 };
                 
                 xhr.onerror = function() {
                     alert('下载出错，请重试');
                     $('#download-progress').addClass('d-none');
-                    $('#download-btn').prop('disabled', false).text('下载音乐');
+                    hideLoading($btn);
                 };
                 
                 // 发送请求
@@ -679,7 +820,8 @@
                 $('#mode-select').val('download').trigger('change');
                 $('html,body').animate({scrollTop: $('#main-form').offset().top}, 300);
             });
-        });
+            });
+        }
     </script>
 </body>
 </html>

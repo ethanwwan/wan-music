@@ -1,0 +1,49 @@
+2026-01-10 13:37:11,389 - music_api - INFO - __init__:90 - 音乐API服务初始化完成，下载目录: /Users/Ethan/Public/Repository/netease-music/downloads
+2026-01-10 13:39:29,657 - music_api - INFO - __init__:90 - 音乐API服务初始化完成，下载目录: /Users/Ethan/Public/Repository/netease-music/downloads
+2026-01-10 13:40:03,126 - music_api - INFO - __init__:90 - 音乐API服务初始化完成，下载目录: /Users/Ethan/Public/Repository/netease-music/downloads
+2026-01-10 13:40:20,082 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+2026-01-10 13:40:20,091 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 13:40:20,606 - music_api - INFO - before_request:215 - GET /favicon.ico - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+2026-01-10 13:40:20,606 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 13:40:46,683 - music_api - INFO - before_request:215 - POST /Song_V1 - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+2026-01-10 13:40:47,354 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 13:41:14,469 - music_api - INFO - before_request:215 - GET /Playlist - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+2026-01-10 13:41:15,904 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 13:41:40,720 - music_api - INFO - before_request:215 - POST /Song_V1 - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+2026-01-10 13:41:41,376 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:25:13,455 - music_api - INFO - __init__:90 - 音乐API服务初始化完成，下载目录: /Users/Ethan/Public/Repository/netease-music/downloads
+2026-01-10 16:25:17,056 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:25:17,068 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:26:14,934 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:26:14,935 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 16:26:31,773 - music_api - INFO - __init__:90 - 音乐API服务初始化完成，下载目录: /Users/Ethan/Public/Repository/netease-music/downloads
+2026-01-10 16:27:13,191 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:27:13,202 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:27:13,207 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:27:13,207 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:27:13,515 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:27:13,515 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 16:27:23,845 - music_api - INFO - before_request:215 - HEAD / - IP: 127.0.0.1 - User-Agent: curl/8.7.1
+2026-01-10 16:27:23,845 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:27:29,936 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: curl/8.7.1
+2026-01-10 16:27:29,936 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:29:40,491 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:29:40,492 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:29:40,500 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:29:40,500 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:29:40,630 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:29:40,631 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 16:57:34,875 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:34,877 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:57:34,885 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:34,886 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:57:34,986 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:34,986 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 16:57:35,982 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:35,983 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:57:38,368 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:38,369 - music_api - INFO - after_request:230 - 响应状态: 404
+2026-01-10 16:57:44,854 - music_api - INFO - before_request:215 - GET / - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:44,856 - music_api - INFO - after_request:230 - 响应状态: 200
+2026-01-10 16:57:45,386 - music_api - INFO - before_request:215 - GET /@vite/client - IP: 127.0.0.1 - User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) TraeCN/1.104.3 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36
+2026-01-10 16:57:45,387 - music_api - INFO - after_request:230 - 响应状态: 404
