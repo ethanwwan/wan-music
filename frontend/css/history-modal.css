@@ -1,0 +1,334 @@
+/* 历史记录弹窗样式文件 */
+/* 包含历史记录按钮、弹窗、列表项等所有相关样式 */
+
+/* 历史记录按钮样式 */
+#history-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    z-index: 10;
+    background-color: transparent;
+    color: #28a745;
+    border: 2px solid #28a745;
+    border-radius: 6px;
+}
+
+#history-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    background-color: rgba(40, 167, 69, 0.1);
+    color: #218838;
+    border-color: #218838;
+}
+
+/* 历史记录弹窗样式 */
+#historyModal .modal-dialog {
+    max-width: 800px;
+}
+
+#historyModal .modal-content {
+    border-radius: 16px;
+    border: none;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+#historyModal .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+    padding: 20px 24px;
+}
+
+#historyModal .modal-title {
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+#historyModal .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.8;
+}
+
+#historyModal .btn-close:hover {
+    opacity: 1;
+}
+
+#historyModal .modal-body {
+    padding: 24px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+#historyModal .modal-footer {
+    border-top: 1px solid #e9ecef;
+    padding: 16px 24px;
+    background-color: #f8f9fa;
+    border-radius: 0 0 16px 16px;
+}
+
+/* 历史记录项样式 */
+.history-item {
+    border: none;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 249, 250, 0.9) 100%);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.history-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(248, 249, 250, 1) 100%);
+}
+
+.history-item img {
+    border-radius: 8px;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.history-item h6 {
+    margin: 0 0 4px 0;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 1rem;
+}
+
+.history-item p {
+    margin: 0 0 2px 0;
+    font-size: 0.875rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.history-item .text-muted {
+    font-size: 0.75rem;
+    color: #adb5bd !important;
+}
+
+.history-item .btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.history-item .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 记录总数徽章样式 */
+#history-count {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: white;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+/* 无历史记录提示样式 */
+#no-history {
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+#no-history i {
+    font-size: 2rem;
+    margin-bottom: 16px;
+    display: block;
+    opacity: 0.5;
+}
+
+.history-cover {
+    border-radius: 6px;
+    object-fit: cover;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* 历史记录列表样式 */
+#history-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border-radius: 0.75rem;
+    background: #f8f9fa;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* 暗黑模式适配 */
+[data-theme="dark"] #history-btn {
+    background-color: transparent;
+    color: #28a745;
+    border: 2px solid #28a745;
+}
+
+[data-theme="dark"] #history-btn:hover {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: #218838;
+    border-color: #218838;
+}
+
+/* 暗黑模式下的历史记录弹窗样式 */
+[data-theme="dark"] #historyModal .modal-content {
+    background-color: #2d3748;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] #historyModal .modal-header {
+    background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+    border-bottom: 1px solid #4a5568;
+}
+
+[data-theme="dark"] #historyModal .modal-footer {
+    background-color: #1a202c;
+    border-top: 1px solid #4a5568;
+}
+
+[data-theme="dark"] .history-item {
+    background: linear-gradient(135deg, rgba(45, 55, 72, 0.9) 0%, rgba(26, 32, 44, 0.9) 100%);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .history-item:hover {
+    background: linear-gradient(135deg, rgba(45, 55, 72, 1) 0%, rgba(26, 32, 44, 1) 100%);
+}
+
+[data-theme="dark"] .history-item h6 {
+    color: #f7fafc;
+}
+
+[data-theme="dark"] .history-item p {
+    color: #a0aec0;
+}
+
+[data-theme="dark"] .history-item .text-muted {
+    color: #718096 !important;
+}
+
+[data-theme="dark"] #no-history {
+    color: #a0aec0;
+}
+
+[data-theme="dark"] #history-list {
+    background-color: var(--card-bg);
+}
+
+/* 通用模态框暗黑模式样式 */
+[data-theme="dark"] .modal-content {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* 移动端响应式样式优化 */
+@media (max-width: 768px) {
+    /* 移动端弹窗样式调整 */
+    #historyModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    #historyModal .modal-content {
+        border-radius: 12px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    #historyModal .modal-header {
+        padding: 16px 20px;
+        border-radius: 12px 12px 0 0;
+        flex-shrink: 0;
+    }
+    
+    #historyModal .modal-title {
+        font-size: 1.1rem;
+    }
+    
+    /* 移动端modal-body优化 - 移除重复的滚动容器 */
+    #historyModal .modal-body {
+        padding: 16px 20px;
+        max-height: none;
+        overflow-y: visible;
+        flex: 1;
+        min-height: 0;
+    }
+    
+    #historyModal .modal-footer {
+        padding: 12px 20px;
+        border-radius: 0 0 12px 12px;
+        flex-shrink: 0;
+    }
+    
+    /* 移动端历史记录列表优化 - 作为唯一的滚动容器 */
+    #history-list {
+        max-height: calc(90vh - 200px);
+        overflow-y: auto;
+        border-radius: 8px;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* 移动端历史记录项样式调整 */
+    .history-item {
+        margin-bottom: 8px;
+        padding: 12px;
+        border-radius: 8px;
+    }
+    
+    .history-item:hover {
+        transform: none;
+    }
+    
+    .history-item img {
+        border-radius: 6px;
+    }
+    
+    .history-item h6 {
+        font-size: 0.95rem;
+    }
+    
+    .history-item p {
+        font-size: 0.8rem;
+    }
+    
+    .history-item .text-muted {
+        font-size: 0.7rem;
+    }
+    
+    /* 移动端按钮样式调整 */
+    .history-item .btn {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+    }
+    
+    /* 移动端无历史记录提示调整 */
+    #no-history {
+        padding: 30px 15px;
+        font-size: 0.9rem;
+    }
+    
+    #no-history i {
+        font-size: 1.5rem;
+        margin-bottom: 12px;
+    }
+}

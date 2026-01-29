@@ -1,0 +1,2552 @@
+<!--
+ * @package 163_music
+ * @author Suxiaoqinx/kanxizai
+ * @version 2.3
+ * @Date 2025-05-15
+-->
+
+<!DOCTYPE html>
+
+<html lang="zh-CN" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noarchive">
+    <title>网易云音乐无损解析 - 高品质音乐下载工具</title>
+
+    <!-- SEO元标签 -->
+    <meta name="description" content="网易云音乐无损解析工具，支持FLAC、Hi-Res、杜比全景声等多种音质格式，免费在线解析下载网易云音乐高品质歌曲。">
+    <meta name="keywords" content="网易云音乐,无损音乐,音乐下载,FLAC,Hi-Res,杜比全景声,音乐解析,高品质音乐,免费音乐下载,免费音乐,网易云音乐解析">
+    <meta name="author" content="Suxiaoqinx/kanxizai">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph标签 -->
+    <meta property="og:title" content="网易云音乐无损解析 - 高品质音乐下载工具">
+    <meta property="og:description" content="免费在线解析下载网易云音乐高品质歌曲，支持FLAC、Hi-Res、杜比全景声等多种音质格式。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.kanxizai.cn/163_music/">
+    <meta property="og:image" content="https://www.kanxizai.cn/163_music/img/og-image.png">
+
+    <!-- Twitter卡片 -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="网易云音乐无损解析 - 高品质音乐下载工具">
+    <meta name="twitter:description" content="免费在线解析下载网易云音乐高品质歌曲，支持多种音质格式。">
+    <meta name="twitter:image" content="https://www.kanxizai.cn/163_music/img/og-image.png">
+
+    <!-- 规范链接 -->
+    <link rel="canonical" href="https://www.kanxizai.cn/163_music/">
+
+    <!-- 样式表 -->
+    <link href="https://cdn.kanxizai.cn/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.kanxizai.cn/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.kanxizai.cn/ajax/libs/APlayer/css/APlayer.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="./css/index.css?v=5.2.0">
+    <link rel="stylesheet" href="./css/playlist.css?v=5.2.0">
+    <link rel="stylesheet" href="./css/quality.css?v=5.2.0">
+    <link rel="stylesheet" href="./css/history-modal.css?v=5.2.0">
+
+    <!-- JavaScript库 -->
+    <script src="https://cdn.kanxizai.cn/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/FileSaver/FileSaver.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/APlayer/js/APlayer.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/sweetalert2/js/sweetalert2.all.min.js"></script>
+    <style>
+        :root {
+            --swal2-outline: 0 0 0 3px rgba(100, 150, 200, 0.5);
+            --swal2-container-padding: 0.625em;
+            --swal2-backdrop: rgba(0, 0, 0, 0.4);
+            --swal2-backdrop-transition: background-color 0.1s;
+            --swal2-width: 32em;
+            --swal2-padding: 0 0 1.25em;
+            --swal2-border: none;
+            --swal2-border-radius: 0.3125rem;
+            --swal2-background: white;
+            --swal2-color: #545454;
+            --swal2-show-animation: swal2-show 0.3s;
+            --swal2-hide-animation: swal2-hide 0.15s forwards;
+            --swal2-icon-zoom: 1;
+            --swal2-icon-animations: true;
+            --swal2-title-padding: 0.8em 1em 0;
+            --swal2-html-container-padding: 1em 1.6em 0.3em;
+            --swal2-input-border: 1px solid #d9d9d9;
+            --swal2-input-border-radius: 0.1875em;
+            --swal2-input-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06), 0 0 0 3px transparent;
+            --swal2-input-background: transparent;
+            --swal2-input-transition: border-color 0.2s, box-shadow 0.2s;
+            --swal2-input-hover-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06), 0 0 0 3px transparent;
+            --swal2-input-focus-border: 1px solid #b4dbed;
+            --swal2-input-focus-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.06), 0 0 0 3px $swal2-outline-color;
+            --swal2-progress-step-background: #add8e6;
+            --swal2-validation-message-background: #f0f0f0;
+            --swal2-validation-message-color: #666;
+            --swal2-footer-border-color: #eee;
+            --swal2-footer-background: transparent;
+            --swal2-footer-color: inherit;
+            --swal2-close-button-position: initial;
+            --swal2-close-button-inset: auto;
+            --swal2-close-button-font-size: 2.5em;
+            --swal2-close-button-color: #ccc;
+            --swal2-close-button-transition: color 0.2s, box-shadow 0.2s;
+            --swal2-close-button-outline: initial;
+            --swal2-close-button-box-shadow: inset 0 0 0 3px transparent;
+            --swal2-close-button-focus-box-shadow: inset var(--swal2-outline);
+            --swal2-close-button-hover-transform: none;
+            --swal2-actions-justify-content: center;
+            --swal2-actions-width: auto;
+            --swal2-actions-margin: 1.25em auto 0;
+            --swal2-actions-padding: 0;
+            --swal2-actions-border-radius: 0;
+            --swal2-actions-background: transparent;
+            --swal2-action-button-transition: background-color 0.2s, box-shadow 0.2s;
+            --swal2-action-button-hover: black 10%;
+            --swal2-action-button-active: black 10%;
+            --swal2-confirm-button-box-shadow: none;
+            --swal2-confirm-button-border-radius: 0.25em;
+            --swal2-confirm-button-background-color: #7066e0;
+            --swal2-confirm-button-color: #fff;
+            --swal2-deny-button-box-shadow: none;
+            --swal2-deny-button-border-radius: 0.25em;
+            --swal2-deny-button-background-color: #dc3741;
+            --swal2-deny-button-color: #fff;
+            --swal2-cancel-button-box-shadow: none;
+            --swal2-cancel-button-border-radius: 0.25em;
+            --swal2-cancel-button-background-color: #6e7881;
+            --swal2-cancel-button-color: #fff;
+            --swal2-toast-show-animation: swal2-toast-show 0.5s;
+            --swal2-toast-hide-animation: swal2-toast-hide 0.1s forwards;
+            --swal2-toast-border: none;
+            --swal2-toast-box-shadow: 0 0 1px hsl(0deg 0% 0% / 0.075), 0 1px 2px hsl(0deg 0% 0% / 0.075), 1px 2px 4px hsl(0deg 0% 0% / 0.075), 1px 3px 8px hsl(0deg 0% 0% / 0.075), 2px 4px 16px hsl(0deg 0% 0% / 0.075)
+        }
+
+        [data-swal2-theme=dark] {
+            --swal2-dark-theme-black: #19191a;
+            --swal2-dark-theme-white: #e1e1e1;
+            --swal2-background: var(--swal2-dark-theme-black);
+            --swal2-color: var(--swal2-dark-theme-white);
+            --swal2-footer-border-color: #555;
+            --swal2-input-background: color-mix(in srgb, var(--swal2-dark-theme-black), var(--swal2-dark-theme-white) 10%);
+            --swal2-validation-message-background: color-mix(in srgb, var(--swal2-dark-theme-black), var(--swal2-dark-theme-white) 10%);
+            --swal2-validation-message-color: var(--swal2-dark-theme-white)
+        }
+
+        @media(prefers-color-scheme: dark) {
+            [data-swal2-theme=auto] {
+                --swal2-dark-theme-black: #19191a;
+                --swal2-dark-theme-white: #e1e1e1;
+                --swal2-background: var(--swal2-dark-theme-black);
+                --swal2-color: var(--swal2-dark-theme-white);
+                --swal2-footer-border-color: #555;
+                --swal2-input-background: color-mix(in srgb, var(--swal2-dark-theme-black), var(--swal2-dark-theme-white) 10%);
+                --swal2-validation-message-background: color-mix(in srgb, var(--swal2-dark-theme-black), var(--swal2-dark-theme-white) 10%);
+                --swal2-validation-message-color: var(--swal2-dark-theme-white)
+            }
+        }
+
+        body.swal2-shown:not(.swal2-no-backdrop, .swal2-toast-shown) {
+            overflow: hidden
+        }
+
+        body.swal2-height-auto {
+            height: auto !important
+        }
+
+        body.swal2-no-backdrop .swal2-container {
+            background-color: rgba(0, 0, 0, 0) !important;
+            pointer-events: none
+        }
+
+        body.swal2-no-backdrop .swal2-container .swal2-popup {
+            pointer-events: all
+        }
+
+        body.swal2-no-backdrop .swal2-container .swal2-modal {
+            box-shadow: 0 0 10px var(--swal2-backdrop)
+        }
+
+        body.swal2-toast-shown .swal2-container {
+            box-sizing: border-box;
+            width: 360px;
+            max-width: 100%;
+            background-color: rgba(0, 0, 0, 0);
+            pointer-events: none
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top {
+            inset: 0 auto auto 50%;
+            transform: translateX(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top-end,
+        body.swal2-toast-shown .swal2-container.swal2-top-right {
+            inset: 0 0 auto auto
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top-start,
+        body.swal2-toast-shown .swal2-container.swal2-top-left {
+            inset: 0 auto auto 0
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center-start,
+        body.swal2-toast-shown .swal2-container.swal2-center-left {
+            inset: 50% auto auto 0;
+            transform: translateY(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center {
+            inset: 50% auto auto 50%;
+            transform: translate(-50%, -50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center-end,
+        body.swal2-toast-shown .swal2-container.swal2-center-right {
+            inset: 50% 0 auto auto;
+            transform: translateY(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom-start,
+        body.swal2-toast-shown .swal2-container.swal2-bottom-left {
+            inset: auto auto 0 0
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom {
+            inset: auto auto 0 50%;
+            transform: translateX(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom-end,
+        body.swal2-toast-shown .swal2-container.swal2-bottom-right {
+            inset: auto 0 0 auto
+        }
+
+        @media print {
+            body.swal2-shown:not(.swal2-no-backdrop, .swal2-toast-shown) {
+                overflow-y: scroll !important
+            }
+
+            body.swal2-shown:not(.swal2-no-backdrop, .swal2-toast-shown)>[aria-hidden=true] {
+                display: none
+            }
+
+            body.swal2-shown:not(.swal2-no-backdrop, .swal2-toast-shown) .swal2-container {
+                position: static !important
+            }
+        }
+
+        div:where(.swal2-container) {
+            display: grid;
+            position: fixed;
+            z-index: 1060;
+            inset: 0;
+            box-sizing: border-box;
+            grid-template-areas: "top-start     top            top-end" "center-start  center         center-end" "bottom-start  bottom-center  bottom-end";
+            grid-template-rows: minmax(min-content, auto) minmax(min-content, auto) minmax(min-content, auto);
+            height: 100%;
+            padding: var(--swal2-container-padding);
+            overflow-x: hidden;
+            transition: var(--swal2-backdrop-transition);
+            -webkit-overflow-scrolling: touch
+        }
+
+        div:where(.swal2-container).swal2-backdrop-show,
+        div:where(.swal2-container).swal2-noanimation {
+            background: var(--swal2-backdrop)
+        }
+
+        div:where(.swal2-container).swal2-backdrop-hide {
+            background: rgba(0, 0, 0, 0) !important
+        }
+
+        div:where(.swal2-container).swal2-top-start,
+        div:where(.swal2-container).swal2-center-start,
+        div:where(.swal2-container).swal2-bottom-start {
+            grid-template-columns: minmax(0, 1fr) auto auto
+        }
+
+        div:where(.swal2-container).swal2-top,
+        div:where(.swal2-container).swal2-center,
+        div:where(.swal2-container).swal2-bottom {
+            grid-template-columns: auto minmax(0, 1fr) auto
+        }
+
+        div:where(.swal2-container).swal2-top-end,
+        div:where(.swal2-container).swal2-center-end,
+        div:where(.swal2-container).swal2-bottom-end {
+            grid-template-columns: auto auto minmax(0, 1fr)
+        }
+
+        div:where(.swal2-container).swal2-top-start>.swal2-popup {
+            align-self: start
+        }
+
+        div:where(.swal2-container).swal2-top>.swal2-popup {
+            grid-column: 2;
+            place-self: start center
+        }
+
+        div:where(.swal2-container).swal2-top-end>.swal2-popup,
+        div:where(.swal2-container).swal2-top-right>.swal2-popup {
+            grid-column: 3;
+            place-self: start end
+        }
+
+        div:where(.swal2-container).swal2-center-start>.swal2-popup,
+        div:where(.swal2-container).swal2-center-left>.swal2-popup {
+            grid-row: 2;
+            align-self: center
+        }
+
+        div:where(.swal2-container).swal2-center>.swal2-popup {
+            grid-column: 2;
+            grid-row: 2;
+            place-self: center center
+        }
+
+        div:where(.swal2-container).swal2-center-end>.swal2-popup,
+        div:where(.swal2-container).swal2-center-right>.swal2-popup {
+            grid-column: 3;
+            grid-row: 2;
+            place-self: center end
+        }
+
+        div:where(.swal2-container).swal2-bottom-start>.swal2-popup,
+        div:where(.swal2-container).swal2-bottom-left>.swal2-popup {
+            grid-column: 1;
+            grid-row: 3;
+            align-self: end
+        }
+
+        div:where(.swal2-container).swal2-bottom>.swal2-popup {
+            grid-column: 2;
+            grid-row: 3;
+            place-self: end center
+        }
+
+        div:where(.swal2-container).swal2-bottom-end>.swal2-popup,
+        div:where(.swal2-container).swal2-bottom-right>.swal2-popup {
+            grid-column: 3;
+            grid-row: 3;
+            place-self: end end
+        }
+
+        div:where(.swal2-container).swal2-grow-row>.swal2-popup,
+        div:where(.swal2-container).swal2-grow-fullscreen>.swal2-popup {
+            grid-column: 1/4;
+            width: 100%
+        }
+
+        div:where(.swal2-container).swal2-grow-column>.swal2-popup,
+        div:where(.swal2-container).swal2-grow-fullscreen>.swal2-popup {
+            grid-row: 1/4;
+            align-self: stretch
+        }
+
+        div:where(.swal2-container).swal2-no-transition {
+            transition: none !important
+        }
+
+        div:where(.swal2-container)[popover] {
+            width: auto;
+            border: 0
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup) {
+            display: none;
+            position: relative;
+            box-sizing: border-box;
+            grid-template-columns: minmax(0, 100%);
+            width: var(--swal2-width);
+            max-width: 100%;
+            padding: var(--swal2-padding);
+            border: var(--swal2-border);
+            border-radius: var(--swal2-border-radius);
+            background: var(--swal2-background);
+            color: var(--swal2-color);
+            font-family: inherit;
+            font-size: 1rem;
+            container-name: swal2-popup
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup):focus {
+            outline: none
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup).swal2-loading {
+            overflow-y: hidden
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup).swal2-draggable {
+            cursor: grab
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup).swal2-draggable div:where(.swal2-icon) {
+            cursor: grab
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup).swal2-dragging {
+            cursor: grabbing
+        }
+
+        div:where(.swal2-container) div:where(.swal2-popup).swal2-dragging div:where(.swal2-icon) {
+            cursor: grabbing
+        }
+
+        div:where(.swal2-container) h2:where(.swal2-title) {
+            position: relative;
+            max-width: 100%;
+            margin: 0;
+            padding: var(--swal2-title-padding);
+            color: inherit;
+            font-size: 1.875em;
+            font-weight: 600;
+            text-align: center;
+            text-transform: none;
+            word-wrap: break-word;
+            cursor: initial
+        }
+
+        div:where(.swal2-container) div:where(.swal2-actions) {
+            display: flex;
+            z-index: 1;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: var(--swal2-actions-justify-content);
+            width: var(--swal2-actions-width);
+            margin: var(--swal2-actions-margin);
+            padding: var(--swal2-actions-padding);
+            border-radius: var(--swal2-actions-border-radius);
+            background: var(--swal2-actions-background)
+        }
+
+        div:where(.swal2-container) div:where(.swal2-loader) {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 2.2em;
+            height: 2.2em;
+            margin: 0 1.875em;
+            animation: swal2-rotate-loading 1.5s linear 0s infinite normal;
+            border-width: .25em;
+            border-style: solid;
+            border-radius: 100%;
+            border-color: #2778c4 rgba(0, 0, 0, 0) #2778c4 rgba(0, 0, 0, 0)
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled) {
+            margin: .3125em;
+            padding: .625em 1.1em;
+            transition: var(--swal2-action-button-transition);
+            border: none;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0);
+            font-weight: 500
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):not([disabled]) {
+            cursor: pointer
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-confirm) {
+            border-radius: var(--swal2-confirm-button-border-radius);
+            background: initial;
+            background-color: var(--swal2-confirm-button-background-color);
+            box-shadow: var(--swal2-confirm-button-box-shadow);
+            color: var(--swal2-confirm-button-color);
+            font-size: 1em
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-confirm):hover {
+            background-color: color-mix(in srgb, var(--swal2-confirm-button-background-color), var(--swal2-action-button-hover))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-confirm):active {
+            background-color: color-mix(in srgb, var(--swal2-confirm-button-background-color), var(--swal2-action-button-active))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-deny) {
+            border-radius: var(--swal2-deny-button-border-radius);
+            background: initial;
+            background-color: var(--swal2-deny-button-background-color);
+            box-shadow: var(--swal2-deny-button-box-shadow);
+            color: var(--swal2-deny-button-color);
+            font-size: 1em
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-deny):hover {
+            background-color: color-mix(in srgb, var(--swal2-deny-button-background-color), var(--swal2-action-button-hover))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-deny):active {
+            background-color: color-mix(in srgb, var(--swal2-deny-button-background-color), var(--swal2-action-button-active))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-cancel) {
+            border-radius: var(--swal2-cancel-button-border-radius);
+            background: initial;
+            background-color: var(--swal2-cancel-button-background-color);
+            box-shadow: var(--swal2-cancel-button-box-shadow);
+            color: var(--swal2-cancel-button-color);
+            font-size: 1em
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-cancel):hover {
+            background-color: color-mix(in srgb, var(--swal2-cancel-button-background-color), var(--swal2-action-button-hover))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):where(.swal2-cancel):active {
+            background-color: color-mix(in srgb, var(--swal2-cancel-button-background-color), var(--swal2-action-button-active))
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled):focus-visible {
+            outline: none;
+            box-shadow: var(--swal2-action-button-focus-box-shadow)
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled)[disabled]:not(.swal2-loading) {
+            opacity: .4
+        }
+
+        div:where(.swal2-container) button:where(.swal2-styled)::-moz-focus-inner {
+            border: 0
+        }
+
+        div:where(.swal2-container) div:where(.swal2-footer) {
+            margin: 1em 0 0;
+            padding: 1em 1em 0;
+            border-top: 1px solid var(--swal2-footer-border-color);
+            background: var(--swal2-footer-background);
+            color: var(--swal2-footer-color);
+            font-size: 1em;
+            text-align: center;
+            cursor: initial
+        }
+
+        div:where(.swal2-container) .swal2-timer-progress-bar-container {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            grid-column: auto !important;
+            overflow: hidden;
+            border-bottom-right-radius: var(--swal2-border-radius);
+            border-bottom-left-radius: var(--swal2-border-radius)
+        }
+
+        div:where(.swal2-container) div:where(.swal2-timer-progress-bar) {
+            width: 100%;
+            height: .25em;
+            background: rgba(0, 0, 0, .2)
+        }
+
+        div:where(.swal2-container) img:where(.swal2-image) {
+            max-width: 100%;
+            margin: 2em auto 1em;
+            cursor: initial
+        }
+
+        div:where(.swal2-container) button:where(.swal2-close) {
+            position: var(--swal2-close-button-position);
+            inset: var(--swal2-close-button-inset);
+            z-index: 2;
+            align-items: center;
+            justify-content: center;
+            width: 1.2em;
+            height: 1.2em;
+            margin-top: 0;
+            margin-right: 0;
+            margin-bottom: -1.2em;
+            padding: 0;
+            overflow: hidden;
+            transition: var(--swal2-close-button-transition);
+            border: none;
+            border-radius: var(--swal2-border-radius);
+            outline: var(--swal2-close-button-outline);
+            background: rgba(0, 0, 0, 0);
+            color: var(--swal2-close-button-color);
+            font-family: monospace;
+            font-size: var(--swal2-close-button-font-size);
+            cursor: pointer;
+            justify-self: end
+        }
+
+        div:where(.swal2-container) button:where(.swal2-close):hover {
+            transform: var(--swal2-close-button-hover-transform);
+            background: rgba(0, 0, 0, 0);
+            color: #f27474
+        }
+
+        div:where(.swal2-container) button:where(.swal2-close):focus-visible {
+            outline: none;
+            box-shadow: var(--swal2-close-button-focus-box-shadow)
+        }
+
+        div:where(.swal2-container) button:where(.swal2-close)::-moz-focus-inner {
+            border: 0
+        }
+
+        div:where(.swal2-container) div:where(.swal2-html-container) {
+            z-index: 1;
+            justify-content: center;
+            margin: 0;
+            padding: var(--swal2-html-container-padding);
+            overflow: auto;
+            color: inherit;
+            font-size: 1.125em;
+            font-weight: normal;
+            line-height: normal;
+            text-align: center;
+            word-wrap: break-word;
+            word-break: break-word;
+            cursor: initial
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input),
+        div:where(.swal2-container) input:where(.swal2-file),
+        div:where(.swal2-container) textarea:where(.swal2-textarea),
+        div:where(.swal2-container) select:where(.swal2-select),
+        div:where(.swal2-container) div:where(.swal2-radio),
+        div:where(.swal2-container) label:where(.swal2-checkbox) {
+            margin: 1em 2em 3px
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input),
+        div:where(.swal2-container) input:where(.swal2-file),
+        div:where(.swal2-container) textarea:where(.swal2-textarea) {
+            box-sizing: border-box;
+            width: auto;
+            transition: var(--swal2-input-transition);
+            border: var(--swal2-input-border);
+            border-radius: var(--swal2-input-border-radius);
+            background: var(--swal2-input-background);
+            box-shadow: var(--swal2-input-box-shadow);
+            color: inherit;
+            font-size: 1.125em
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input).swal2-inputerror,
+        div:where(.swal2-container) input:where(.swal2-file).swal2-inputerror,
+        div:where(.swal2-container) textarea:where(.swal2-textarea).swal2-inputerror {
+            border-color: #f27474 !important;
+            box-shadow: 0 0 2px #f27474 !important
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input):hover,
+        div:where(.swal2-container) input:where(.swal2-file):hover,
+        div:where(.swal2-container) textarea:where(.swal2-textarea):hover {
+            box-shadow: var(--swal2-input-hover-box-shadow)
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input):focus,
+        div:where(.swal2-container) input:where(.swal2-file):focus,
+        div:where(.swal2-container) textarea:where(.swal2-textarea):focus {
+            border: var(--swal2-input-focus-border);
+            outline: none;
+            box-shadow: var(--swal2-input-focus-box-shadow)
+        }
+
+        div:where(.swal2-container) input:where(.swal2-input)::placeholder,
+        div:where(.swal2-container) input:where(.swal2-file)::placeholder,
+        div:where(.swal2-container) textarea:where(.swal2-textarea)::placeholder {
+            color: #ccc
+        }
+
+        div:where(.swal2-container) .swal2-range {
+            margin: 1em 2em 3px;
+            background: var(--swal2-background)
+        }
+
+        div:where(.swal2-container) .swal2-range input {
+            width: 80%
+        }
+
+        div:where(.swal2-container) .swal2-range output {
+            width: 20%;
+            color: inherit;
+            font-weight: 600;
+            text-align: center
+        }
+
+        div:where(.swal2-container) .swal2-range input,
+        div:where(.swal2-container) .swal2-range output {
+            height: 2.625em;
+            padding: 0;
+            font-size: 1.125em;
+            line-height: 2.625em
+        }
+
+        div:where(.swal2-container) .swal2-input {
+            height: 2.625em;
+            padding: 0 .75em
+        }
+
+        div:where(.swal2-container) .swal2-file {
+            width: 75%;
+            margin-right: auto;
+            margin-left: auto;
+            background: var(--swal2-input-background);
+            font-size: 1.125em
+        }
+
+        div:where(.swal2-container) .swal2-textarea {
+            height: 6.75em;
+            padding: .75em
+        }
+
+        div:where(.swal2-container) .swal2-select {
+            min-width: 50%;
+            max-width: 100%;
+            padding: .375em .625em;
+            background: var(--swal2-input-background);
+            color: inherit;
+            font-size: 1.125em
+        }
+
+        div:where(.swal2-container) .swal2-radio,
+        div:where(.swal2-container) .swal2-checkbox {
+            align-items: center;
+            justify-content: center;
+            background: var(--swal2-background);
+            color: inherit
+        }
+
+        div:where(.swal2-container) .swal2-radio label,
+        div:where(.swal2-container) .swal2-checkbox label {
+            margin: 0 .6em;
+            font-size: 1.125em
+        }
+
+        div:where(.swal2-container) .swal2-radio input,
+        div:where(.swal2-container) .swal2-checkbox input {
+            flex-shrink: 0;
+            margin: 0 .4em
+        }
+
+        div:where(.swal2-container) label:where(.swal2-input-label) {
+            display: flex;
+            justify-content: center;
+            margin: 1em auto 0
+        }
+
+        div:where(.swal2-container) div:where(.swal2-validation-message) {
+            align-items: center;
+            justify-content: center;
+            margin: 1em 0 0;
+            padding: .625em;
+            overflow: hidden;
+            background: var(--swal2-validation-message-background);
+            color: var(--swal2-validation-message-color);
+            font-size: 1em;
+            font-weight: 300
+        }
+
+        div:where(.swal2-container) div:where(.swal2-validation-message)::before {
+            content: "!";
+            display: inline-block;
+            width: 1.5em;
+            min-width: 1.5em;
+            height: 1.5em;
+            margin: 0 .625em;
+            border-radius: 50%;
+            background-color: #f27474;
+            color: #fff;
+            font-weight: 600;
+            line-height: 1.5em;
+            text-align: center
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps {
+            flex-wrap: wrap;
+            align-items: center;
+            max-width: 100%;
+            margin: 1.25em auto;
+            padding: 0;
+            background: rgba(0, 0, 0, 0);
+            font-weight: 600
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps li {
+            display: inline-block;
+            position: relative
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps .swal2-progress-step {
+            z-index: 20;
+            flex-shrink: 0;
+            width: 2em;
+            height: 2em;
+            border-radius: 2em;
+            background: #2778c4;
+            color: #fff;
+            line-height: 2em;
+            text-align: center
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps .swal2-progress-step.swal2-active-progress-step {
+            background: #2778c4
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps .swal2-progress-step.swal2-active-progress-step~.swal2-progress-step {
+            background: var(--swal2-progress-step-background);
+            color: #fff
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps .swal2-progress-step.swal2-active-progress-step~.swal2-progress-step-line {
+            background: var(--swal2-progress-step-background)
+        }
+
+        div:where(.swal2-container) .swal2-progress-steps .swal2-progress-step-line {
+            z-index: 10;
+            flex-shrink: 0;
+            width: 2.5em;
+            height: .4em;
+            margin: 0 -1px;
+            background: #2778c4
+        }
+
+        div:where(.swal2-icon) {
+            position: relative;
+            box-sizing: content-box;
+            justify-content: center;
+            width: 5em;
+            height: 5em;
+            margin: 2.5em auto .6em;
+            zoom: var(--swal2-icon-zoom);
+            border: .25em solid rgba(0, 0, 0, 0);
+            border-radius: 50%;
+            border-color: #000;
+            font-family: inherit;
+            line-height: 5em;
+            cursor: default;
+            user-select: none
+        }
+
+        div:where(.swal2-icon) .swal2-icon-content {
+            display: flex;
+            align-items: center;
+            font-size: 3.75em
+        }
+
+        div:where(.swal2-icon).swal2-error {
+            border-color: #f27474;
+            color: #f27474
+        }
+
+        div:where(.swal2-icon).swal2-error .swal2-x-mark {
+            position: relative;
+            flex-grow: 1
+        }
+
+        div:where(.swal2-icon).swal2-error [class^=swal2-x-mark-line] {
+            display: block;
+            position: absolute;
+            top: 2.3125em;
+            width: 2.9375em;
+            height: .3125em;
+            border-radius: .125em;
+            background-color: #f27474
+        }
+
+        div:where(.swal2-icon).swal2-error [class^=swal2-x-mark-line][class$=left] {
+            left: 1.0625em;
+            transform: rotate(45deg)
+        }
+
+        div:where(.swal2-icon).swal2-error [class^=swal2-x-mark-line][class$=right] {
+            right: 1em;
+            transform: rotate(-45deg)
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            div:where(.swal2-icon).swal2-error.swal2-icon-show {
+                animation: swal2-animate-error-icon .5s
+            }
+
+            div:where(.swal2-icon).swal2-error.swal2-icon-show .swal2-x-mark {
+                animation: swal2-animate-error-x-mark .5s
+            }
+        }
+
+        div:where(.swal2-icon).swal2-warning {
+            border-color: #f8bb86;
+            color: #f8bb86
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            div:where(.swal2-icon).swal2-warning.swal2-icon-show {
+                animation: swal2-animate-error-icon .5s
+            }
+
+            div:where(.swal2-icon).swal2-warning.swal2-icon-show .swal2-icon-content {
+                animation: swal2-animate-i-mark .5s
+            }
+        }
+
+        div:where(.swal2-icon).swal2-info {
+            border-color: #3fc3ee;
+            color: #3fc3ee
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            div:where(.swal2-icon).swal2-info.swal2-icon-show {
+                animation: swal2-animate-error-icon .5s
+            }
+
+            div:where(.swal2-icon).swal2-info.swal2-icon-show .swal2-icon-content {
+                animation: swal2-animate-i-mark .8s
+            }
+        }
+
+        div:where(.swal2-icon).swal2-question {
+            border-color: #87adbd;
+            color: #87adbd
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            div:where(.swal2-icon).swal2-question.swal2-icon-show {
+                animation: swal2-animate-error-icon .5s
+            }
+
+            div:where(.swal2-icon).swal2-question.swal2-icon-show .swal2-icon-content {
+                animation: swal2-animate-question-mark .8s
+            }
+        }
+
+        div:where(.swal2-icon).swal2-success {
+            border-color: #a5dc86;
+            color: #a5dc86
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-circular-line] {
+            position: absolute;
+            width: 3.75em;
+            height: 7.5em;
+            border-radius: 50%
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-circular-line][class$=left] {
+            top: -0.4375em;
+            left: -2.0635em;
+            transform: rotate(-45deg);
+            transform-origin: 3.75em 3.75em;
+            border-radius: 7.5em 0 0 7.5em
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-circular-line][class$=right] {
+            top: -0.6875em;
+            left: 1.875em;
+            transform: rotate(-45deg);
+            transform-origin: 0 3.75em;
+            border-radius: 0 7.5em 7.5em 0
+        }
+
+        div:where(.swal2-icon).swal2-success .swal2-success-ring {
+            position: absolute;
+            z-index: 2;
+            top: -0.25em;
+            left: -0.25em;
+            box-sizing: content-box;
+            width: 100%;
+            height: 100%;
+            border: .25em solid rgba(165, 220, 134, .3);
+            border-radius: 50%
+        }
+
+        div:where(.swal2-icon).swal2-success .swal2-success-fix {
+            position: absolute;
+            z-index: 1;
+            top: .5em;
+            left: 1.625em;
+            width: .4375em;
+            height: 5.625em;
+            transform: rotate(-45deg)
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-line] {
+            display: block;
+            position: absolute;
+            z-index: 2;
+            height: .3125em;
+            border-radius: .125em;
+            background-color: #a5dc86
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-line][class$=tip] {
+            top: 2.875em;
+            left: .8125em;
+            width: 1.5625em;
+            transform: rotate(45deg)
+        }
+
+        div:where(.swal2-icon).swal2-success [class^=swal2-success-line][class$=long] {
+            top: 2.375em;
+            right: .5em;
+            width: 2.9375em;
+            transform: rotate(-45deg)
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            div:where(.swal2-icon).swal2-success.swal2-icon-show .swal2-success-line-tip {
+                animation: swal2-animate-success-line-tip .75s
+            }
+
+            div:where(.swal2-icon).swal2-success.swal2-icon-show .swal2-success-line-long {
+                animation: swal2-animate-success-line-long .75s
+            }
+
+            div:where(.swal2-icon).swal2-success.swal2-icon-show .swal2-success-circular-line-right {
+                animation: swal2-rotate-success-circular-line 4.25s ease-in
+            }
+        }
+
+        [class^=swal2] {
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0)
+        }
+
+        .swal2-show {
+            animation: var(--swal2-show-animation)
+        }
+
+        .swal2-hide {
+            animation: var(--swal2-hide-animation)
+        }
+
+        .swal2-noanimation {
+            transition: none
+        }
+
+        .swal2-scrollbar-measure {
+            position: absolute;
+            top: -9999px;
+            width: 50px;
+            height: 50px;
+            overflow: scroll
+        }
+
+        .swal2-rtl .swal2-close {
+            margin-right: initial;
+            margin-left: 0
+        }
+
+        .swal2-rtl .swal2-timer-progress-bar {
+            right: 0;
+            left: auto
+        }
+
+        .swal2-toast {
+            box-sizing: border-box;
+            grid-column: 1/4 !important;
+            grid-row: 1/4 !important;
+            grid-template-columns: min-content auto min-content;
+            padding: 1em;
+            overflow-y: hidden;
+            border: var(--swal2-toast-border);
+            background: var(--swal2-background);
+            box-shadow: var(--swal2-toast-box-shadow);
+            pointer-events: all
+        }
+
+        .swal2-toast>* {
+            grid-column: 2
+        }
+
+        .swal2-toast h2:where(.swal2-title) {
+            margin: .5em 1em;
+            padding: 0;
+            font-size: 1em;
+            text-align: initial
+        }
+
+        .swal2-toast .swal2-loading {
+            justify-content: center
+        }
+
+        .swal2-toast input:where(.swal2-input) {
+            height: 2em;
+            margin: .5em;
+            font-size: 1em
+        }
+
+        .swal2-toast .swal2-validation-message {
+            font-size: 1em
+        }
+
+        .swal2-toast div:where(.swal2-footer) {
+            margin: .5em 0 0;
+            padding: .5em 0 0;
+            font-size: .8em
+        }
+
+        .swal2-toast button:where(.swal2-close) {
+            grid-column: 3/3;
+            grid-row: 1/99;
+            align-self: center;
+            width: .8em;
+            height: .8em;
+            margin: 0;
+            font-size: 2em
+        }
+
+        .swal2-toast div:where(.swal2-html-container) {
+            margin: .5em 1em;
+            padding: 0;
+            overflow: initial;
+            font-size: 1em;
+            text-align: initial
+        }
+
+        .swal2-toast div:where(.swal2-html-container):empty {
+            padding: 0
+        }
+
+        .swal2-toast .swal2-loader {
+            grid-column: 1;
+            grid-row: 1/99;
+            align-self: center;
+            width: 2em;
+            height: 2em;
+            margin: .25em
+        }
+
+        .swal2-toast .swal2-icon {
+            grid-column: 1;
+            grid-row: 1/99;
+            align-self: center;
+            width: 2em;
+            min-width: 2em;
+            height: 2em;
+            margin: 0 .5em 0 0
+        }
+
+        .swal2-toast .swal2-icon .swal2-icon-content {
+            display: flex;
+            align-items: center;
+            font-size: 1.8em;
+            font-weight: bold
+        }
+
+        .swal2-toast .swal2-icon.swal2-success .swal2-success-ring {
+            width: 2em;
+            height: 2em
+        }
+
+        .swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line] {
+            top: .875em;
+            width: 1.375em
+        }
+
+        .swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=left] {
+            left: .3125em
+        }
+
+        .swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=right] {
+            right: .3125em
+        }
+
+        .swal2-toast div:where(.swal2-actions) {
+            justify-content: flex-start;
+            height: auto;
+            margin: 0;
+            margin-top: .5em;
+            padding: 0 .5em
+        }
+
+        .swal2-toast button:where(.swal2-styled) {
+            margin: .25em .5em;
+            padding: .4em .6em;
+            font-size: 1em
+        }
+
+        .swal2-toast .swal2-success {
+            border-color: #a5dc86
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-circular-line] {
+            position: absolute;
+            width: 1.6em;
+            height: 3em;
+            border-radius: 50%
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-circular-line][class$=left] {
+            top: -0.8em;
+            left: -0.5em;
+            transform: rotate(-45deg);
+            transform-origin: 2em 2em;
+            border-radius: 4em 0 0 4em
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-circular-line][class$=right] {
+            top: -0.25em;
+            left: .9375em;
+            transform-origin: 0 1.5em;
+            border-radius: 0 4em 4em 0
+        }
+
+        .swal2-toast .swal2-success .swal2-success-ring {
+            width: 2em;
+            height: 2em
+        }
+
+        .swal2-toast .swal2-success .swal2-success-fix {
+            top: 0;
+            left: .4375em;
+            width: .4375em;
+            height: 2.6875em
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-line] {
+            height: .3125em
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-line][class$=tip] {
+            top: 1.125em;
+            left: .1875em;
+            width: .75em
+        }
+
+        .swal2-toast .swal2-success [class^=swal2-success-line][class$=long] {
+            top: .9375em;
+            right: .1875em;
+            width: 1.375em
+        }
+
+        @container swal2-popup style(--swal2-icon-animations:true) {
+            .swal2-toast .swal2-success.swal2-icon-show .swal2-success-line-tip {
+                animation: swal2-toast-animate-success-line-tip .75s
+            }
+
+            .swal2-toast .swal2-success.swal2-icon-show .swal2-success-line-long {
+                animation: swal2-toast-animate-success-line-long .75s
+            }
+        }
+
+        .swal2-toast.swal2-show {
+            animation: var(--swal2-toast-show-animation)
+        }
+
+        .swal2-toast.swal2-hide {
+            animation: var(--swal2-toast-hide-animation)
+        }
+
+        @keyframes swal2-show {
+            0% {
+                transform: scale(0.7)
+            }
+
+            45% {
+                transform: scale(1.05)
+            }
+
+            80% {
+                transform: scale(0.95)
+            }
+
+            100% {
+                transform: scale(1)
+            }
+        }
+
+        @keyframes swal2-hide {
+            0% {
+                transform: scale(1);
+                opacity: 1
+            }
+
+            100% {
+                transform: scale(0.5);
+                opacity: 0
+            }
+        }
+
+        @keyframes swal2-animate-success-line-tip {
+            0% {
+                top: 1.1875em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: 1.0625em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: 2.1875em;
+                left: -0.375em;
+                width: 3.125em
+            }
+
+            84% {
+                top: 3em;
+                left: 1.3125em;
+                width: 1.0625em
+            }
+
+            100% {
+                top: 2.8125em;
+                left: .8125em;
+                width: 1.5625em
+            }
+        }
+
+        @keyframes swal2-animate-success-line-long {
+            0% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            65% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            84% {
+                top: 2.1875em;
+                right: 0;
+                width: 3.4375em
+            }
+
+            100% {
+                top: 2.375em;
+                right: .5em;
+                width: 2.9375em
+            }
+        }
+
+        @keyframes swal2-rotate-success-circular-line {
+            0% {
+                transform: rotate(-45deg)
+            }
+
+            5% {
+                transform: rotate(-45deg)
+            }
+
+            12% {
+                transform: rotate(-405deg)
+            }
+
+            100% {
+                transform: rotate(-405deg)
+            }
+        }
+
+        @keyframes swal2-animate-error-x-mark {
+            0% {
+                margin-top: 1.625em;
+                transform: scale(0.4);
+                opacity: 0
+            }
+
+            50% {
+                margin-top: 1.625em;
+                transform: scale(0.4);
+                opacity: 0
+            }
+
+            80% {
+                margin-top: -0.375em;
+                transform: scale(1.15)
+            }
+
+            100% {
+                margin-top: 0;
+                transform: scale(1);
+                opacity: 1
+            }
+        }
+
+        @keyframes swal2-animate-error-icon {
+            0% {
+                transform: rotateX(100deg);
+                opacity: 0
+            }
+
+            100% {
+                transform: rotateX(0deg);
+                opacity: 1
+            }
+        }
+
+        @keyframes swal2-rotate-loading {
+            0% {
+                transform: rotate(0deg)
+            }
+
+            100% {
+                transform: rotate(360deg)
+            }
+        }
+
+        @keyframes swal2-animate-question-mark {
+            0% {
+                transform: rotateY(-360deg)
+            }
+
+            100% {
+                transform: rotateY(0)
+            }
+        }
+
+        @keyframes swal2-animate-i-mark {
+            0% {
+                transform: rotateZ(45deg);
+                opacity: 0
+            }
+
+            25% {
+                transform: rotateZ(-25deg);
+                opacity: .4
+            }
+
+            50% {
+                transform: rotateZ(15deg);
+                opacity: .8
+            }
+
+            75% {
+                transform: rotateZ(-5deg);
+                opacity: 1
+            }
+
+            100% {
+                transform: rotateX(0);
+                opacity: 1
+            }
+        }
+
+        @keyframes swal2-toast-show {
+            0% {
+                transform: translateY(-0.625em) rotateZ(2deg)
+            }
+
+            33% {
+                transform: translateY(0) rotateZ(-2deg)
+            }
+
+            66% {
+                transform: translateY(0.3125em) rotateZ(2deg)
+            }
+
+            100% {
+                transform: translateY(0) rotateZ(0deg)
+            }
+        }
+
+        @keyframes swal2-toast-hide {
+            100% {
+                transform: rotateZ(1deg);
+                opacity: 0
+            }
+        }
+
+        @keyframes swal2-toast-animate-success-line-tip {
+            0% {
+                top: .5625em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: .125em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: .625em;
+                left: -0.25em;
+                width: 1.625em
+            }
+
+            84% {
+                top: 1.0625em;
+                left: .75em;
+                width: .5em
+            }
+
+            100% {
+                top: 1.125em;
+                left: .1875em;
+                width: .75em
+            }
+        }
+
+        @keyframes swal2-toast-animate-success-line-long {
+            0% {
+                top: 1.625em;
+                right: 1.375em;
+                width: 0
+            }
+
+            65% {
+                top: 1.25em;
+                right: .9375em;
+                width: 0
+            }
+
+            84% {
+                top: .9375em;
+                right: 0;
+                width: 1.125em
+            }
+
+            100% {
+                top: .9375em;
+                right: .1875em;
+                width: 1.375em
+            }
+        }
+    </style>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/blueimp-md5/2.19.0/md5.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script src="https://cdn.kanxizai.cn/ajax/libs/browser-id3-writer/4.4.0/browser-id3-writer.min.js"></script>
+
+    <!-- 统计脚本 -->
+    <script charset="UTF-8" id="LA_COLLECT" src="./js/vender/js-sdk-pro.min.js"></script>
+    <script>LA.init({ id: "3LqkTrqSpXRKvmFy", ck: "3LqkTrqSpXRKvmFy" })</script>
+
+    <!-- 暗黑模式切换脚本 -->
+    <script src="./js/theme-switcher.js?v=5.2.0"></script>
+
+    <!-- 公告弹窗样式 -->
+    <link rel="stylesheet" href="./css/announcement.css?v=2.0.0">
+    <style type="text/css">
+        .card-form {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        .card-form.fade-out {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        .card-form.fade-in {
+            animation: fadeInUp 0.5s ease forwards;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body style="overflow: hidden;">
+    <!-- 公告弹窗 -->
+    <div class="announcement-modal show" id="announcementModal" style="display: flex;">
+        <div class="announcement-content">
+            <div class="announcement-header">
+                <h3>系统公告</h3>
+            </div>
+            <div class="announcement-body">
+                <div class="announcement-section system-announcement">
+                    <div class="section-title">
+                        <i class="fas fa-bullhorn"></i>
+                        系统公告
+                    </div>
+                    <div class="section-content" id="systemAnnouncement">
+                        <p style="color: red;">
+                            本站运行差不多已满一年，由于个人原因无法继续维护。感谢大家一直以来的支持！如需继续使用网易云解析服务，推荐访问苏晓晴 苏姐的站点：<a
+                                href="https://wyapi.toubiec.cn" style="color: red;">https://wyapi.toubiec.cn</a>
+                        </p>
+                    </div>
+                </div>
+                <div class="announcement-section disclaimer-section">
+                    <div class="section-title">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        免责声明协议
+                    </div>
+                    <div class="section-content" id="disclaimerContent">
+                        <div class="disclaimer-container">
+                            <h3>⚠️ 重要免责声明 ⚠️</h3>
+
+                            <div class="disclaimer-content">
+                                <p>用户在使用本网站服务前，请务必仔细阅读并理解本免责声明。</p>
+
+                                <p><strong>1. 责任免除</strong></p>
+                                <p>用户通过本网站解析获取音乐资源的行为属于<strong>个人行为</strong>，与网站开发者、运营方及任何相关方<strong>无关</strong>。网站开发者不承担任何由此产生的直接或间接责任。
+                                </p>
+
+                                <p><strong>2. 版权声明</strong></p>
+                                <p>用户须完全尊重音乐版权，承诺仅将获取的音乐资源用于<strong>个人学习、研究或欣赏目的</strong>，不得用于任何商业用途。</p>
+
+                                <p><strong>3. 禁止传播</strong></p>
+                                <p>用户<strong>不得以任何形式</strong>传播、分享、分发通过本网站获取的音乐文件，不得侵犯版权方的合法权益。</p>
+
+                                <p><strong>4. 使用即同意</strong></p>
+                                <p>任何用户使用本网站服务即默认<strong>表示已阅读、理解并同意</strong>本免责声明的全部内容，接受所有相关条款的约束。</p>
+
+                                <p><strong>5. 法律责任</strong></p>
+                                <p>如用户违反本声明内容，产生任何法律纠纷或责任，均由用户<strong>自行承担全部责任</strong>，网站开发者不承担任何法律责任。</p>
+
+                                <p class="warning-note">
+                                    <strong>继续使用本网站即表示您接受以上所有条款！</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="announcement-footer">
+                <button class="confirm-btn" id="confirmBtn">我已阅读并同意</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header position-relative">
+            <h1><i class="fas fa-music fa-bounce text-primary"></i> 网易云无损解析</h1>
+            <p class="text-muted">高品质音乐解析下载工具</p>
+        </div>
+
+        <!-- 解析方式选择卡片 -->
+        <div class="parse-method-card mb-3 position-relative">
+            <!-- 历史记录 -->
+            <button id="history-btn" class="position-absolute" style="top: 10px; right: 50px;" title="播放历史">
+                <i class="fas fa-history"></i>
+            </button>
+
+            <!-- 设置 -->
+            <button id="settings-btn" class="position-absolute" style="top: 10px; right: 10px;" title="网站设置">
+                <i class="fas fa-cog"></i>
+            </button>
+
+            <div class="parse-method-header">
+                <i class="fas fa-tools text-primary me-2"></i>
+                <span class="fw-bold">解析方式</span>
+            </div>
+
+            <div class="parse-method-options">
+                <label class="parse-method-option" for="parseMethodSearch">
+                    <input class="parse-method-input" type="radio" name="parseMethod" id="parseMethodSearch"
+                        value="search" checked="">
+                    <div class="parse-method-content">
+                        <div class="parse-method-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="parse-method-label">搜索解析</div>
+                    </div>
+                </label>
+
+                <label class="parse-method-option" for="parseMethodId">
+                    <input class="parse-method-input" type="radio" name="parseMethod" id="parseMethodId" value="id">
+                    <div class="parse-method-content">
+                        <div class="parse-method-icon">
+                            <i class="fas fa-link"></i>
+                        </div>
+                        <div class="parse-method-label">ID/链接解析</div>
+                    </div>
+                </label>
+
+                <label class="parse-method-option" for="parseMethodPlaylist">
+                    <input class="parse-method-input" type="radio" name="parseMethod" id="parseMethodPlaylist"
+                        value="playlist">
+                    <div class="parse-method-content">
+                        <div class="parse-method-icon">
+                            <i class="fas fa-list"></i>
+                        </div>
+                        <div class="parse-method-label">歌单解析</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- 搜索卡片 -->
+        <div id="search-parse-card" class="card-form mb-3 p-3 position-relative d-none">
+            <div class="mb-2">
+                <label for="search_input" class="form-label fw-bold mb-1"><i
+                        class="fas fa-search text-primary me-2"></i>搜索歌曲</label>
+                <div class="input-group">
+                    <input type="text" id="search_input" class="form-control" placeholder="输入歌曲名称搜索">
+                    <span class="position-absolute"
+                        style="right:130px; top: 50%; transform: translateY(-50%); z-index: 5; cursor: pointer; display: none;"
+                        id="clear_search_btn" title="清空搜索">
+                        <i class="fas fa-times-circle text-muted"></i>
+                    </span>
+                    <button class="btn btn-primary" type="button" id="search_btn">
+                        <i class="fas fa-search"></i> 搜索
+                    </button>
+                </div>
+            </div>
+
+            <!-- 搜索卡片中添加音质选择 -->
+            <div class="mb-3">
+                <label class="form-label fw-bold"><i class="fas fa-headphones-alt text-primary me-2"></i>音质选择</label>
+                <div id="search-quality-container">
+                    <div class="card">
+                        <div class="card-header p-0">
+                            <button
+                                class="btn btn-link w-100 text-start text-decoration-none d-flex justify-content-between align-items-center p-3"
+                                type="button" data-bs-toggle="collapse" data-bs-target="#searchQualityOptions">
+                                <span><i class="fas fa-music me-2"></i>当前选择：<span id="searchSelectedQuality"
+                                        class="fw-bold text-primary">高解析度无损(VIP)</span></span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        </div>
+                        <div id="searchQualityOptions" class="collapse">
+                            <div class="card-body p-0">
+                                <div class="list-group list-group-flush">
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="standard">
+                                        <span><i class="fas fa-music text-muted me-2"></i>标准(看歌曲)</span>
+                                        <span class="badge bg-light text-dark">128kbps</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="exhigh">
+                                        <span><i class="fas fa-star text-warning me-2"></i>极高(看歌曲)</span>
+                                        <span class="badge bg-light text-dark">HQ</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="lossless">
+                                        <span><i class="fas fa-gem text-info me-2"></i>无损(VIP)</span>
+                                        <span class="badge bg-light text-dark">SQ</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="hires">
+                                        <span><i class="fas fa-crown text-warning me-2"></i>高解析度无损(VIP)</span>
+                                        <span class="badge bg-light text-dark">Hi-Res</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="jyeffect">
+                                        <span><i class="fas fa-headphones text-success me-2"></i>高清臻音(VIP)</span>
+                                        <span class="badge bg-light text-dark">Spatial Audio</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="jymaster">
+                                        <span><i class="fas fa-certificate text-danger me-2"></i>超清母带(SVIP)</span>
+                                        <span class="badge bg-light text-dark">Master</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="sky">
+                                        <span><i class="fas fa-cloud text-primary me-2"></i>沉浸环绕声(SVIP)</span>
+                                        <span class="badge bg-light text-dark">Surround Audio</span>
+                                    </button>
+                                    <button type="button"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center search-quality-option"
+                                        data-value="dolby">
+                                        <span><i class="fas fa-compact-disc text-danger me-2"></i>杜比全景声(SVIP)</span>
+                                        <span class="badge bg-light text-dark">Dolby Atmos</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="search_level" value="hires">
+                </div>
+            </div>
+            <div id="search_results" class="search-results mt-2 d-none">
+                <div class="list-group" id="results_list"></div>
+                <div class="text-center mt-1 d-none" id="loading_indicator">
+                    <div class="spinner-border text-primary spinner-border-sm" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p class="text-muted small mb-1">搜索中...</p>
+                </div>
+                <p class="text-muted small text-center mt-1 mb-0">点击歌曲可直接解析</p>
+            </div>
+        </div>
+
+        <!-- 歌曲ID或URL解析 -->
+        <div id="id-parse-card" class="card-form mb-3 p-3 position-relative d-none">
+            <form id="query-form">
+                <div class="mb-4">
+                    <label for="song_ids" class="form-label fw-bold"><i
+                            class="fas fa-list text-primary me-2"></i>歌曲ID或URL</label>
+                    <input type="text" id="song_ids" class="form-control" placeholder="请输入歌曲ID或分享链接">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold"><i
+                            class="fas fa-headphones-alt text-primary me-2"></i>音质选择</label>
+                    <div id="id-quality-container">
+                        <div class="card">
+                            <div class="card-header p-0">
+                                <button
+                                    class="btn btn-link w-100 text-start text-decoration-none d-flex justify-content-between align-items-center p-3"
+                                    type="button" data-bs-toggle="collapse" data-bs-target="#qualityOptions">
+                                    <span><i class="fas fa-music me-2"></i>当前选择：<span id="selectedQuality"
+                                            class="fw-bold text-primary">高解析度无损(VIP)</span></span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="qualityOptions" class="collapse">
+                                <div class="card-body p-0">
+                                    <div class="list-group list-group-flush">
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="standard">
+                                            <span><i class="fas fa-music text-muted me-2"></i>标准(看歌曲)</span>
+                                            <span class="badge bg-light text-dark">128kbps</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="exhigh">
+                                            <span><i class="fas fa-star text-warning me-2"></i>极高(看歌曲)</span>
+                                            <span class="badge bg-light text-dark">HQ</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="lossless">
+                                            <span><i class="fas fa-gem text-info me-2"></i>无损(VIP)</span>
+                                            <span class="badge bg-light text-dark">SQ</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="hires">
+                                            <span><i class="fas fa-crown text-warning me-2"></i>高解析度无损(VIP)</span>
+                                            <span class="badge bg-light text-dark">Hi-Res</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="jyeffect">
+                                            <span><i class="fas fa-headphones text-success me-2"></i>高清臻音(VIP)</span>
+                                            <span class="badge bg-light text-dark">Spatial Audio</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="jymaster">
+                                            <span><i class="fas fa-certificate text-danger me-2"></i>超清母带(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Master</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="sky">
+                                            <span><i class="fas fa-cloud text-primary me-2"></i>沉浸环绕声(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Surround Audio</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center quality-option"
+                                            data-value="dolby">
+                                            <span><i class="fas fa-compact-disc text-danger me-2"></i>杜比全景声(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Dolby Atmos</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="level" value="hires">
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">立即解析</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 歌单解析卡片 -->
+        <div id="playlist-parse-card" class="card-form mb-3 p-3 position-relative">
+            <form id="playlist-form">
+                <div class="mb-4">
+                    <label for="playlist_id" class="form-label fw-bold"><i
+                            class="fas fa-list text-primary me-2"></i>歌单ID或URL</label>
+                    <input type="text" id="playlist_id" class="form-control" placeholder="请输入歌单ID或分享链接">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold"><i
+                            class="fas fa-headphones-alt text-primary me-2"></i>音质选择</label>
+                    <div id="playlist-quality-container">
+                        <div class="card">
+                            <div class="card-header p-0">
+                                <button
+                                    class="btn btn-link w-100 text-start text-decoration-none d-flex justify-content-between align-items-center p-3"
+                                    type="button" data-bs-toggle="collapse" data-bs-target="#playlistQualityOptions">
+                                    <span><i class="fas fa-music me-2"></i>当前选择：<span id="playlistSelectedQuality"
+                                            class="fw-bold text-primary">高解析度无损(VIP)</span></span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="playlistQualityOptions" class="collapse">
+                                <div class="card-body p-0">
+                                    <div class="list-group list-group-flush">
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="standard">
+                                            <span><i class="fas fa-music text-muted me-2"></i>标准(看歌曲)</span>
+                                            <span class="badge bg-light text-dark">128kbps</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="exhigh">
+                                            <span><i class="fas fa-star text-warning me-2"></i>极高(看歌曲)</span>
+                                            <span class="badge bg-light text-dark">HQ</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="lossless">
+                                            <span><i class="fas fa-gem text-info me-2"></i>无损(VIP)</span>
+                                            <span class="badge bg-light text-dark">SQ</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="hires">
+                                            <span><i class="fas fa-crown text-warning me-2"></i>高解析度无损(VIP)</span>
+                                            <span class="badge bg-light text-dark">Hi-Res</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="jyeffect">
+                                            <span><i class="fas fa-headphones text-success me-2"></i>高清臻音(VIP)</span>
+                                            <span class="badge bg-light text-dark">Spatial Audio</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="jymaster">
+                                            <span><i class="fas fa-certificate text-danger me-2"></i>超清母带(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Master</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="sky">
+                                            <span><i class="fas fa-cloud text-primary me-2"></i>沉浸环绕声(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Surround Audio</span>
+                                        </button>
+                                        <button type="button"
+                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center playlist-quality-option"
+                                            data-value="dolby">
+                                            <span><i class="fas fa-compact-disc text-danger me-2"></i>杜比全景声(SVIP)</span>
+                                            <span class="badge bg-light text-dark">Dolby Atmos</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="playlist_level" value="hires">
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">解析歌单</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 歌单结果显示 -->
+        <div id="playlist-result" class="result-card d-none">
+            <div class="playlist-info mb-4">
+                <div class="playlist-cover">
+                    <img id="playlist-cover" src="" alt="歌单封面" referrerpolicy="no-referrer">
+                </div>
+                <div class="playlist-meta">
+                    <h4 id="playlist-name" class="playlist-name"></h4>
+                    <div class="playlist-meta-item">
+                        <i class="fas fa-user text-primary"></i>
+                        <div>创建者：<span id="playlist-creator" class="fw-medium"></span></div>
+                    </div>
+                    <div class="playlist-meta-item">
+                        <i class="fas fa-music text-danger"></i>
+                        <div>歌曲数：<span id="playlist-track-count" class="fw-medium"></span></div>
+                    </div>
+                    <div class="playlist-meta-item">
+                        <i class="fas fa-calendar-alt text-success"></i>
+                        <div>创建时间：<span id="playlist-create-time" class="fw-medium"></span></div>
+                    </div>
+                    <div class="mt-3">
+                        <button id="download-all" class="btn btn-primary rounded-pill px-4">
+                            <i class="fas fa-download me-2"></i>一键下载全部
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="playlist-tracks mt-4">
+                <h5 class="mb-3"><i class="fas fa-list-ul text-primary me-2"></i>歌曲列表</h5>
+                <div class="playlist-tracks-container">
+                    <div id="playlist-tracks-list">
+                        <!-- 歌曲列表将通过JS动态生成 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 批量下载进度 -->
+            <div id="batch-download-progress" class="mt-4 d-none">
+                <h5 class="mb-3"><i class="fas fa-tasks text-primary me-2"></i>批量下载进度</h5>
+                <div class="progress mb-2">
+                    <div id="batch-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                        role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+                        title="批量下载进度" aria-label="批量下载进度"></div>
+                </div>
+                <p id="batch-status" class="text-center">准备下载...</p>
+                <div id="batch-details" class="small text-muted"></div>
+            </div>
+        </div>
+
+        <!-- 歌曲信息页面 -->
+        <div id="song-info" class="result-card d-none">
+            <div class="song-info">
+                <div id="aplayer" class="aplayer-container"></div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-music text-danger"></i> 歌名：</strong><span id="song_name"></span></p>
+                    <p><strong><i class="fas fa-microphone text-success"></i> 歌手：</strong><span
+                            id="artist_names"></span></p>
+                    <p><strong><i class="fas fa-compact-disc text-primary"></i> 专辑：</strong><span
+                            id="song_alname"></span></p>
+                    <p><strong><i class="fas fa-sliders-h text-warning"></i> 音质：</strong><span id="song_level"></span>
+                    </p>
+                    <p><strong><i class="fas fa-box text-info"></i> 大小：</strong><span id="song_size"></span></p>
+                </div>
+            </div>
+
+            <!-- 下载按钮 -->
+            <div class="d-grid">
+                <button id="download-pack" class="btn btn-primary btn-lg">
+                    📥 下载歌曲
+                </button>
+            </div>
+            <!-- 进度条 -->
+            <div class="progress-container mt-3 d-none">
+                <div class="progress">
+                    <div id="download-progress" class="progress-bar progress-bar-striped" role="progressbar"
+                        title="下载进度" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        <span id="progress-text">0%</span>
+                    </div>
+                </div>
+                <p id="download-status" class="text-center mt-2 text-muted small">准备下载...</p>
+            </div>
+
+            <!-- 歌词 -->
+            <!-- <div class="lyric-box">
+                <h5>📜 歌词</h5>
+                <div id="lyric" class="text-secondary"></div>
+            </div> -->
+        </div>
+
+        <!-- 网站信息手风琴 -->
+        <div class="site-info-section mt-4 mb-3">
+            <div class="section-header text-center mb-3">
+                <div class="d-flex align-items-center justify-content-center">
+                    <hr class="flex-grow-1 border-top border-2 border-primary opacity-25 rounded-pill">
+                    <span class="mx-3 text-primary fw-bold px-3 py-1 rounded-pill bg-light shadow-sm"
+                        style="font-size:1.1rem;">
+                        <i class="fas fa-info-circle me-2"></i>本站信息
+                    </span>
+                    <hr class="flex-grow-1 border-top border-2 border-primary opacity-25 rounded-pill">
+                </div>
+            </div>
+
+
+
+            <!-- 关于我们 -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingAbout">
+                    <button class="accordion-button collapsed shadow-none bg-light" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#collapseAbout" aria-expanded="false"
+                        aria-controls="collapseAbout">
+                        <i class="fas fa-heart text-primary me-2"></i>
+                        <span class="fw-bold">关于我们</span>
+                    </button>
+                </h2>
+                <div id="collapseAbout" class="accordion-collapse collapse" aria-labelledby="headingAbout"
+                    data-bs-parent="#siteInfoAccordion">
+                    <div class="accordion-body bg-white">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <h5 class="text-primary mb-2">
+                                        <i class="fas fa-music me-2"></i>专业音乐下载平台
+                                    </h5>
+                                    <p class="text-muted mb-3 lh-lg">
+                                        基于网易云音乐API构建的高品质音乐下载工具，为音乐爱好者提供
+                                        <span class="text-primary fw-semibold">便捷、高效、专业</span>的音乐获取体验。
+                                    </p>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <span class="badge bg-primary-subtle text-primary px-3 py-2">
+                                        <i class="fas fa-crown me-1"></i>多音质支持
+                                    </span>
+                                    <span class="badge bg-success-subtle text-success px-3 py-2">
+                                        <i class="fas fa-bolt me-1"></i>快速解析
+                                    </span>
+                                    <span class="badge bg-info-subtle text-info px-3 py-2">
+                                        <i class="fas fa-shield-alt me-1"></i>安全稳定
+                                    </span>
+                                    <span class="badge bg-warning-subtle text-warning px-3 py-2">
+                                        <i class="fas fa-palette me-1"></i>个性定制
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="p-3">
+                                    <div class="bg-primary-subtle rounded-circle d-inline-flex align-items-center justify-content-center"
+                                        style="width: 80px; height: 80px;">
+                                        <i class="fas fa-headphones text-primary" style="font-size: 2rem;"></i>
+                                    </div>
+                                    <div class="mt-3">
+                                        <small class="text-muted d-block">让音乐触手可及</small>
+                                        <small class="text-primary fw-semibold">Music Within Reach</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 使用指南 -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingUsage">
+                    <button class="accordion-button collapsed shadow-none bg-light" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#collapseUsage" aria-expanded="false"
+                        aria-controls="collapseUsage">
+                        <i class="fas fa-compass text-primary me-2"></i>
+                        <span class="fw-bold">使用指南</span>
+                    </button>
+                </h2>
+                <div id="collapseUsage" class="accordion-collapse collapse" aria-labelledby="headingUsage"
+                    data-bs-parent="#siteInfoAccordion">
+                    <div class="accordion-body bg-white">
+                        <div class="row">
+                            <!-- 操作流程 -->
+                            <div class="col-lg-6 mb-4">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-primary-subtle rounded-circle d-inline-flex align-items-center justify-content-center me-3"
+                                        style="width: 40px; height: 40px;">
+                                        <i class="fas fa-play text-primary"></i>
+                                    </div>
+                                    <h6 class="text-primary mb-0 fw-bold">操作流程</h6>
+                                </div>
+                                <div class="ps-4">
+                                    <div class="d-flex mb-3">
+                                        <span
+                                            class="badge bg-primary text-white rounded-circle me-3 d-flex align-items-center justify-content-center"
+                                            style="width: 24px; height: 24px; font-size: 12px;">1</span>
+                                        <div>
+                                            <div class="fw-semibold text-dark">选择解析方式</div>
+                                            <small class="text-muted">支持搜索解析、ID/链接解析、歌单解析</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <span
+                                            class="badge bg-success text-white rounded-circle me-3 d-flex align-items-center justify-content-center"
+                                            style="width: 24px; height: 24px; font-size: 12px;">2</span>
+                                        <div>
+                                            <div class="fw-semibold text-dark">选择音质格式</div>
+                                            <small class="text-muted">标准、极高、无损、Hi-Res等音质选项</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <span
+                                            class="badge bg-info text-white rounded-circle me-3 d-flex align-items-center justify-content-center"
+                                            style="width: 24px; height: 24px; font-size: 12px;">3</span>
+                                        <div>
+                                            <div class="fw-semibold text-dark">个性化设置</div>
+                                            <small class="text-muted">调整主题模式、文件命名格式等偏好</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex">
+                                        <span
+                                            class="badge bg-warning text-white rounded-circle me-3 d-flex align-items-center justify-content-center"
+                                            style="width: 24px; height: 24px; font-size: 12px;">4</span>
+                                        <div>
+                                            <div class="fw-semibold text-dark">开始解析下载</div>
+                                            <small class="text-muted">点击解析按钮，等待处理完成后下载</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 下载功能 -->
+                            <div class="col-lg-6">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-success-subtle rounded-circle d-inline-flex align-items-center justify-content-center me-3"
+                                        style="width: 40px; height: 40px;">
+                                        <i class="fas fa-download text-success"></i>
+                                    </div>
+                                    <h6 class="text-success mb-0 fw-bold">下载功能</h6>
+                                </div>
+                                <div class="ps-4">
+                                    <div class="card border-0 bg-light-subtle">
+                                        <div class="card-body p-3">
+                                            <div class="d-flex align-items-start mb-2">
+                                                <i class="fas fa-cog text-primary me-2 mt-1"
+                                                    style="font-size: 14px;"></i>
+                                                <div>
+                                                    <div class="fw-semibold" style="font-size: 14px;">智能命名</div>
+                                                    <small class="text-muted">支持"歌曲-歌手"或"歌手-歌曲"格式</small>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-start mb-2">
+                                                <i class="fas fa-tags text-info me-2 mt-1" style="font-size: 14px;"></i>
+                                                <div>
+                                                    <div class="fw-semibold" style="font-size: 14px;">元数据写入</div>
+                                                    <small class="text-muted">自动添加完整的标签信息（如：歌曲名、歌手、专辑等）</small>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-start mb-2">
+                                                <i class="fas fa-archive text-warning me-2 mt-1"
+                                                    style="font-size: 14px;"></i>
+                                                <div>
+                                                    <div class="fw-semibold" style="font-size: 14px;">打包选项</div>
+                                                    <small class="text-muted">单文件下载或ZIP压缩包下载（需要开启ZIP打包下载）</small>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-start mb-2">
+                                                <i class="fas fa-clock text-danger me-2 mt-1"
+                                                    style="font-size: 14px;"></i>
+                                                <div>
+                                                    <div class="fw-semibold" style="font-size: 14px;">下载进度</div>
+                                                    <small class="text-muted">实时显示进度，支持大文件传输</small>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-start">
+                                                <i class="fas fa-folder-open text-success me-2 mt-1"
+                                                    style="font-size: 14px;"></i>
+                                                <div>
+                                                    <div class="fw-semibold" style="font-size: 14px;">完整资源（需要开启ZIP打包下载）
+                                                    </div>
+                                                    <small class="text-muted">音频+封面(JPG)+歌词(LRC)</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 版权声明 -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingCopyright">
+                    <button class="accordion-button collapsed shadow-none bg-light" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#collapseCopyright" aria-expanded="false"
+                        aria-controls="collapseCopyright">
+                        <i class="fas fa-shield-alt text-primary me-2"></i>
+                        <span class="fw-bold">版权声明</span>
+                    </button>
+                </h2>
+                <div id="collapseCopyright" class="accordion-collapse collapse" aria-labelledby="headingCopyright"
+                    data-bs-parent="#siteInfoAccordion">
+                    <div class="accordion-body bg-white">
+                        <div class="row">
+                            <div class="col-lg-8">
+                                <div class="alert alert-danger border-0 shadow-sm mb-3">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="bg-danger-subtle rounded-circle d-inline-flex align-items-center justify-content-center me-3"
+                                            style="width: 40px; height: 40px;">
+                                            <i class="fas fa-ban text-danger"></i>
+                                        </div>
+                                        <h6 class="text-danger mb-0 fw-bold">重要声明</h6>
+                                    </div>
+                                    <div class="ps-4">
+                                        <div class="d-flex align-items-start mb-2">
+                                            <i class="fas fa-exclamation-triangle text-danger me-2 mt-1"
+                                                style="font-size: 14px;"></i>
+                                            <div class="fw-bold text-danger">严禁任何商业用途！本工具仅供个人学习研究使用</div>
+                                        </div>
+                                        <div class="d-flex align-items-start mb-2">
+                                            <i class="fas fa-user-shield text-warning me-2 mt-1"
+                                                style="font-size: 14px;"></i>
+                                            <div class="fw-bold text-danger">用户行为与本站无关，作者不承担任何法律责任</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="alert alert-info border-0 shadow-sm">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="bg-info-subtle rounded-circle d-inline-flex align-items-center justify-content-center me-3"
+                                            style="width: 40px; height: 40px;">
+                                            <i class="fas fa-info-circle text-info"></i>
+                                        </div>
+                                        <h6 class="text-info mb-0 fw-bold">服务说明</h6>
+                                    </div>
+                                    <div class="ps-4">
+                                        <div class="d-flex align-items-start mb-2">
+                                            <i class="fas fa-server text-info me-2 mt-1" style="font-size: 14px;"></i>
+                                            <div>本站不提供任何音视频存储服务</div>
+                                        </div>
+                                        <div class="d-flex align-items-start mb-2">
+                                            <i class="fas fa-cogs text-info me-2 mt-1" style="font-size: 14px;"></i>
+                                            <div>只提供最基本的解析服务</div>
+                                        </div>
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-copyright text-info me-2 mt-1"
+                                                style="font-size: 14px;"></i>
+                                            <div>如有版权问题，请通过下方联系方式与我们沟通</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4 text-center">
+                                <div class="p-3">
+                                    <div class="bg-warning-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                                        style="width: 80px; height: 80px;">
+                                        <i class="fas fa-balance-scale text-warning" style="font-size: 2rem;"></i>
+                                    </div>
+                                    <div class="mb-3">
+                                        <small class="text-muted d-block">合规使用</small>
+                                        <small class="text-warning fw-semibold">Legal Compliance</small>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                        <span class="badge bg-danger-subtle text-danger px-2 py-1">
+                                            <i class="fas fa-graduation-cap me-1"></i>学习研究
+                                        </span>
+                                        <span class="badge bg-success-subtle text-success px-2 py-1">
+                                            <i class="fas fa-heart me-1"></i>个人使用
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 联系我们 -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingContact">
+                    <button class="accordion-button collapsed shadow-none bg-light" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#collapseContact" aria-expanded="false"
+                        aria-controls="collapseContact">
+                        <i class="fas fa-comments text-primary me-2"></i>
+                        <span class="fw-bold">联系我们</span>
+                    </button>
+                </h2>
+                <div id="collapseContact" class="accordion-collapse collapse" aria-labelledby="headingContact"
+                    data-bs-parent="#siteInfoAccordion">
+                    <div class="accordion-body bg-white">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <h5 class="text-primary mb-2">
+                                        <i class="fas fa-user-tie me-2"></i>开发者：kanxizai
+                                    </h5>
+                                    <p class="text-muted mb-3 lh-lg">
+                                        如有问题、建议，欢迎通过以下方式与我们取得联系。
+                                        我们会尽快回复您的消息。
+                                    </p>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-sm-6">
+                                        <a href="mailto:kanxizai@qq.com"
+                                            class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center py-3">
+                                            <i class="fas fa-envelope me-2"></i>
+                                            <div class="text-start">
+                                                <div class="fw-semibold">邮箱联系</div>
+                                                <small class="text-muted">kanxizai@qq.com</small>
+                                            </div>
+                                        </a>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <a href="https://qm.qq.com/q/vA7WqEjEgo" target="_blank" rel="noopener"
+                                            class="btn btn-outline-success w-100 d-flex align-items-center justify-content-center py-3">
+                                            <i class="fab fa-qq me-2"></i>
+                                            <div class="text-start">
+                                                <div class="fw-semibold">QQ联系</div>
+                                                <small class="text-muted">3192777846</small>
+                                            </div>
+                                        </a>
+                                    </div>
+                                    <div class="col-12">
+                                        <a href="https://qm.qq.com/q/cVBPMYO1cA" target="_blank" rel="noopener"
+                                            class="btn btn-outline-info w-100 d-flex align-items-center justify-content-center py-3">
+                                            <i class="fas fa-users me-2"></i>
+                                            <div class="text-start">
+                                                <div class="fw-semibold">加入交流群</div>
+                                                <small class="text-muted">与其他用户交流使用心得</small>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4 text-center">
+                                <div class="p-3">
+                                    <div class="bg-primary-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                                        style="width: 80px; height: 80px;">
+                                        <i class="fas fa-handshake text-primary" style="font-size: 2rem;"></i>
+                                    </div>
+                                    <div class="mb-3">
+                                        <small class="text-muted d-block">随时为您服务</small>
+                                        <small class="text-primary fw-semibold">Always Here to Help</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录弹窗 -->
+    <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="historyModalLabel">
+                        <i class="fas fa-history text-primary me-2"></i>播放历史
+                        <span class="badge bg-secondary ms-2" id="history-count">0</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="history-list" class="list-group">
+                        <!-- 历史记录将通过JavaScript动态添加 -->
+                    </div>
+                    <div id="no-history" class="text-center py-4 text-muted">
+                        <i class="fas fa-info-circle me-2"></i>暂无播放历史
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger" id="clear-history-btn">
+                        <i class="fas fa-trash-alt me-2"></i>清空历史
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel">
+                        <i class="fas fa-cog text-primary me-2"></i>网站设置
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 主题设置 -->
+                    <div class="setting-section mb-4">
+                        <h6 class="setting-title">
+                            <i class="fas fa-palette text-primary me-2"></i>主题设置
+                        </h6>
+                        <div class="setting-content">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="themeMode" id="systemMode"
+                                    value="system" checked="">
+                                <label class="form-check-label" for="systemMode">
+                                    <i class="fas fa-desktop text-secondary me-1"></i>跟随系统
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="themeMode" id="lightMode"
+                                    value="light">
+                                <label class="form-check-label" for="lightMode">
+                                    <i class="fas fa-sun text-warning me-1"></i>浅色模式
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="themeMode" id="darkMode"
+                                    value="dark">
+                                <label class="form-check-label" for="darkMode">
+                                    <i class="fas fa-moon text-info me-1"></i>暗黑模式
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 文件命名格式设置 -->
+                    <div class="setting-section mb-4">
+                        <h6 class="setting-title">
+                            <i class="fas fa-file-signature text-primary me-2"></i>文件命名格式
+                        </h6>
+                        <div class="setting-content">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="filenameFormat" id="formatSongArtist"
+                                    value="song-artist" checked="">
+                                <label class="form-check-label" for="formatSongArtist">
+                                    歌曲名 - 歌手名 <span class="text-muted small">(默认)</span>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="filenameFormat" id="formatArtistSong"
+                                    value="artist-song">
+                                <label class="form-check-label" for="formatArtistSong">
+                                    歌手名 - 歌曲名
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 下载设置 -->
+                    <div class="setting-section mb-3">
+                        <h6 class="setting-title">
+                            <i class="fas fa-archive text-primary me-2"></i>下载设置
+                        </h6>
+                        <div class="setting-content">
+                            <!-- 写入歌曲元数据设置 -->
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="enableMetadata" checked="">
+                                <label class="form-check-label" for="enableMetadata">
+                                    写入歌曲元数据
+                                    <span class="badge bg-success ms-2">
+                                        <i class="fas fa-check-circle me-1"></i>推荐
+                                    </span>
+                                </label>
+                                <div class="form-text text-muted small mt-1">
+                                    <i class="fas fa-lightbulb me-1"></i>
+                                    开启后，系统将在下载时将歌曲封面、歌手及专辑信息、歌词写入歌曲文件的元数据中
+                                </div>
+                            </div>
+
+                            <!-- ZIP打包设置 -->
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enableZipPackage">
+                                <label class="form-check-label" for="enableZipPackage">
+                                    ZIP打包下载
+                                    <span class="badge bg-info ms-2">
+                                        <i class="fas fa-info-circle me-1"></i>仅支持单曲解析
+                                    </span>
+                                </label>
+                                <div class="form-text text-muted small mt-1">
+                                    <i class="fas fa-lightbulb me-1"></i>
+                                    开启后将打包歌曲文件、封面图片(jpg)和歌词文件(lrc)为ZIP格式下载
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveSettings">
+                        <i class="fas fa-save me-2"></i>保存设置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/api-security.js?v=5.2.0"></script>
+    <script src="./js/flac-meta.js?v=5.2.0"></script>
+    <script src="./js/qualitySelector.js?v=5.2.0"></script>
+    <script src="./js/musicParser.js?v=5.2.0"></script>
+    <script src="./js/downloader.js?v=5.2.0"></script>
+    <script src="./js/announcement.js?v=2.0.0"></script>
+    <script src="./js/historyManager.js?v=5.2.0"></script>
+    <script src="./js/playlistParser.js?v=5.2.0"></script>
+    <script src="./js/settingsManager.js?v=5.2.0"></script>
+    <script src="./js/main.js?v=5.2.0"></script>
+
+    <!-- PV/UV统计脚本 -->
+    <script src="./js/track.js?v=1.0.0"></script>
+
+</body>
+
+</html>

@@ -37,7 +37,7 @@ class APIConfig:
     """API配置类"""
     host: str = '0.0.0.0'
     port: int = 5001
-    debug: bool = False
+    debug: bool = True
     downloads_dir: str = 'downloads'
     max_file_size: int = 500 * 1024 * 1024  # 500MB
     request_timeout: int = 30
@@ -251,9 +251,17 @@ def handle_internal_error(e):
 
 
 @app.route('/')
-def index() -> str:
+def index() -> Response:
     """首页路由"""
-    return render_template('index.html')
+    from flask import send_from_directory
+    return send_from_directory('frontend', 'index.html')
+
+
+@app.route('/<path:filename>')
+def static_files(filename) -> Response:
+    """静态文件路由"""
+    from flask import send_from_directory
+    return send_from_directory('frontend', filename)
 
 
 @app.route('/health', methods=['GET'])

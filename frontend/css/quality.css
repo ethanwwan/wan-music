@@ -1,0 +1,218 @@
+/* 解析方式选择卡片样式 */
+.parse-method-card {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.parse-method-header {
+    margin-bottom: 1.25rem;
+    font-size: 1.1rem;
+    color: var(--primary-color);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 0.75rem;
+}
+
+.parse-method-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.parse-method-option {
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+    cursor: pointer;
+    margin: 0;
+    position: relative;
+}
+
+.parse-method-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.parse-method-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.25rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.7);
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.parse-method-icon {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(52, 152, 219, 0.1);
+    margin-bottom: 0.75rem;
+    font-size: 1.25rem;
+    color: var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.parse-method-label {
+    font-weight: 600;
+    color: #555;
+    transition: color 0.3s ease;
+}
+
+/* 选中状态 */
+.parse-method-input:checked + .parse-method-content {
+    border-color: var(--primary-color);
+    background: rgba(52, 152, 219, 0.05);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+    transform: translateY(-3px);
+}
+
+.parse-method-input:checked + .parse-method-content .parse-method-icon {
+    background: var(--primary-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+.parse-method-input:checked + .parse-method-content .parse-method-label {
+    color: var(--primary-color);
+}
+
+/* 悬停效果 */
+.parse-method-content:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-3px);
+}
+
+.parse-method-content:hover .parse-method-icon {
+    background: rgba(52, 152, 219, 0.2);
+}
+
+/* 暗黑模式适配 */
+[data-theme="dark"] .parse-method-card {
+    background: rgba(44, 62, 80, 0.4);
+}
+
+[data-theme="dark"] .parse-method-content {
+    background: rgba(44, 62, 80, 0.7);
+}
+
+[data-theme="dark"] .parse-method-content:hover {
+    background: rgba(44, 62, 80, 0.9);
+}
+
+[data-theme="dark"] .parse-method-label {
+    color: #ddd;
+}
+
+[data-theme="dark"] .parse-method-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 暗黑模式下的图标样式 */
+[data-theme="dark"] .parse-method-icon {
+    background: rgba(52, 152, 219, 0.2);
+    color: #ecf0f1;
+}
+
+[data-theme="dark"] .parse-method-content:hover .parse-method-icon {
+    background: rgba(52, 152, 219, 0.3);
+    color: #ffffff;
+}
+
+[data-theme="dark"] .parse-method-input:checked + .parse-method-content .parse-method-icon {
+    background: var(--secondary-color);
+    color: white;
+}
+
+[data-theme="dark"] .parse-method-input:checked + .parse-method-content {
+    border-color: var(--secondary-color);
+    background: rgba(52, 152, 219, 0.1);
+}
+
+[data-theme="dark"] .parse-method-input:checked + .parse-method-content .parse-method-label {
+    color: var(--secondary-color);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .parse-method-options {
+        gap: 0.75rem;
+    }
+    
+    .parse-method-option {
+        min-width: 100px;
+    }
+    
+    .parse-method-content {
+        padding: 1rem 0.75rem;
+    }
+    
+    .parse-method-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .parse-method-label {
+        font-size: 0.9rem;
+    }
+}
+
+/* 超小屏幕适配 */
+@media (max-width: 576px) {
+    .parse-method-options {
+        /* 移除竖向排列 */
+        /* flex-direction: column; */
+        /* 保持横向排列 */
+        flex-direction: row;
+        /* 调整间距 */
+        gap: 0.5rem;
+        /* 确保居中对齐 */
+        justify-content: center;
+        align-items: stretch;
+    }
+    
+    .parse-method-option {
+        /* 调整宽度，使三个选项能在一行显示 */
+        width: auto;
+        min-width: 80px;
+        max-width: 30%;
+        flex: 1;
+    }
+    
+    .parse-method-content {
+        /* 保持垂直布局，但调整内边距 */
+        flex-direction: column;
+        justify-content: center;
+        padding: 0.5rem;
+        height: 100%;
+    }
+    
+    .parse-method-icon {
+        /* 调整图标大小 */
+        width: 30px;
+        height: 30px;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        margin-right: 0;
+    }
+    
+    .parse-method-label {
+        /* 调整文字大小 */
+        font-size: 0.8rem;
+    }
+}
