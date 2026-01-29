@@ -183,9 +183,10 @@ const MusicParser = {
             // 隐藏加载指示器
             $('#loading_indicator').addClass('d-none');
 
-            if (response.code === 200 && response.data && response.data.length > 0) {
+            if ((response.status === 200 || response.code === 200) && response.data && response.data.length > 0) {
                 this.displaySearchResults(response.data);
             } else {
+                console.log('搜索响应:', response);
                 $('#results_list').html(`
                     <div class="list-group-item text-center text-muted">
                         <i class="fas fa-info-circle me-2"></i>未找到相关歌曲
@@ -214,14 +215,24 @@ const MusicParser = {
         $('#results_list').empty();
 
         results.forEach(song => {
-            // 处理歌手名称
-            const artistNames = song.artists.map(artist => artist.name).join(', ');
+            // 处理歌手名称 - 支持数组和字符串两种格式
+            let artistNames = '';
+            if (Array.isArray(song.artists)) {
+                artistNames = song.artists.map(artist => artist.name).join(', ');
+            } else if (typeof song.artists === 'string') {
+                artistNames = song.artists;
+            } else if (song.artist_string) {
+                artistNames = song.artist_string;
+            }
             
-            // 获取封面图片URL (使用新的picUrl字段或回退到album.picUrl)
+            // 获取封面图片URL
             const coverUrl = song.picUrl || (song.album && song.album.picUrl) || '';
             
-            // 检查是否为会员歌曲 (fee=1表示会员歌曲，fee=0表示免费歌曲)
+            // 检查是否为会员歌曲
             const isVip = song.fee === 1;
+            
+            // 获取专辑名称
+            const albumName = song.album && typeof song.album === 'object' ? song.album.name : song.album || '';
             
             // 创建结果项
             const resultItem = $(`
@@ -235,10 +246,10 @@ const MusicParser = {
                             <div class="me-auto">
                                 <div class="song-title">${song.name}</div>
                                 <div class="song-artist"><i class="fas fa-microphone-alt text-muted me-1"></i>${artistNames}</div>
-                                <div class="song-album"><i class="fas fa-compact-disc text-muted me-1"></i>${song.album.name}</div>
+                                <div class="song-album"><i class="fas fa-compact-disc text-muted me-1"></i>${albumName}</div>
                             </div>
                         </div>
-                        <span class="badge bg-light text-dark">${song.duration}</span>
+                        <span class="badge bg-light text-dark">${song.duration || ''}</span>
                     </div>
                 </div>
             `);
@@ -309,10 +320,12 @@ const MusicParser = {
                     type: 'json'
                 }, { useEncryption: true });
 
-                if (response.code !== 200) {
+                // 检查响应状态
+                if ((response.status !== 200 && response.code !== 200) || !response.data) {
                     // 记录错误信息用于重试
-                    lastError = new Error(response.msg);
-                    console.warn(`歌曲解析失败 (尝试 ${attempt}/${maxRetries}):`, response.msg);
+                    const errorMsg = response.message || response.msg || '解析失败';
+                    lastError = new Error(errorMsg);
+                    console.warn(`歌曲解析失败 (尝试 ${attempt}/${maxRetries}):`, errorMsg);
                     
                     // 如果不是最后一次尝试，则等待后重试
                     if (attempt < maxRetries) {
@@ -326,17 +339,37 @@ const MusicParser = {
                     throw lastError;
                 }
 
+                // 获取歌曲数据
+                const songData = response.data;
+                
                 // 处理歌词
-                const processedLyrics = response.tlyric
-                    ? lrctran(response.lyric, response.tlyric)
-                    : response.lyric;
+                const processedLyrics = songData.tlyric
+                    ? lrctran(songData.lyric, songData.tlyric)
+                    : songData.lyric;
+
+                // 构造返回的数据结构，确保与前端期望的格式匹配
+                const result = {
+                    id: songData.id || validId,
+                    name: songData.name || '未知歌曲',
+                    ar_name: songData.ar_name || '未知歌手',
+                    al_name: songData.al_name || '未知专辑',
+                    pic: songData.pic || '',
+                    level: songData.level || level || 'standard',
+                    size: songData.size || '',
+                    url: songData.url,
+                    lyric: songData.lyric || '',
+                    tlyric: songData.tlyric || '',
+                    processedLyrics: processedLyrics,
+                    validId: validId
+                };
+
+                // 验证结果
+                if (!result.url) {
+                    throw new Error('未获取到歌曲播放链接');
+                }
 
                 // 返回处理后的数据
-                return {
-                    ...response,
-                    processedLyrics,
-                    validId
-                };
+                return result;
                 
             } catch (error) {
                 lastError = error;

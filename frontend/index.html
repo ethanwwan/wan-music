@@ -1544,9 +1544,9 @@
     </style>
 </head>
 
-<body style="overflow: hidden;">
+<body>
     <!-- 公告弹窗 -->
-    <div class="announcement-modal show" id="announcementModal" style="display: flex;">
+    <div class="announcement-modal" id="announcementModal" style="display: none;">
         <div class="announcement-content">
             <div class="announcement-header">
                 <h3>系统公告</h3>
@@ -1665,7 +1665,7 @@
         </div>
 
         <!-- 搜索卡片 -->
-        <div id="search-parse-card" class="card-form mb-3 p-3 position-relative d-none">
+        <div id="search-parse-card" class="card-form mb-3 p-3 position-relative">
             <div class="mb-2">
                 <label for="search_input" class="form-label fw-bold mb-1"><i
                         class="fas fa-search text-primary me-2"></i>搜索歌曲</label>
@@ -1853,7 +1853,7 @@
         </div>
 
         <!-- 歌单解析卡片 -->
-        <div id="playlist-parse-card" class="card-form mb-3 p-3 position-relative">
+        <div id="playlist-parse-card" class="card-form mb-3 p-3 position-relative d-none">
             <form id="playlist-form">
                 <div class="mb-4">
                     <label for="playlist_id" class="form-label fw-bold"><i

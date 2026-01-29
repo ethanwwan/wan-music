@@ -5,7 +5,7 @@
  */
 
 // 后端API地址（使用相对路径）
-const backendApiUrl = '/';
+const backendApiUrl = '';
 
 /**
  * API安全模块
@@ -34,23 +34,26 @@ const ApiSecurity = (function() {
             }
             
             // 添加查询参数
-            const params = new URLSearchParams();
+            const params = [];
             if (data.id) {
-                params.append('id', data.id);
+                params.push(`id=${encodeURIComponent(data.id)}`);
             } else if (data.url) {
-                params.append('id', data.url);
+                params.push(`id=${encodeURIComponent(data.url)}`);
             }
             if (data.name) {
-                params.append('keyword', data.name);
+                params.push(`keyword=${encodeURIComponent(data.name)}`);
             }
             if (data.level) {
-                params.append('level', data.level);
+                params.push(`level=${encodeURIComponent(data.level)}`);
             }
             if (data.limit) {
-                params.append('limit', data.limit);
+                params.push(`limit=${encodeURIComponent(data.limit)}`);
+            }
+            if (data.type) {
+                params.push(`type=${encodeURIComponent(data.type)}`);
             }
             
-            const queryString = params.toString();
+            const queryString = params.join('&');
             if (queryString) {
                 apiUrl += '?' + queryString;
             }
@@ -59,7 +62,6 @@ const ApiSecurity = (function() {
             const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     ...options.headers
                 }
             });

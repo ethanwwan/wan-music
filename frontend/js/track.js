@@ -25,6 +25,8 @@
             return;
         }
         
+        return;
+
         // 创建XMLHttpRequest对象
         const xhr = new XMLHttpRequest();
         

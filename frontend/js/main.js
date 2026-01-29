@@ -45,22 +45,29 @@ function initModules() {
  * 绑定解析方式切换事件
  */
 function bindParseMethodSwitch() {
-    // 解析方式切换按钮
-    $('.parse-method-btn').on('click', function() {
-        const method = $(this).data('method');
-        
-        // 移除所有按钮的激活状态
-        $('.parse-method-btn').removeClass('active');
-        
-        // 添加当前按钮的激活状态
-        $(this).addClass('active');
+    // 监听input的change事件
+    $('.parse-method-input').on('change', function() {
+        const method = $(this).val();
+        console.log('解析方式切换:', method);
         
         // 隐藏所有解析方式容器
-        $('.parse-method-container').hide();
+        $('.card-form').addClass('d-none');
         
         // 显示对应解析方式的容器
-        $(`#${method}-parse-container`).show();
+        const cardId = `#${method}-parse-card`;
+        console.log('显示卡片:', cardId);
+        $(cardId).removeClass('d-none');
+        
+        // 验证卡片是否存在
+        if (!$(cardId).length) {
+            console.error('卡片不存在:', cardId);
+        }
     });
+    
+    // 默认显示搜索解析
+    $('.card-form').addClass('d-none');
+    $('#search-parse-card').removeClass('d-none');
+    console.log('默认显示搜索解析');
 }
 
 /**
@@ -68,10 +75,9 @@ function bindParseMethodSwitch() {
  */
 function bindFormSubmit() {
     // 搜索表单提交
-    $('#search-form').on('submit', function(e) {
-        e.preventDefault();
-        const keyword = $('#search-keyword').val().trim();
-        const quality = $('#search-quality').val();
+    $('#search_btn').on('click', function() {
+        const keyword = $('#search_input').val().trim();
+        const quality = $('#search_level').val();
         
         if (!keyword) {
             Swal.fire({
@@ -88,7 +94,7 @@ function bindFormSubmit() {
         
         // 调用MusicParser进行搜索
         if (typeof MusicParser !== 'undefined') {
-            MusicParser.searchMusic(keyword, quality);
+            MusicParser.performSearch();
         }
     });
     
@@ -96,7 +102,7 @@ function bindFormSubmit() {
     $('#query-form').on('submit', function(e) {
         e.preventDefault();
         const songIds = $('#song_ids').val().trim();
-        const quality = $('#quality').val();
+        const quality = $('#level').val();
         
         if (!songIds) {
             Swal.fire({
@@ -113,7 +119,29 @@ function bindFormSubmit() {
         
         // 调用MusicParser进行解析
         if (typeof MusicParser !== 'undefined') {
-            MusicParser.parseMusicById(songIds, quality);
+            MusicParser.parseSongById(songIds, quality).then(songData => {
+                // 调用HistoryManager添加到历史记录
+                if (typeof HistoryManager !== 'undefined') {
+                    HistoryManager.addToHistory({
+                        id: songData.id || songData.validId,
+                        name: songData.name,
+                        artist: songData.ar_name,
+                        album: songData.al_name,
+                        pic: songData.pic,
+                        fee: songData.fee || 0,
+                        timestamp: Date.now()
+                    });
+                }
+                
+                // 更新UI显示解析结果
+                MusicParser.updateUIWithParsedSong(songData, function(songInfo) {
+                    if (typeof HistoryManager !== 'undefined') {
+                        HistoryManager.addToHistory(songInfo);
+                    }
+                });
+            }).catch(error => {
+                MusicParser.handleParseError(error);
+            });
         }
     });
     
@@ -121,6 +149,7 @@ function bindFormSubmit() {
     $('#playlist-form').on('submit', function(e) {
         e.preventDefault();
         const playlistId = $('#playlist_id').val().trim();
+        const quality = $('#playlist_level').val();
         
         if (!playlistId) {
             Swal.fire({
@@ -137,7 +166,7 @@ function bindFormSubmit() {
         
         // 调用PlaylistParser进行解析
         if (typeof PlaylistParser !== 'undefined') {
-            PlaylistParser.parsePlaylist();
+            PlaylistParser.parsePlaylist(playlistId, quality);
         }
     });
 }
@@ -148,7 +177,7 @@ function bindFormSubmit() {
 function bindOtherEvents() {
     // 清空搜索框按钮
     $('#clear-search').on('click', function() {
-        $('#search-keyword').val('');
+        $('#search_input').val('');
     });
     
     // 清空ID输入框按钮
@@ -203,24 +232,24 @@ $(document).on('keydown', function(e) {
     // Ctrl + /: 切换解析方式
     if (e.ctrlKey && e.key === '/') {
         e.preventDefault();
-        const activeMethod = $('.parse-method-btn.active').data('method');
+        const activeMethod = $('.parse-method-input:checked').val();
         const methods = ['search', 'id', 'playlist'];
         const currentIndex = methods.indexOf(activeMethod);
         const nextIndex = (currentIndex + 1) % methods.length;
-        $(`[data-method="${methods[nextIndex]}"]`).click();
+        $(`#parseMethod${methods[nextIndex].charAt(0).toUpperCase() + methods[nextIndex].slice(1)}`).prop('checked', true).trigger('change');
     }
     
     // Ctrl + K: 聚焦搜索框
     if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
-        $('#search-keyword').focus();
+        $('#search_input').focus();
     }
     
     // Esc: 清空当前输入框
     if (e.key === 'Escape') {
-        const activeMethod = $('.parse-method-btn.active').data('method');
+        const activeMethod = $('.parse-method-input:checked').val();
         if (activeMethod === 'search') {
-            $('#search-keyword').val('');
+            $('#search_input').val('');
         } else if (activeMethod === 'id') {
             $('#song_ids').val('');
         } else if (activeMethod === 'playlist') {
@@ -285,8 +314,11 @@ function clearResults() {
  * 初始化页面
  */
 function initPage() {
-    // 设置默认解析方式
-    $(`[data-method="search"]`).click();
+    // 隐藏所有解析方式容器
+    $('.card-form').addClass('d-none');
+    
+    // 默认显示搜索解析
+    $('#search-parse-card').removeClass('d-none');
     
     // 加载页面时的动画效果
     $('.container').fadeIn(500);

@@ -8,3 +8,8 @@ __pycache__
 *.pyc
 *.pyo
 *.pyd
+
+
+.DS_Store
+downloads
+music_api.log

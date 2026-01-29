@@ -24,12 +24,6 @@ const PlaylistParser = (function () {
      * @function init
      */
     function init() {
-        // 绑定歌单解析表单提交事件
-        $('#playlist-form').on('submit', function (e) {
-            e.preventDefault();
-            parsePlaylist();
-        });
-
         // 绑定一键下载全部按钮事件
         $('#download-all').on('click', function () {
             downloadAllSongs();
@@ -40,24 +34,28 @@ const PlaylistParser = (function () {
      * 解析歌单
      * @function parsePlaylist
      * @async
+     * @param {string} playlistInput - 歌单ID或链接
+     * @param {string} quality - 音质级别
      */
-    async function parsePlaylist() {
-        const playlistInput = $('#playlist_id').val().trim();
+    async function parsePlaylist(playlistInput, quality) {
         if (!playlistInput) {
-            Swal.fire({
-                icon: 'warning',
-                title: '请输入歌单ID或链接',
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 3000,
-                timerProgressBar: true
-            });
-            return;
+            playlistInput = $('#playlist_id').val().trim();
+            if (!playlistInput) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '请输入歌单ID或链接',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+                return;
+            }
         }
 
         // 保存当前选择的音质
-        currentQuality = $('#playlist_level').val() || 'standard';
+        currentQuality = quality || $('#playlist_level').val() || 'standard';
 
         // 显示加载提示
         Swal.fire({

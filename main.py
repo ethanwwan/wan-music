@@ -8,6 +8,7 @@
 - 健康检查
 """
 
+import json
 import logging
 import sys
 import time
@@ -49,7 +50,7 @@ class APIResponse:
     """API响应工具类"""
     
     @staticmethod
-    def success(data: Any = None, message: str = 'success', status_code: int = 200) -> Tuple[Dict[str, Any], int]:
+    def success(data: Any = None, message: str = 'success', status_code: int = 200) -> Response:
         """成功响应"""
         response = {
             'status': status_code,
@@ -58,10 +59,14 @@ class APIResponse:
         }
         if data is not None:
             response['data'] = data
-        return response, status_code
+        return app.response_class(
+            response=json.dumps(response, ensure_ascii=False),
+            status=status_code,
+            mimetype='application/json'
+        )
     
     @staticmethod
-    def error(message: str, status_code: int = 400, error_code: str = None) -> Tuple[Dict[str, Any], int]:
+    def error(message: str, status_code: int = 400, error_code: str = None) -> Response:
         """错误响应"""
         response = {
             'status': status_code,
@@ -70,7 +75,11 @@ class APIResponse:
         }
         if error_code:
             response['error_code'] = error_code
-        return response, status_code
+        return app.response_class(
+            response=json.dumps(response, ensure_ascii=False),
+            status=status_code,
+            mimetype='application/json'
+        )
 
 
 class MusicAPIService:
@@ -190,13 +199,21 @@ class MusicAPIService:
         """安全获取请求数据"""
         try:
             if request.method == 'GET':
-                return dict(request.args)
+                data = dict(request.args)
+                # 添加调试信息
+                if 'keyword' in data:
+                    self.logger.info(f"GET请求接收到的关键词: {data['keyword']}")
+                return data
             else:
                 # 优先使用JSON数据，然后是表单数据
                 json_data = request.get_json(silent=True) or {}
                 form_data = dict(request.form)
                 # 合并数据，JSON优先
-                return {**form_data, **json_data}
+                data = {**form_data, **json_data}
+                # 添加调试信息
+                if 'keyword' in data:
+                    self.logger.info(f"POST请求接收到的关键词: {data['keyword']}")
+                return data
         except Exception as e:
             self.logger.error(f"获取请求数据失败: {e}")
             return {}
@@ -205,6 +222,11 @@ class MusicAPIService:
 # 创建Flask应用和服务实例
 config = APIConfig()
 app = Flask(__name__)
+
+# 设置Flask应用编码
+app.config['JSON_AS_ASCII'] = False
+app.config['JSONIFY_MIMETYPE'] = 'application/json; charset=utf-8'
+
 api_service = MusicAPIService(config)
 
 
