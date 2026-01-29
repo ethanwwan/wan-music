@@ -120,15 +120,61 @@ function checkValidLink(link) {
 }
 
 /**
- * 从文本中提取并检查ID或链接
+ * 从文本中提取ID或链接
  * @function extractAndCheckId
  * @param {string} text - 包含ID或链接的文本
  * @returns {string} 有效的ID或链接，无效则返回空字符串
  */
 function extractAndCheckId(text) {
+    if (!text) return '';
+    
     var link = extractLinks(text);
     if (checkValidLink(link)) {
-        return link;
+        // 从链接中提取ID参数 - 支持多种格式
+        // 1. 普通参数格式: id=123456
+        var idMatch = link.match(/[?&]id=(\d+)/);
+        if (idMatch && idMatch[1]) {
+            return idMatch[1]; // 返回纯数字ID
+        }
+        
+        // 2. 编码参数格式: id%3D123456 (即 id= 被编码为 %3D)
+        // 更精确的正则表达式，避免捕获额外字符
+        idMatch = link.match(/[?&]id%3D(\d+)(?:%26|&|$)/i);
+        if (idMatch && idMatch[1]) {
+            return idMatch[1]; // 返回纯数字ID
+        }
+        
+        // 通用格式：支持 = 或 %3D
+        idMatch = link.match(/[?&]id(?:%3D|=)(\d+)(?:%26|&|$)/i);
+        if (idMatch && idMatch[1]) {
+            return idMatch[1]; // 返回纯数字ID
+        }
+        
+        // 作为备用方案，尝试找到独立的长数字序列
+        const longNumbers = text.match(/\d{6,}/g);
+        if(longNumbers && longNumbers.length > 0) {
+            return longNumbers[0]; // 返回第一个长数字序列
+        }
+        
+        // 3. 路径格式: /playlist/123456 或 /song/123456
+        idMatch = link.match(/\/(?:playlist|song)\/(\d+)/i);
+        if (idMatch && idMatch[1]) {
+            return idMatch[1]; // 返回纯数字ID
+        }
+        
+        // 4. 从原始文本中提取所有数字，取第一个6位以上的数字（通常是ID）
+        var allNumbers = text.match(/\d{6,}/g);
+        if (allNumbers && allNumbers.length > 0) {
+            return allNumbers[0];
+        }
+        
+        // 5. 从原始文本中提取所有数字
+        var idRegex = /\b\d+\b/g;
+        var ids = text.match(idRegex);
+        if (ids && ids.length > 0) {
+            return ids[0];
+        }
+        return '';
     } else {
         var idRegex = /\b\d+\b/g;
         var ids = text.match(idRegex);
@@ -485,7 +531,7 @@ const MusicParser = {
             tlyric: songData.tlyric,
             ar_name: songData.ar_name, // 添加歌手名称字段
             al_name: songData.al_name, // 添加专辑名称字段
-
+            fee: feeValue,
             ext: {
                 audio: getFileExtension(songData.url) || 'mp3',
                 image: getFileExtension(songData.pic) || 'jpg'

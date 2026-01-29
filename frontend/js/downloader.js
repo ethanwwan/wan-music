@@ -174,7 +174,12 @@ const MusicDownloader = (function() {
             try {
                 // 获取文件大小
                 logger.debug(`发送HEAD请求获取文件大小`);
-                const headResponse = await fetch(url, { method: 'HEAD' });
+                const headResponse = await fetch(url, { 
+                    method: 'HEAD',
+                    headers: {
+                        Referer: 'http://music.163.com/'
+                    }
+                });
                 if (!headResponse.ok) {
                     logger.error(`获取文件信息失败: ${headResponse.statusText}`);
                     throw new Error(`获取文件信息失败: ${headResponse.statusText}`);
@@ -271,7 +276,8 @@ const MusicDownloader = (function() {
                         
                         const response = await fetch(url, {
                             headers: {
-                                Range: `bytes=${chunk.start}-${chunk.end}`
+                                Range: `bytes=${chunk.start}-${chunk.end}`,
+                                Referer: 'http://music.163.com/'
                             }
                         });
                         
@@ -377,6 +383,8 @@ const MusicDownloader = (function() {
             xhr.open('GET', url);
             xhr.responseType = 'blob';
             xhr.timeout = 60000; // 60秒超时
+            
+            xhr.setRequestHeader('Referer', 'http://music.163.com/');
             
             let startTime = Date.now();
             let lastUpdate = startTime;
@@ -489,9 +497,16 @@ const MusicDownloader = (function() {
         try {
             const { name, url, pic, lyric, tlyric, ar_name, al_name, ext } = songData;
             
-            // 处理文件扩展名 - 如果是mp4则改为m4a
-            let fileExt = ext.audio || 'mp3';
-            if (fileExt.toLowerCase() === 'mp4') {
+            // 处理文件扩展名 - 确保是字符串
+            let fileExt = 'mp3';
+            if (ext && ext.audio) {
+                fileExt = String(ext.audio).toLowerCase();
+            } else if (typeof ext === 'string') {
+                fileExt = ext.toLowerCase();
+            }
+            
+            // 如果是mp4则改为m4a
+            if (fileExt === 'mp4') {
                 logger.info(`检测到MP4音频文件，将扩展名修改为M4A`);
                 fileExt = 'm4a';
             }
@@ -639,7 +654,11 @@ const MusicDownloader = (function() {
                         if (pic) {
                             try {
                                 // 获取封面图片
-                                const coverResponse = await fetch(pic);
+                                const coverResponse = await fetch(pic, {
+                                    headers: {
+                                        Referer: 'http://music.163.com/'
+                                    }
+                                });
                                 coverBlob = await coverResponse.blob();
                             } catch (coverError) {
                                 logger.error('获取封面图片失败:', coverError);
@@ -687,7 +706,11 @@ const MusicDownloader = (function() {
                         if (pic) {
                             try {
                                 // 获取封面图片
-                                const coverResponse = await fetch(pic);
+                                const coverResponse = await fetch(pic, {
+                                    headers: {
+                                        Referer: 'http://music.163.com/'
+                                    }
+                                });
                                 const coverArrayBuffer = await coverResponse.arrayBuffer();
                                 writer.setFrame('APIC', {
                                     type: 3, // 封面图片
@@ -807,7 +830,11 @@ const MusicDownloader = (function() {
             // 下载并添加封面图片
             if (pic) {
                 try {
-                    const coverResponse = await fetch(pic);
+                    const coverResponse = await fetch(pic, {
+                        headers: {
+                            Referer: 'http://music.163.com/'
+                        }
+                    });
                     if (coverResponse.ok) {
                         const coverBlob = await coverResponse.blob();
                         const coverFileName = `${safeFileName}.jpg`;

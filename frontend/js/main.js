@@ -122,7 +122,7 @@ function bindFormSubmit() {
             MusicParser.parseSongById(songIds, quality).then(songData => {
                 // 调用HistoryManager添加到历史记录
                 if (typeof HistoryManager !== 'undefined') {
-                    HistoryManager.addToHistory({
+                    HistoryManager.add({
                         id: songData.id || songData.validId,
                         name: songData.name,
                         artist: songData.ar_name,
@@ -136,7 +136,7 @@ function bindFormSubmit() {
                 // 更新UI显示解析结果
                 MusicParser.updateUIWithParsedSong(songData, function(songInfo) {
                     if (typeof HistoryManager !== 'undefined') {
-                        HistoryManager.addToHistory(songInfo);
+                        HistoryManager.add(songInfo);
                     }
                 });
             }).catch(error => {
@@ -222,6 +222,57 @@ function bindOtherEvents() {
             icon: 'info',
             confirmButtonText: '确定'
         });
+    });
+    
+    // 绑定下载按钮事件
+    $('#download-pack').on('click', function() {
+        const songData = window.currentSongData;
+        if (!songData || !songData.url) {
+            Swal.fire({
+                icon: 'warning',
+                title: '没有可下载的歌曲',
+                text: '请先解析一首歌曲',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
+            });
+            return;
+        }
+        
+        const uiElements = {
+            $progressContainer: $('#download-progress-container'),
+            $progressBar: $('#download-progress-bar'),
+            $progressText: $('#download-progress-text'),
+            $status: $('#download-status')
+        };
+        
+        const downloadData = {
+            name: songData.name,
+            url: songData.url,
+            pic: songData.pic,
+            lyric: songData.processedLyrics || songData.lyric,
+            tlyric: songData.tlyric,
+            ar_name: songData.ar_name,
+            al_name: songData.al_name,
+            fee: songData.fee,
+            id: songData.id,
+            ext: songData.ext || { audio: 'mp3' }
+        };
+        
+        if (typeof MusicDownloader !== 'undefined') {
+            MusicDownloader.downloadAndPackSong(downloadData, uiElements);
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: '下载模块未加载',
+                text: '请刷新页面后重试',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
+            });
+        }
     });
 }
 

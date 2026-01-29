@@ -37,6 +37,81 @@ const PlaylistParser = (function () {
      * @param {string} playlistInput - 歌单ID或链接
      * @param {string} quality - 音质级别
      */
+    // 从文本中提取ID或链接的辅助函数
+    function extractLinks(text) {
+        var regex = /https?:\/\/\S+/g;
+        var matches = text.match(regex);
+        if (matches) {
+            return matches[0];
+        } else {
+            return '';
+        }
+    }
+
+    // 检查链接是否为有效的网易云音乐链接
+    function checkValidLink(link) {
+        if (link.indexOf("http") === -1 ||
+            (link.indexOf("music.163.com") === -1 && link.indexOf("163cn.tv") === -1)) {
+            return false;
+        }
+        return true;
+    }
+
+    // 从文本中提取纯数字ID
+    function extractAndCheckId(text) {
+        if (!text) return '';
+        
+        var link = extractLinks(text);
+        if (checkValidLink(link)) {
+            // 从链接中提取ID参数 - 支持多种格式
+            // 1. 普通参数格式: id=123456
+            var idMatch = link.match(/[?&]id=(\d+)/);
+            if (idMatch && idMatch[1]) {
+                return idMatch[1]; // 返回纯数字ID
+            }
+            
+            // 2. 编码参数格式: id%3D123456 (即 id= 被编码为 %3D)
+            // 更精确的正则表达式，避免捕获额外字符
+            idMatch = link.match(/[?&]id%3D(\d+)(?:%26|&|$)/i);
+            if (idMatch && idMatch[1]) {
+                return idMatch[1]; // 返回纯数字ID
+            }
+            
+            // 通用格式：支持 = 或 %3D
+            idMatch = link.match(/[?&]id(?:%3D|=)(\d+)(?:%26|&|$)/i);
+            if (idMatch && idMatch[1]) {
+                return idMatch[1]; // 返回纯数字ID
+            }
+            
+            // 3. 路径格式: /playlist/123456 或 /song/123456
+            idMatch = link.match(/\/(?:playlist|song)\/(\d+)/i);
+            if (idMatch && idMatch[1]) {
+                return idMatch[1]; // 返回纯数字ID
+            }
+            
+            // 4. 从原始文本中提取所有数字，取第一个6位以上的数字（通常是ID）
+            var allNumbers = text.match(/\d{6,}/g);
+            if (allNumbers && allNumbers.length > 0) {
+                return allNumbers[0];
+            }
+            
+            // 5. 从原始文本中提取所有数字
+            var idRegex = /\b\d+\b/g;
+            var ids = text.match(idRegex);
+            if (ids && ids.length > 0) {
+                return ids[0];
+            }
+            return '';
+        } else {
+            var idRegex = /\b\d+\b/g;
+            var ids = text.match(idRegex);
+            if (ids && ids.length > 0) {
+                return ids[0];
+            }
+            return '';
+        }
+    }
+
     async function parsePlaylist(playlistInput, quality) {
         if (!playlistInput) {
             playlistInput = $('#playlist_id').val().trim();
@@ -68,10 +143,16 @@ const PlaylistParser = (function () {
         });
 
         try {
+            // 提取并验证歌单ID（支持完整URL或纯ID）
+            const validId = extractAndCheckId(playlistInput);
+            if (!validId) {
+                throw new Error('请输入有效的歌单ID或链接');
+            }
+            
             // 使用新的安全API请求方法调用歌单解析API
             const response = await ApiSecurity.secureApiRequest('./api/api.php', {
                 action: 'playlist',
-                id: playlistInput
+                id: validId
             }, { useEncryption: true });
 
             // 关闭加载提示
@@ -394,7 +475,11 @@ const PlaylistParser = (function () {
                             if (songData.pic) {
                                 try {
                                     // 获取封面图片
-                                    const coverResponse = await fetch(songData.pic);
+                                    const coverResponse = await fetch(songData.pic, {
+                                        headers: {
+                                            Referer: 'http://music.163.com/'
+                                        }
+                                    });
                                     coverBlob = await coverResponse.blob();
                                 } catch (coverError) {
                                     console.error('获取封面图片失败:', coverError);
@@ -435,7 +520,11 @@ const PlaylistParser = (function () {
                                 if (songData.pic) {
                                     try {
                                         // 获取封面图片
-                                        const coverResponse = await fetch(songData.pic);
+                                        const coverResponse = await fetch(songData.pic, {
+                                            headers: {
+                                                Referer: 'http://music.163.com/'
+                                            }
+                                        });
                                         const coverArrayBuffer = await coverResponse.arrayBuffer();
                                         writer.setFrame('APIC', {
                                             type: 3, // 封面图片
@@ -685,7 +774,11 @@ const PlaylistParser = (function () {
             const fileName = sanitizeFilename(`${formatMusicFilename(songData.name, songData.ar_name)}.${fileExt}`);
 
             // 使用普通下载方式替代分片下载
-            const response = await fetch(songData.url);
+            const response = await fetch(songData.url, {
+                headers: {
+                    Referer: 'http://music.163.com/'
+                }
+            });
             if (!response.ok) {
                 throw new Error(`下载失败: ${response.status} ${response.statusText}`);
             }
@@ -713,7 +806,11 @@ const PlaylistParser = (function () {
                     if (songData.pic) {
                         try {
                             // 获取封面图片
-                            const coverResponse = await fetch(songData.pic);
+                            const coverResponse = await fetch(songData.pic, {
+                                headers: {
+                                    Referer: 'http://music.163.com/'
+                                }
+                            });
                             coverBlob = await coverResponse.blob();
                         } catch (coverError) {
                             console.error('获取封面图片失败:', coverError);
@@ -748,7 +845,11 @@ const PlaylistParser = (function () {
                     if (songData.pic) {
                         try {
                             // 获取封面图片
-                            const coverResponse = await fetch(songData.pic);
+                            const coverResponse = await fetch(songData.pic, {
+                                headers: {
+                                    Referer: 'http://music.163.com/'
+                                }
+                            });
                             const coverArrayBuffer = await coverResponse.arrayBuffer();
                             writer.setFrame('APIC', {
                                 type: 3, // 封面图片
@@ -809,6 +910,7 @@ const PlaylistParser = (function () {
     // 返回公共API
     return {
         init: init,
+        parsePlaylist: parsePlaylist,
         isDownloading: isDownloading
     };
 })();

@@ -8,6 +8,70 @@
 const backendApiUrl = '';
 
 /**
+ * 从文本中提取纯数字ID
+ * @param {string} text - 包含ID或链接的文本
+ * @returns {string} 纯数字ID，无效则返回原值
+ */
+function extractPureId(text) {
+    if (!text) return text;
+    
+    const textStr = text.toString();
+    
+    // 如果已经是纯数字，直接返回
+    if (/^\d+$/.test(textStr)) {
+        return text;
+    }
+    
+    // 尝试从链接中提取ID参数 - 支持多种格式
+    // 1. 普通参数格式: id=123456
+    let idMatch = textStr.match(/[?&]id=(\d+)/);
+    if (idMatch && idMatch[1]) {
+        return idMatch[1]; // 返回纯数字ID
+    }
+    
+    // 2. 编码参数格式: id%3D123456 (即 id= 被编码为 %3D)
+    // 更精确的正则表达式，避免捕获额外字符
+    idMatch = textStr.match(/[?&]id%3D(\d+)(?:%26|&|$)/i);
+    if (idMatch && idMatch[1]) {
+        return idMatch[1]; // 返回纯数字ID
+    }
+    
+    // 通用格式：支持 = 或 %3D
+    idMatch = textStr.match(/[?&]id(?:%3D|=)(\d+)(?:%26|&|$)/i);
+    if (idMatch && idMatch[1]) {
+        return idMatch[1]; // 返回纯数字ID
+    }
+    
+    // 作为备用方案，尝试找到独立的长数字序列
+    const longNumbers = textStr.match(/\d{6,}/g);
+    if(longNumbers && longNumbers.length > 0) {
+        return longNumbers[0]; // 返回第一个长数字序列
+    }
+    
+    // 3. 路径格式: /playlist/123456 或 /song/123456
+    idMatch = textStr.match(/\/(?:playlist|song)\/(\d+)/i);
+    if (idMatch && idMatch[1]) {
+        return idMatch[1]; // 返回纯数字ID
+    }
+    
+    // 4. 从原始文本中提取所有数字，取第一个6位以上的数字（通常是ID）
+    const allNumbers = textStr.match(/\d{6,}/g);
+    if (allNumbers && allNumbers.length > 0) {
+        return allNumbers[0];
+    }
+    
+    // 5. 从原始文本中提取所有数字
+    const idRegex = /\b(\d+)\b/;
+    const matches = textStr.match(idRegex);
+    if (matches && matches[1]) {
+        return matches[1];
+    }
+    
+    // 如果都找不到，返回原文本
+    return text;
+}
+
+/**
  * API安全模块
  * 提供安全的API请求方法
  */
@@ -36,9 +100,13 @@ const ApiSecurity = (function() {
             // 添加查询参数
             const params = [];
             if (data.id) {
-                params.push(`id=${encodeURIComponent(data.id)}`);
+                // 清理ID参数，确保发送纯数字ID
+                const cleanId = extractPureId(data.id);
+                params.push(`id=${encodeURIComponent(cleanId)}`);
             } else if (data.url) {
-                params.push(`id=${encodeURIComponent(data.url)}`);
+                // 如果使用url参数，也尝试清理
+                const cleanId = extractPureId(data.url);
+                params.push(`id=${encodeURIComponent(cleanId)}`);
             }
             if (data.name) {
                 params.push(`keyword=${encodeURIComponent(data.name)}`);
