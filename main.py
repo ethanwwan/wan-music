@@ -20,13 +20,13 @@ from urllib.parse import quote
 from flask import Flask, request, send_file, render_template, Response
 
 try:
-    from music_api import (
+    from api.music_api import (
         NeteaseAPI, APIException, QualityLevel,
         url_v1, name_v1, lyric_v1, search_music, 
         playlist_detail, album_detail
     )
-    from cookie_manager import CookieManager, CookieException
-    from music_downloader import MusicDownloader, DownloadException, AudioFormat
+    from api.cookie_manager import CookieManager, CookieException
+    from api.music_downloader import MusicDownloader, DownloadException, AudioFormat
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保所有依赖模块存在且可用")

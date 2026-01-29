@@ -14,8 +14,8 @@ from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 
 try:
-    from music_api import QRLoginManager, APIException
-    from cookie_manager import CookieManager, CookieException
+    from .music_api import QRLoginManager, APIException
+    from .cookie_manager import CookieManager, CookieException
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保 music_api.py 和 cookie_manager.py 文件存在且可用")

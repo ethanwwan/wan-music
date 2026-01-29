@@ -25,8 +25,8 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC
 from mutagen.mp4 import MP4
 
-from music_api import NeteaseAPI, APIException
-from cookie_manager import CookieManager
+from .music_api import NeteaseAPI, APIException
+from .cookie_manager import CookieManager
 
 
 class AudioFormat(Enum):
