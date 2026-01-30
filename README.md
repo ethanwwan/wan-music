@@ -2,16 +2,11 @@
 
 <div align="center">
 
-![GitHub stars](https://img.shields.io/github/stars/Suxiaoqinx/Netease_url?style=flat-square)
-![GitHub forks](https://img.shields.io/github/forks/Suxiaoqinx/Netease_url?style=flat-square)
-![GitHub issues](https://img.shields.io/github/issues/Suxiaoqinx/Netease_url?style=flat-square)
-![GitHub license](https://img.shields.io/github/license/Suxiaoqinx/Netease_url?style=flat-square)
-
 **功能强大的网易云音乐解析工具**
 
 支持歌曲搜索 | 单曲解析 | 歌单解析 | 专辑解析 | 音乐下载
 
-[在线体验](https://wyapi.toubiec.cn) • [使用文档](./使用文档.md) • [问题反馈](https://github.com/Suxiaoqinx/Netease_url/issues)
+[在线体验](http://localhost:5001) • [问题反馈](https://github.com/Awan/wan-music/issues)
 
 </div>
 
@@ -19,13 +14,6 @@
 
 > **⚠️ 重要声明**  
 > 本项目采用 MIT 许可证开源。根据 MIT 许可证的条款，任何个人或组织均可自由使用、修改和分发本项目的源代码，包括用于商业项目。
-
-**注意**：本项目旨在为开源社区做贡献，我们鼓励用户：
-- 在遵守开源精神的前提下使用和分享代码
-- 如有改进，欢迎贡献回本项目
-- 在商业使用中，请考虑对开源项目的支持和回馈
-
-虽然 MIT 许可证允许商业使用，但我们希望用户能尊重开源精神，合理使用本项目。
 
 ## ✨ 功能特性
 
@@ -37,53 +25,48 @@
 - **⬇️ 音乐下载**：支持多种音质的音乐文件下载
 
 ### 🎼 音质支持
-- `standard`：标准音质 (128kbps)
-- `exhigh`：极高音质 (320kbps)
-- `lossless`：无损音质 (FLAC)
-- `hires`：Hi-Res音质 (24bit/96kHz)
-- `jyeffect`：高清环绕声
-- `sky`：沉浸环绕声
-- `jymaster`：超清母带
+| 参数 | 说明 |
+|------|------|
+| `standard` | 标准音质 (128kbps) |
+| `exhigh` | 极高音质 (320kbps) |
+| `lossless` | 无损音质 (FLAC) |
+| `hires` | Hi-Res音质 (24bit/96kHz) |
+| `jyeffect` | 高清环绕声 |
+| `sky` | 沉浸环绕声 |
+| `jymaster` | 超清母带 |
 
-### 🌐 使用方式
-- **Web界面**：直观友好的网页操作界面
-- **RESTful API**：完整的API接口支持
-- **批量处理**：支持歌单和专辑的批量解析
-- **多格式支持**：支持ID和链接多种输入格式
+> 黑胶VIP音质：standard, exhigh, lossless, hires, jyeffect  
+> 黑胶SVIP音质：sky, jymaster
 
 ---
 
 ## 🚀 快速开始
 
 ### 环境要求
-- Python 3.7+
+- Python 3.9+
 - 网易云音乐黑胶会员账号
 
 ### 安装步骤
 
-#### 1. 克隆项目
 ```bash
-git clone https://github.com/Suxiaoqinx/Netease_url.git
-cd Netease_url
-```
+# 1. 克隆项目
+git clone https://github.com/Awan/wan-music.git
+cd wan-music
 
-#### 2. 安装依赖
-```bash
+# 2. 安装依赖
 pip install -r requirements.txt
-```
 
-#### 3. 配置Cookie
-在 `cookie.txt` 文件中填入黑胶会员账号的Cookie：
+# 3. 配置Cookie
+# 在 api/cookie.txt 文件中填入黑胶会员账号的Cookie
+
+# 4. 启动服务
+python main.py
+
+# 5. 访问界面
+# 打开浏览器访问：http://localhost:5001
+```
 
 > 💡 **获取Cookie方法**：登录网易云音乐网页版 → F12开发者工具 → Network标签页 → 复制任意请求的Cookie值
-
-#### 4. 启动服务
-```bash
-python main.py
-```
-
-#### 5. 访问界面
-打开浏览器访问：`http://localhost:5000`
 
 ### 🐳 Docker部署
 
@@ -91,9 +74,9 @@ python main.py
 # 使用Docker Compose
 docker-compose up -d
 
-# 或使用Docker
-docker build -t netease-music-api .
-docker run -d -p 5000:5000 netease-music-api
+# 或使用Docker构建
+docker build -t wan-music .
+docker run -d -p 5001:5001 wan-music
 ```
 
 ---
@@ -136,7 +119,7 @@ docker run -d -p 5000:5000 netease-music-api
 
 ### 支持的链接格式
 
-```
+```bash
 # 歌曲链接
 https://music.163.com/song?id=1234567890
 https://music.163.com/#/song?id=1234567890
@@ -153,10 +136,12 @@ https://music.163.com/#/album?id=1234567890
 1234567890
 ```
 
+---
+
 ## 🔌 API接口文档
 
 ### 基础信息
-- **Base URL**: `http://localhost:5000`
+- **Base URL**: `http://localhost:5001`
 - **请求方式**: GET / POST
 - **响应格式**: JSON
 
@@ -166,6 +151,7 @@ https://music.163.com/#/album?id=1234567890
 ```http
 GET /health
 ```
+
 **响应示例**:
 ```json
 {
@@ -184,20 +170,13 @@ Content-Type: application/json
   "limit": 10
 }
 ```
+
 **响应示例**:
 ```json
 {
   "code": 200,
   "result": {
-    "songs": [
-      {
-        "id": 185668,
-        "name": "稻香",
-        "artists": ["周杰伦"],
-        "album": "魔杰座",
-        "duration": 223000
-      }
-    ]
+    "songs": [...]
   }
 }
 ```
@@ -242,71 +221,159 @@ Content-Type: application/json
   "quality": "lossless"
 }
 ```
+
 **响应**: 直接返回音频文件流
 
 ---
 
-## 音质参数说明（仅限单曲解析）
+## ⚙️ 配置说明
 
-- `standard`：标准音质
-- `exhigh`：极高音质
-- `lossless`：无损音质
-- `hires`：Hi-Res音质
-- `jyeffect`：高清环绕声
-- `sky`：沉浸环绕声
-- `jymaster`：超清母带
+### Cookie配置
 
-> 黑胶VIP音质：standard, exhigh, lossless, hires, jyeffect  
-> 黑胶SVIP音质：sky, jymaster
+在 `api/cookie.txt` 文件中配置网易云音乐Cookie：
 
----
+```text
+MUSIC_U=你的MUSIC_U值; os=pc; appver=8.9.70;
+```
 
-## Docker 一键部署
+> ⚠️ **重要提示**：
+> - 必须使用黑胶会员账号的Cookie
+> - Cookie格式必须严格按照示例填写
+> - 定期更新Cookie以保持有效性
 
-1. **修改参数**
+### 环境变量
 
-   - 如需修改端口，请编辑 `.env` 或 `docker-compose.yml` 文件中的 `ports` 配置，例如：
+可以通过 `.env` 文件配置服务：
 
-     ```yaml
-     ports:
-       - "8080:5000"
-     ```
-
-2. **启动服务**
-
-   ```bash
-   docker-compose up -d
-   ```
+```bash
+HOST=0.0.0.0
+PORT=5001
+DEBUG=false
+LOG_LEVEL=INFO
+```
 
 ---
 
-## 在线演示
+## 🔧 故障排除
 
-[在线解析](https://wyapi.toubiec.cn/)
+### 常见问题
+
+#### 1. Cookie无效
+**问题**：提示Cookie无效或过期
+
+**解决方案**：
+- 确认使用的是黑胶会员账号
+- 重新获取Cookie并更新 `api/cookie.txt`
+- 检查Cookie格式是否正确
+
+#### 2. 无法下载高音质
+**问题**：只能下载标准音质
+
+**解决方案**：
+- 确认账号是黑胶会员
+- 检查Cookie是否有效
+- 确认歌曲本身支持高音质
+
+#### 3. 服务启动失败
+**问题**：运行 `python main.py` 报错
+
+**解决方案**：
+- 检查Python版本（需要3.9+）
+- 安装所有依赖：`pip install -r requirements.txt`
+- 检查端口5001是否被占用
+
+#### 4. 下载文件损坏
+**问题**：下载的音频文件无法播放
+
+**解决方案**：
+- 检查网络连接是否稳定
+- 重新下载文件
+- 尝试其他音质选项
+
+### 日志查看
+
+服务运行时会生成日志文件 `music_api.log`：
+
+```bash
+tail -f music_api.log
+```
 
 ---
 
-## 注意事项
+## 📁 项目结构
 
-- 必须使用黑胶会员账号的 Cookie 才能解析高音质资源。
-- Cookie 格式请严格按照 `cookie.txt` 示例填写。
+```
+wan-music/
+├── main.py                 # 主程序入口
+├── requirements.txt        # Python依赖
+├── Dockerfile              # Docker构建文件
+├── docker-compose.yml      # Docker Compose配置
+├── .env                    # 环境配置
+├── .github/
+│   └── workflows/
+│       └── docker-publish.yml  # GitHub Actions
+├── api/
+│   ├── main.py             # Flask主程序
+│   ├── music_api.py        # 音乐API核心模块
+│   ├── music_downloader.py # 音乐下载模块
+│   ├── cookie_manager.py   # Cookie管理模块
+│   ├── qr_login.py         # 二维码登录模块
+│   ├── api_security.py     # API安全模块
+│   └── cookie.txt          # Cookie配置
+└── frontend/
+    ├── index.html          # Web界面
+    ├── css/                # 样式文件
+    ├── js/                 # 脚本文件
+    └── imgs/               # 图片资源
+```
+
+### 技术栈
+
+- **后端**：Flask + Python
+- **前端**：Bootstrap + jQuery
+- **音频处理**：mutagen, FLACMetadata, ID3Writer
+- **HTTP客户端**：aiohttp + requests
+- **容器化**：Docker + GitHub Actions
 
 ---
 
-## 致谢
+## 🤖 CI/CD
 
-- [Ravizhan](https://github.com/ravizhan)
+### GitHub Actions
+
+推送版本标签自动构建并推送到 Docker Hub：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+这将构建并推送 `awan1987/wan-music:1.0.0` 到 Docker Hub。
 
 ---
 
-## 反馈与交流
+## 📄 许可证
 
-- 在 Github [Issues](https://github.com/Suxiaoqinx/Netease_url/issues) 提交反馈
-- 或访问 [我的博客](https://www.toubiec.cn)
+本项目采用 MIT 许可证开源。
+
+---
+
+## 🤝 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本项目
+2. 创建特性分支：`git checkout -b feature/new-feature`
+3. 提交更改：`git commit -am 'Add new feature'`
+4. 推送分支：`git push origin feature/new-feature`
+5. 提交 Pull Request
+
+---
+
+## 📞 联系方式
+
+- **GitHub Issues**：[提交问题](https://github.com/Awan/wan-music/issues)
 
 ---
 
 欢迎 Star、Fork 和 PR！
-
-
-

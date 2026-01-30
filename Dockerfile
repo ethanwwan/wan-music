@@ -1,10 +1,22 @@
-FROM python:3.9.22-alpine3.21
+FROM python:3.9-alpine AS builder
+
 WORKDIR /app
-COPY requirements.txt requirements.txt
-RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
-    pip3 install --no-cache-dir -r requirements.txt
-COPY . .
-RUN chmod +x /app/entrypoint.sh
+
+COPY requirements.txt .
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip install --no-cache-dir -r requirements.txt
+
+FROM python:3.9-alpine
+
+WORKDIR /app
+
 ENV TZ=Asia/Shanghai
-EXPOSE 5000
-CMD ["/app/entrypoint.sh"]
+
+COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+COPY . .
+
+EXPOSE 5001
+
+CMD ["python", "main.py"]
