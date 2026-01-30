@@ -2,7 +2,7 @@
     'use strict';
 
     const Logger = (function() {
-        const isDev = (function() {
+        function isDevEnv() {
             try {
                 return localStorage.getItem('app_env') === 'dev' ||
                        window.APP_ENV === 'dev' ||
@@ -10,7 +10,7 @@
             } catch (e) {
                 return true;
             }
-        })();
+        }
 
         const levels = {
             DEBUG: 0,
@@ -19,11 +19,10 @@
             ERROR: 3
         };
 
-        const currentLevel = isDev ? levels.DEBUG : levels.WARN;
+        const currentLevel = isDevEnv() ? levels.DEBUG : levels.WARN;
 
         function formatMessage(level, message, data) {
-            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
-            const prefix = isDev ? `[${timestamp}] [${level}]` : `[${level}]`;
+            const prefix = isDevEnv() ? `[${level}]` : `[${level}]`;
             return data !== undefined ? `${prefix} ${message}` : `${prefix} ${message}`;
         }
 
@@ -40,7 +39,7 @@
         }
 
         return {
-            isDev: isDev,
+            isDev: isDevEnv,
 
             debug: function(message, data) {
                 log('debug', 'DEBUG', message, data);
@@ -59,22 +58,22 @@
             },
 
             group: function(label) {
-                if (!isDev) return;
+                if (!isDevEnv()) return;
                 console.group?.(label);
             },
 
             groupEnd: function() {
-                if (!isDev) return;
+                if (!isDevEnv()) return;
                 console.groupEnd?.();
             },
 
             time: function(label) {
-                if (!isDev) return;
+                if (!isDevEnv()) return;
                 console.time?.(label);
             },
 
             timeEnd: function(label) {
-                if (!isDev) return;
+                if (!isDevEnv()) return;
                 console.timeEnd?.(label);
             },
 
@@ -89,7 +88,7 @@
             },
 
             getEnv: function() {
-                return isDev ? 'dev' : 'prod';
+                return isDevEnv() ? 'dev' : 'prod';
             },
 
             enableLogs: function() {
@@ -101,7 +100,7 @@
             },
 
             toggleLogs: function() {
-                if (isDev) {
+                if (isDevEnv()) {
                     this.disableLogs();
                 } else {
                     this.enableLogs();
@@ -109,7 +108,7 @@
             },
 
             isLogsEnabled: function() {
-                return isDev;
+                return isDevEnv();
             }
         };
     })();

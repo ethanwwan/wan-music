@@ -222,11 +222,9 @@ class MusicAPIService:
         self.cookie_manager = CookieManager()
         self.netease_api = NeteaseAPI()
         self.downloader = MusicDownloader()
-        
-        # 已注释：前端直接下载，不使用后端存储
-        # self.downloads_path = Path(config.downloads_dir)
-        # self.downloads_path.mkdir(exist_ok=True)
-        # self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
+
+        self.downloads_path = Path('downloads')
+        self.downloads_path.mkdir(exist_ok=True)
     
     def _get_cookies(self) -> Dict[str, str]:
         """获取Cookie"""
@@ -803,8 +801,7 @@ def start_api_server():
             host=config.host,
             port=config.port,
             debug=config.debug,
-            threaded=True,
-            reload_on_change=config.debug
+            threaded=True
         )
         
     except KeyboardInterrupt:
