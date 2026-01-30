@@ -1,1 +1,688 @@
-const _0x9e33a7=_0x3b46;function _0x3b46(_0x6a0885,_0x282a9d){const _0x4a8fca=_0x4a8f();return _0x3b46=function(_0x3b469f,_0x26aec5){_0x3b469f=_0x3b469f-0x1ae;let _0x4bb613=_0x4a8fca[_0x3b469f];return _0x4bb613;},_0x3b46(_0x6a0885,_0x282a9d);}(function(_0x579a6a,_0x35f307){const _0x3703fa=_0x3b46,_0x487ab0=_0x579a6a();while(!![]){try{const _0x2a47f0=parseInt(_0x3703fa(0x1e4))/0x1+parseInt(_0x3703fa(0x1bb))/0x2+parseInt(_0x3703fa(0x1fa))/0x3*(parseInt(_0x3703fa(0x1db))/0x4)+-parseInt(_0x3703fa(0x205))/0x5+parseInt(_0x3703fa(0x1c0))/0x6+parseInt(_0x3703fa(0x202))/0x7+-parseInt(_0x3703fa(0x1d3))/0x8;if(_0x2a47f0===_0x35f307)break;else _0x487ab0['push'](_0x487ab0['shift']());}catch(_0x5584a7){_0x487ab0['push'](_0x487ab0['shift']());}}}(_0x4a8f,0xd6ec3));class FLACMetadata{static async[_0x9e33a7(0x1b4)](_0x1c731d,_0x46e88b){return new Promise(async(_0x4995f1,_0x4fb2d0)=>{const _0x478662=_0x3b46;try{console['log']('开始为FLAC文件添加元数据:',_0x46e88b);const _0x550685=new Uint8Array(_0x1c731d);if(!this[_0x478662(0x1d9)](_0x550685))throw new Error('无效的FLAC文件');const _0x19ca62={};_0x19ca62['TITLE']=_0x46e88b['title']||'',_0x19ca62[_0x478662(0x1b6)]=_0x46e88b[_0x478662(0x1df)]||'',_0x19ca62[_0x478662(0x201)]=_0x46e88b[_0x478662(0x1fd)]||'',_0x19ca62[_0x478662(0x1d1)]=_0x46e88b[_0x478662(0x1c3)]||'',_0x19ca62['LYRICS']=_0x46e88b['lyrics']||'';const _0x1e0448=this[_0x478662(0x20a)](_0x19ca62);let _0x28c84e=this[_0x478662(0x1e5)](_0x550685,_0x1e0448);_0x46e88b[_0x478662(0x203)]&&(_0x28c84e=await this[_0x478662(0x1f4)](_0x28c84e,_0x46e88b['cover']));const _0x38bca7={};_0x38bca7[_0x478662(0x1b0)]=_0x478662(0x1cf);const _0x538338=new Blob([_0x28c84e],_0x38bca7),_0x596855={};_0x596855[_0x478662(0x1be)]=_0x46e88b[_0x478662(0x1be)],_0x596855[_0x478662(0x1df)]=_0x46e88b['artist'],_0x596855[_0x478662(0x1fd)]=_0x46e88b[_0x478662(0x1fd)],_0x596855[_0x478662(0x1eb)]=_0x1c731d[_0x478662(0x1fb)],_0x596855['newSize']=_0x538338[_0x478662(0x1bd)],console[_0x478662(0x1e7)](_0x478662(0x1b9),_0x596855),_0x4995f1(_0x538338);}catch(_0x45754c){console[_0x478662(0x208)]('添加FLAC元数据失败:',_0x45754c),_0x4fb2d0(_0x45754c);}});}static async[_0x9e33a7(0x1e1)](_0x544ac2){return new Promise((_0x5bda05,_0x5a5978)=>{const _0x4b9c62=_0x3b46;try{const _0x76ceef=new Uint8Array(_0x544ac2);if(!this[_0x4b9c62(0x1d9)](_0x76ceef))throw new Error(_0x4b9c62(0x1ae));const _0x2020b3=this[_0x4b9c62(0x209)](_0x76ceef),_0x4e8266=this[_0x4b9c62(0x1f6)](_0x76ceef),_0x58ed0e=this[_0x4b9c62(0x1ed)](_0x76ceef),_0x1f320a={'title':_0x2020b3[_0x4b9c62(0x1cc)]||'','artist':_0x2020b3[_0x4b9c62(0x1b6)]||'','album':_0x2020b3[_0x4b9c62(0x201)]||'','year':_0x2020b3['DATE']||'','lyrics':_0x2020b3['LYRICS']||'','cover':_0x4e8266,..._0x58ed0e};_0x5bda05(_0x1f320a);}catch(_0x1615f5){console[_0x4b9c62(0x208)]('提取FLAC元数据失败:',_0x1615f5),_0x5a5978(_0x1615f5);}});}static[_0x9e33a7(0x1d9)](_0x4eace7){return _0x4eace7[0x0]===0x66&&_0x4eace7[0x1]===0x4c&&_0x4eace7[0x2]===0x61&&_0x4eace7[0x3]===0x43;}static['createVorbisComment'](_0x3c4eaa){const _0x3b6abc=_0x9e33a7,_0x5dfb17=_0x3b6abc(0x1de),_0x3caf18=new TextEncoder()[_0x3b6abc(0x1c7)](_0x5dfb17),_0x2a13d7=[];for(const [_0x2e0b5a,_0x7332ac]of Object[_0x3b6abc(0x1d0)](_0x3c4eaa)){if(_0x7332ac){const _0x26db74=_0x2e0b5a+'='+_0x7332ac;_0x2a13d7[_0x3b6abc(0x1ec)](new TextEncoder()[_0x3b6abc(0x1c7)](_0x26db74));}}let _0x209cf8=0x4+_0x3caf18[_0x3b6abc(0x1c2)]+0x4;for(const _0x19bf1c of _0x2a13d7){_0x209cf8+=0x4+_0x19bf1c[_0x3b6abc(0x1c2)];}const _0x21de71=new Uint8Array(_0x209cf8);let _0x5b172a=0x0;_0x21de71[_0x5b172a++]=_0x3caf18[_0x3b6abc(0x1c2)]&0xff,_0x21de71[_0x5b172a++]=_0x3caf18[_0x3b6abc(0x1c2)]>>0x8&0xff,_0x21de71[_0x5b172a++]=_0x3caf18[_0x3b6abc(0x1c2)]>>0x10&0xff,_0x21de71[_0x5b172a++]=_0x3caf18[_0x3b6abc(0x1c2)]>>0x18&0xff,_0x21de71[_0x3b6abc(0x1e2)](_0x3caf18,_0x5b172a),_0x5b172a+=_0x3caf18['length'],_0x21de71[_0x5b172a++]=_0x2a13d7[_0x3b6abc(0x1c2)]&0xff,_0x21de71[_0x5b172a++]=_0x2a13d7[_0x3b6abc(0x1c2)]>>0x8&0xff,_0x21de71[_0x5b172a++]=_0x2a13d7[_0x3b6abc(0x1c2)]>>0x10&0xff,_0x21de71[_0x5b172a++]=_0x2a13d7[_0x3b6abc(0x1c2)]>>0x18&0xff;for(const _0x178c58 of _0x2a13d7){_0x21de71[_0x5b172a++]=_0x178c58[_0x3b6abc(0x1c2)]&0xff,_0x21de71[_0x5b172a++]=_0x178c58['length']>>0x8&0xff,_0x21de71[_0x5b172a++]=_0x178c58['length']>>0x10&0xff,_0x21de71[_0x5b172a++]=_0x178c58['length']>>0x18&0xff,_0x21de71[_0x3b6abc(0x1e2)](_0x178c58,_0x5b172a),_0x5b172a+=_0x178c58[_0x3b6abc(0x1c2)];}return _0x21de71;}static['insertVorbisCommentBlock'](_0x588b56,_0x5266de){const _0x48d7ec=_0x9e33a7;let _0x15b23a=0x4,_0x3e52bb=![],_0x4b2863=0x0,_0x44d34c=0x0;while(_0x15b23a<_0x588b56['length']){const _0x2de274=_0x588b56[_0x15b23a],_0x2f2e9d=(_0x2de274&0x80)!==0x0,_0x582b87=_0x2de274&0x7f,_0x5ead76=_0x588b56[_0x15b23a+0x1]<<0x10|_0x588b56[_0x15b23a+0x2]<<0x8|_0x588b56[_0x15b23a+0x3];if(_0x582b87===0x4){_0x3e52bb=!![],_0x4b2863=_0x15b23a,_0x44d34c=_0x15b23a+0x4+_0x5ead76;break;}_0x15b23a+=0x4+_0x5ead76;if(_0x2f2e9d)break;}const _0x192854=_0x5266de['length'],_0x5d509b=new Uint8Array(0x4);_0x5d509b[0x0]=0x4,_0x5d509b[0x1]=_0x192854>>0x10&0xff,_0x5d509b[0x2]=_0x192854>>0x8&0xff,_0x5d509b[0x3]=_0x192854&0xff;if(_0x3e52bb){const _0x27d13b=new Uint8Array(_0x588b56[_0x48d7ec(0x1c2)]-(_0x44d34c-_0x4b2863)+0x4+_0x192854);return _0x27d13b[_0x48d7ec(0x1e2)](_0x588b56['slice'](0x0,_0x4b2863),0x0),_0x27d13b[_0x48d7ec(0x1e2)](_0x5d509b,_0x4b2863),_0x27d13b[_0x48d7ec(0x1e2)](_0x5266de,_0x4b2863+0x4),_0x27d13b[_0x48d7ec(0x1e2)](_0x588b56['slice'](_0x44d34c),_0x4b2863+0x4+_0x192854),_0x27d13b;}else{const _0x3cabf0=0x4+0x4+0x22,_0x543c2b=new Uint8Array(_0x588b56[_0x48d7ec(0x1c2)]+0x4+_0x192854);return _0x543c2b[_0x48d7ec(0x1e2)](_0x588b56[_0x48d7ec(0x1da)](0x0,_0x3cabf0),0x0),_0x543c2b[_0x48d7ec(0x1e2)](_0x5d509b,_0x3cabf0),_0x543c2b[_0x48d7ec(0x1e2)](_0x5266de,_0x3cabf0+0x4),_0x543c2b[_0x48d7ec(0x1e2)](_0x588b56[_0x48d7ec(0x1da)](_0x3cabf0),_0x3cabf0+0x4+_0x192854),_0x543c2b;}}static[_0x9e33a7(0x209)](_0xf93e64){const _0x7b74b5=_0x9e33a7;let _0x974fa0=0x4;const _0x53a949={};while(_0x974fa0<_0xf93e64[_0x7b74b5(0x1c2)]){const _0x19c534=_0xf93e64[_0x974fa0],_0x291f2e=(_0x19c534&0x80)!==0x0,_0x364b8f=_0x19c534&0x7f,_0x4d7a15=_0xf93e64[_0x974fa0+0x1]<<0x10|_0xf93e64[_0x974fa0+0x2]<<0x8|_0xf93e64[_0x974fa0+0x3];if(_0x364b8f===0x4){_0x974fa0+=0x4;const _0x2b86f5=_0xf93e64[_0x974fa0]|_0xf93e64[_0x974fa0+0x1]<<0x8|_0xf93e64[_0x974fa0+0x2]<<0x10|_0xf93e64[_0x974fa0+0x3]<<0x18;_0x974fa0+=0x4,_0x974fa0+=_0x2b86f5;const _0x3e5616=_0xf93e64[_0x974fa0]|_0xf93e64[_0x974fa0+0x1]<<0x8|_0xf93e64[_0x974fa0+0x2]<<0x10|_0xf93e64[_0x974fa0+0x3]<<0x18;_0x974fa0+=0x4;for(let _0x4fb9ff=0x0;_0x4fb9ff<_0x3e5616;_0x4fb9ff++){const _0xff4648=_0xf93e64[_0x974fa0]|_0xf93e64[_0x974fa0+0x1]<<0x8|_0xf93e64[_0x974fa0+0x2]<<0x10|_0xf93e64[_0x974fa0+0x3]<<0x18;_0x974fa0+=0x4;const _0x180c84=_0xf93e64[_0x7b74b5(0x1da)](_0x974fa0,_0x974fa0+_0xff4648);_0x974fa0+=_0xff4648;const _0x59fb11=new TextDecoder()[_0x7b74b5(0x1d8)](_0x180c84),_0x24105c=_0x59fb11['indexOf']('=');if(_0x24105c>0x0){const _0x445ecd=_0x59fb11[_0x7b74b5(0x206)](0x0,_0x24105c)[_0x7b74b5(0x1c9)](),_0x4f9793=_0x59fb11[_0x7b74b5(0x206)](_0x24105c+0x1);_0x53a949[_0x445ecd]=_0x4f9793;}}break;}_0x974fa0+=0x4+_0x4d7a15;if(_0x291f2e)break;}return _0x53a949;}static[_0x9e33a7(0x1f6)](_0x4b1e5b){const _0x3b222b=_0x9e33a7;let _0x33ba13=0x4;while(_0x33ba13<_0x4b1e5b[_0x3b222b(0x1c2)]){const _0x4f70bf=_0x4b1e5b[_0x33ba13],_0x50951b=(_0x4f70bf&0x80)!==0x0,_0x1308ae=_0x4f70bf&0x7f,_0x5189f9=_0x4b1e5b[_0x33ba13+0x1]<<0x10|_0x4b1e5b[_0x33ba13+0x2]<<0x8|_0x4b1e5b[_0x33ba13+0x3];if(_0x1308ae===0x6){_0x33ba13+=0x4,_0x33ba13+=0x4;const _0x440df1=_0x4b1e5b[_0x33ba13]|_0x4b1e5b[_0x33ba13+0x1]<<0x8|_0x4b1e5b[_0x33ba13+0x2]<<0x10|_0x4b1e5b[_0x33ba13+0x3]<<0x18;_0x33ba13+=0x4;const _0x45c05c=_0x4b1e5b['slice'](_0x33ba13,_0x33ba13+_0x440df1),_0x34cb6c=new TextDecoder()[_0x3b222b(0x1d8)](_0x45c05c);_0x33ba13+=_0x440df1;const _0x31ae0c=_0x4b1e5b[_0x33ba13]|_0x4b1e5b[_0x33ba13+0x1]<<0x8|_0x4b1e5b[_0x33ba13+0x2]<<0x10|_0x4b1e5b[_0x33ba13+0x3]<<0x18;_0x33ba13+=0x4+_0x31ae0c,_0x33ba13+=0x4*0x4;const _0x5df46f=_0x4b1e5b[_0x33ba13]|_0x4b1e5b[_0x33ba13+0x1]<<0x8|_0x4b1e5b[_0x33ba13+0x2]<<0x10|_0x4b1e5b[_0x33ba13+0x3]<<0x18;_0x33ba13+=0x4;const _0x498e2f=_0x4b1e5b['slice'](_0x33ba13,_0x33ba13+_0x5df46f),_0x5572ff={};return _0x5572ff[_0x3b222b(0x1b0)]=_0x34cb6c,new Blob([_0x498e2f],_0x5572ff);}_0x33ba13+=0x4+_0x5189f9;if(_0x50951b)break;}return null;}static async[_0x9e33a7(0x1f4)](_0x106597,_0x280717){return new Promise((_0xd1f19c,_0x571aa6)=>{const _0x5e485a=_0x3b46;try{const _0x5b90a5=0x2*0x400*0x400;_0x280717[_0x5e485a(0x1bd)]>_0x5b90a5?(console[_0x5e485a(0x1e7)](_0x5e485a(0x1ce)+(_0x280717[_0x5e485a(0x1bd)]/0x400/0x400)[_0x5e485a(0x1c4)](0x2)+_0x5e485a(0x1d7)),this[_0x5e485a(0x1e6)](_0x280717,_0x5b90a5)[_0x5e485a(0x1dd)](_0x156e4c=>{const _0x462bf7=_0x5e485a;this[_0x462bf7(0x1f7)](_0x106597,_0x156e4c)[_0x462bf7(0x1dd)](_0xd1f19c)[_0x462bf7(0x204)](_0x571aa6);})[_0x5e485a(0x204)](_0x571aa6)):this[_0x5e485a(0x1f7)](_0x106597,_0x280717)[_0x5e485a(0x1dd)](_0xd1f19c)[_0x5e485a(0x204)](_0x571aa6);}catch(_0x40795c){_0x571aa6(_0x40795c);}});}static async[_0x9e33a7(0x1e6)](_0x556100,_0x403b21){return new Promise((_0xcc321d,_0x1e8493)=>{const _0x1fe503=_0x3b46,_0x3bff8a=new Image(),_0x5b1996=document[_0x1fe503(0x1e3)](_0x1fe503(0x207)),_0x51e46b=_0x5b1996[_0x1fe503(0x1f5)]('2d');_0x3bff8a[_0x1fe503(0x1ef)]=()=>{const _0x1cdc01=_0x1fe503;try{let {width:_0x143c06,height:_0x29d580}=_0x3bff8a;const _0x43afa7=0x320;if(_0x143c06>_0x43afa7||_0x29d580>_0x43afa7){const _0x5f164c=Math[_0x1cdc01(0x1ea)](_0x43afa7/_0x143c06,_0x43afa7/_0x29d580);_0x143c06=Math[_0x1cdc01(0x1ba)](_0x143c06*_0x5f164c),_0x29d580=Math[_0x1cdc01(0x1ba)](_0x29d580*_0x5f164c);}_0x5b1996[_0x1cdc01(0x1e9)]=_0x143c06,_0x5b1996[_0x1cdc01(0x20b)]=_0x29d580,_0x51e46b['drawImage'](_0x3bff8a,0x0,0x0,_0x143c06,_0x29d580);let _0x37288d=0.9;const _0xcaf6c4=()=>{const _0x4a45ff=_0x1cdc01;_0x5b1996[_0x4a45ff(0x1b2)](_0x5179dd=>{const _0x196ed9=_0x4a45ff;if(!_0x5179dd){_0x1e8493(new Error(_0x196ed9(0x1e8)));return;}_0x5179dd['size']<=_0x403b21||_0x37288d<=0.5?(console[_0x196ed9(0x1e7)](_0x196ed9(0x1f8)+(_0x5179dd[_0x196ed9(0x1bd)]/0x400)[_0x196ed9(0x1c4)](0x2)+'KB'),_0xcc321d(_0x5179dd)):(_0x37288d-=0.1,_0x5b1996[_0x196ed9(0x1b2)](_0xcaf6c4,_0x196ed9(0x200),_0x37288d));},_0x4a45ff(0x200),_0x37288d);};_0xcaf6c4();}catch(_0xa8df37){_0x1e8493(_0xa8df37);}},_0x3bff8a[_0x1fe503(0x1f1)]=()=>_0x1e8493(new Error('图片加载失败')),_0x3bff8a[_0x1fe503(0x1fc)]=URL[_0x1fe503(0x1e0)](_0x556100);});}static async[_0x9e33a7(0x1f7)](_0xca57f1,_0x2136b5){return new Promise((_0x25586b,_0x2a32ed)=>{const _0x1001d2=_0x3b46,_0x31e07e=new FileReader();_0x31e07e[_0x1001d2(0x1ef)]=()=>{const _0x180286=_0x1001d2;try{const _0x2072ab=new Uint8Array(_0x31e07e[_0x180286(0x1fe)]),_0x3895bf=0x10*0x400*0x400;if(_0x2072ab[_0x180286(0x1c2)]>_0x3895bf){_0x2a32ed(new Error(_0x180286(0x1c1)+_0x2072ab[_0x180286(0x1c2)]+_0x180286(0x1b5)));return;}const _0x35b413={};_0x35b413[_0x180286(0x1b0)]=0x3,_0x35b413[_0x180286(0x1b8)]=_0x2136b5[_0x180286(0x1b0)],_0x35b413['description']='Cover',_0x35b413[_0x180286(0x1e9)]=0x0,_0x35b413['height']=0x0,_0x35b413[_0x180286(0x1c8)]=0x18,_0x35b413[_0x180286(0x1ff)]=0x0,_0x35b413[_0x180286(0x1c5)]=_0x2072ab;const _0x820d7d=this[_0x180286(0x1dc)](_0x35b413),_0x426373=this[_0x180286(0x1d5)](_0xca57f1,_0x820d7d);_0x25586b(_0x426373);}catch(_0x4904a1){_0x2a32ed(_0x4904a1);}},_0x31e07e['onerror']=()=>_0x2a32ed(_0x31e07e['error']),_0x31e07e[_0x1001d2(0x1ca)](_0x2136b5);});}static[_0x9e33a7(0x1dc)](_0x10a680){const _0x106de5=_0x9e33a7,_0x4b711d=new TextEncoder()['encode'](_0x10a680[_0x106de5(0x1b8)]),_0x40f75f=new TextEncoder()[_0x106de5(0x1c7)](_0x10a680[_0x106de5(0x1f2)]),_0x5e8b31=new ArrayBuffer(0x20+_0x4b711d['length']+_0x40f75f[_0x106de5(0x1c2)]+_0x10a680[_0x106de5(0x1c5)][_0x106de5(0x1fb)]),_0x4c0ec0=new DataView(_0x5e8b31);let _0x2e1d49=0x0;_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680['type'],![]),_0x2e1d49+=0x4,_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x4b711d['length'],![]),_0x2e1d49+=0x4;for(let _0xbb7867=0x0;_0xbb7867<_0x4b711d[_0x106de5(0x1c2)];_0xbb7867++){_0x4c0ec0[_0x106de5(0x1bf)](_0x2e1d49,_0x4b711d[_0xbb7867]),_0x2e1d49++;}_0x4c0ec0['setUint32'](_0x2e1d49,_0x40f75f['length'],![]),_0x2e1d49+=0x4;for(let _0x22af9b=0x0;_0x22af9b<_0x40f75f['length'];_0x22af9b++){_0x4c0ec0[_0x106de5(0x1bf)](_0x2e1d49,_0x40f75f[_0x22af9b]),_0x2e1d49++;}_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680[_0x106de5(0x1e9)],![]),_0x2e1d49+=0x4,_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680[_0x106de5(0x20b)],![]),_0x2e1d49+=0x4,_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680['depth'],![]),_0x2e1d49+=0x4,_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680[_0x106de5(0x1ff)],![]),_0x2e1d49+=0x4,_0x4c0ec0[_0x106de5(0x1ee)](_0x2e1d49,_0x10a680[_0x106de5(0x1c5)]['byteLength'],![]),_0x2e1d49+=0x4;const _0x5065fa=new Uint8Array(_0x10a680['data'][_0x106de5(0x1bc)]||_0x10a680[_0x106de5(0x1c5)]);for(let _0x552420=0x0;_0x552420<_0x5065fa[_0x106de5(0x1c2)];_0x552420++){_0x4c0ec0[_0x106de5(0x1bf)](_0x2e1d49,_0x5065fa[_0x552420]),_0x2e1d49++;}return new Uint8Array(_0x5e8b31);}static[_0x9e33a7(0x1d5)](_0x51c627,_0x5b6282){const _0x3b0fd7=_0x9e33a7;let _0x5dc903=0x4,_0xe0bfde=![],_0x2480d6=0x0,_0x5f1bac=0x0;while(_0x5dc903<_0x51c627[_0x3b0fd7(0x1c2)]){const _0x4fd4ea=_0x51c627[_0x5dc903],_0x14f228=(_0x4fd4ea&0x80)!==0x0,_0x167ead=_0x4fd4ea&0x7f,_0x120c11=_0x51c627[_0x5dc903+0x1]<<0x10|_0x51c627[_0x5dc903+0x2]<<0x8|_0x51c627[_0x5dc903+0x3];if(_0x167ead===0x6){_0xe0bfde=!![],_0x2480d6=_0x5dc903,_0x5f1bac=_0x5dc903+0x4+_0x120c11;break;}_0x5dc903+=0x4+_0x120c11;if(_0x14f228)break;}const _0x139e81=_0x5b6282[_0x3b0fd7(0x1c2)],_0xc45a18=new Uint8Array(0x4);_0xc45a18[0x0]=0x6,_0xc45a18[0x1]=_0x139e81>>0x10&0xff,_0xc45a18[0x2]=_0x139e81>>0x8&0xff,_0xc45a18[0x3]=_0x139e81&0xff;if(_0xe0bfde){const _0x1e5b83=new Uint8Array(_0x51c627[_0x3b0fd7(0x1c2)]-(_0x5f1bac-_0x2480d6)+0x4+_0x139e81);return _0x1e5b83[_0x3b0fd7(0x1e2)](_0x51c627[_0x3b0fd7(0x1da)](0x0,_0x2480d6),0x0),_0x1e5b83[_0x3b0fd7(0x1e2)](_0xc45a18,_0x2480d6),_0x1e5b83[_0x3b0fd7(0x1e2)](_0x5b6282,_0x2480d6+0x4),_0x1e5b83[_0x3b0fd7(0x1e2)](_0x51c627[_0x3b0fd7(0x1da)](_0x5f1bac),_0x2480d6+0x4+_0x139e81),_0x1e5b83;}else{let _0x1f8303=0x4,_0x211a3c=0x0;while(_0x1f8303<_0x51c627['length']){const _0x3be446=_0x51c627[_0x1f8303],_0x1a6fa6=(_0x3be446&0x80)!==0x0,_0x156be2=_0x3be446&0x7f,_0x47ac43=_0x51c627[_0x1f8303+0x1]<<0x10|_0x51c627[_0x1f8303+0x2]<<0x8|_0x51c627[_0x1f8303+0x3];if(_0x156be2===0x4){_0x211a3c=_0x1f8303+0x4+_0x47ac43;break;}_0x1f8303+=0x4+_0x47ac43;if(_0x1a6fa6){_0x211a3c=_0x1f8303;break;}}const _0x41252f=new Uint8Array(_0x51c627[_0x3b0fd7(0x1c2)]+0x4+_0x139e81);return _0x41252f[_0x3b0fd7(0x1e2)](_0x51c627[_0x3b0fd7(0x1da)](0x0,_0x211a3c),0x0),_0x41252f[_0x3b0fd7(0x1e2)](_0xc45a18,_0x211a3c),_0x41252f[_0x3b0fd7(0x1e2)](_0x5b6282,_0x211a3c+0x4),_0x41252f[_0x3b0fd7(0x1e2)](_0x51c627['slice'](_0x211a3c),_0x211a3c+0x4+_0x139e81),_0x41252f;}}static[_0x9e33a7(0x1ed)](_0x1cae96){const _0x1626f8=_0x9e33a7;let _0x20fea5=0x4;const _0x169654={};_0x169654[_0x1626f8(0x1d6)]=0x0,_0x169654[_0x1626f8(0x1cb)]=0x0,_0x169654[_0x1626f8(0x1c6)]=0x0,_0x169654[_0x1626f8(0x1af)]=0x0,_0x169654[_0x1626f8(0x1b3)]=_0x1cae96[_0x1626f8(0x1c2)];const _0x4c94b2=_0x169654;while(_0x20fea5<_0x1cae96[_0x1626f8(0x1c2)]){const _0x40af20=_0x1cae96[_0x20fea5],_0x387ddf=(_0x40af20&0x80)!==0x0,_0x4b27ee=_0x40af20&0x7f,_0x190e89=_0x1cae96[_0x20fea5+0x1]<<0x10|_0x1cae96[_0x20fea5+0x2]<<0x8|_0x1cae96[_0x20fea5+0x3];if(_0x4b27ee===0x0){_0x20fea5+=0x4;const _0x10d8e7=_0x1cae96[_0x20fea5]<<0x8|_0x1cae96[_0x20fea5+0x1];_0x20fea5+=0x2;const _0x5db99b=_0x1cae96[_0x20fea5]<<0x8|_0x1cae96[_0x20fea5+0x1];_0x20fea5+=0x2;const _0x56d361=_0x1cae96[_0x20fea5]<<0x10|_0x1cae96[_0x20fea5+0x1]<<0x8|_0x1cae96[_0x20fea5+0x2];_0x20fea5+=0x3;const _0x26e161=_0x1cae96[_0x20fea5]<<0x10|_0x1cae96[_0x20fea5+0x1]<<0x8|_0x1cae96[_0x20fea5+0x2];_0x20fea5+=0x3;const _0x344d41=(_0x1cae96[_0x20fea5]&0xf)<<0x10,_0x5f1f56=_0x1cae96[_0x20fea5+0x1]<<0x8,_0x4214ea=_0x1cae96[_0x20fea5+0x2];_0x4c94b2[_0x1626f8(0x1cb)]=_0x344d41|_0x5f1f56|_0x4214ea;const _0x1e0a6c=((_0x1cae96[_0x20fea5+0x3]&0xe)>>0x1)+0x1,_0x7c492=(_0x1cae96[_0x20fea5+0x3]&0x1)<<0x4|((_0x1cae96[_0x20fea5+0x4]&0xf0)>>0x4)+0x1;_0x20fea5+=0x5;const _0x314d2f=(_0x1cae96[_0x20fea5]&0xf)<<0x20,_0x510f1f=_0x1cae96[_0x20fea5+0x1]<<0x18|_0x1cae96[_0x20fea5+0x2]<<0x10|_0x1cae96[_0x20fea5+0x3]<<0x8,_0x451572=_0x1cae96[_0x20fea5+0x4],_0x516dd9=_0x314d2f|_0x510f1f|_0x451572;_0x4c94b2[_0x1626f8(0x1cb)]>0x0&&(_0x4c94b2['duration']=Math['round'](_0x516dd9/_0x4c94b2['sampleRate']));_0x4c94b2[_0x1626f8(0x1c6)]=_0x7c492,_0x4c94b2[_0x1626f8(0x1af)]=_0x1e0a6c;break;}_0x20fea5+=0x4+_0x190e89;if(_0x387ddf)break;}return _0x4c94b2;}static[_0x9e33a7(0x1f0)](_0x5d0db4){const _0x8abcc=_0x9e33a7;if(!_0x5d0db4)return _0x8abcc(0x1d2);const _0x3fa120=Math['floor'](_0x5d0db4/0x3c),_0x5c3ebe=_0x5d0db4%0x3c;return _0x3fa120[_0x8abcc(0x1b1)]()['padStart'](0x2,'0')+':'+_0x5c3ebe[_0x8abcc(0x1b1)]()[_0x8abcc(0x1f3)](0x2,'0');}static[_0x9e33a7(0x1cd)](_0x5e7409){const _0x365c1f=_0x9e33a7;if(!_0x5e7409)return _0x365c1f(0x1f9);const _0x35f2d4=['B','KB','MB','GB'],_0x11b8ef=Math[_0x365c1f(0x1ba)](Math[_0x365c1f(0x1e7)](_0x5e7409)/Math[_0x365c1f(0x1e7)](0x400));return Math[_0x365c1f(0x1b7)](_0x5e7409/Math[_0x365c1f(0x1d4)](0x400,_0x11b8ef)*0x64)/0x64+'\x20'+_0x35f2d4[_0x11b8ef];}}function _0x4a8f(){const _0x5a1fcf=['无效的FLAC文件','channels','type','toString','toBlob','fileSize','addMetadata','字节)，最大支持16MB','ARTIST','round','mimeType','✅\x20FLAC元数据写入成功!','floor','3177632NVDqEC','buffer','size','title','setUint8','10332018QtgByg','图片数据过大(','length','year','toFixed','data','bitDepth','encode','depth','toUpperCase','readAsArrayBuffer','sampleRate','TITLE','formatFileSize','图片大小为','audio/flac','entries','DATE','00:00','18698848TlBjqH','pow','insertPictureBlock','duration','MB，超过限制，开始压缩...','decode','isValidFLAC','slice','4ecpBZs','createPictureBlock','then','FLAC\x20Metadata\x20Editor','artist','createObjectURL','extractMetadata','set','createElement','485605EuobGI','insertVorbisCommentBlock','compressImage','log','图片压缩失败','width','min','originalSize','push','extractTechInfo','setUint32','onload','formatDuration','onerror','description','padStart','addCoverImage','getContext','extractCoverImage','processCoverImage','图片压缩完成:\x20','0\x20B','1606449IINMEC','byteLength','src','album','result','colors','image/jpeg','ALBUM','3348863MUwtbf','cover','catch','7963185lJnrqF','substring','canvas','error','extractVorbisComment','createVorbisComment','height'];_0x4a8f=function(){return _0x5a1fcf;};return _0x4a8f();}
+/**
+ * FLAC Metadata Editor
+ * 用于为FLAC无损音乐文件添加/提取元数据
+ * 功能：添加标题、艺术家、专辑、歌词等标签；嵌入封面图片
+ */
+
+class FLACMetadata {
+    /**
+     * 检查是否为有效的FLAC文件
+     * @param {Uint8Array} data - 文件字节数据
+     * @returns {boolean}
+     */
+    static isValidFLAC(data) {
+        return data[0] === 0x66 &&  // 'f'
+               data[1] === 0x4C &&  // 'L'
+               data[2] === 0x61 &&  // 'a'
+               data[3] === 0x43;    // 'C'
+    }
+
+    /**
+     * 添加元数据到FLAC文件
+     * @param {ArrayBuffer} audioData - FLAC文件数据
+     * @param {Object} metadata - 元数据对象
+     * @param {string} metadata.title - 标题
+     * @param {string} metadata.artist - 艺术家
+     * @param {string} metadata.album - 专辑
+     * @param {string} metadata.lyrics - 歌词
+     * @param {Blob} [metadata.cover] - 封面图片
+     * @returns {Promise<Blob>}
+     */
+    static async addMetadata(audioData, metadata) {
+        console.log('开始为FLAC文件添加元数据:', metadata);
+
+        const uint8Array = new Uint8Array(audioData);
+        if (!this.isValidFLAC(uint8Array)) {
+            throw new Error('无效的FLAC文件');
+        }
+
+        const vorbisComment = {};
+        vorbisComment['TITLE'] = metadata.title || '';
+        vorbisComment['ARTIST'] = metadata.artist || '';
+        vorbisComment['ALBUM'] = metadata.album || '';
+        vorbisComment['DATE'] = metadata.year || '';
+        vorbisComment['LYRICS'] = metadata.lyrics || '';
+
+        const commentData = this.createVorbisComment(vorbisComment);
+        let resultData = this.insertVorbisCommentBlock(uint8Array, commentData);
+
+        if (metadata.cover) {
+            resultData = await this.addCoverImage(resultData, metadata.cover);
+        }
+
+        const blobInfo = {
+            mimeType: 'audio/flac',
+            title: metadata.title,
+            artist: metadata.artist,
+            album: metadata.album,
+            originalSize: audioData.byteLength,
+            newSize: resultData.length
+        };
+
+        console.log('✅ FLAC元数据写入成功!', blobInfo);
+
+        return new Blob([resultData], { type: 'audio/flac' });
+    }
+
+    /**
+     * 从FLAC文件中提取元数据
+     * @param {ArrayBuffer} audioData - FLAC文件数据
+     * @returns {Promise<Object>}
+     */
+    static async extractMetadata(audioData) {
+        return new Promise((resolve, reject) => {
+            try {
+                const uint8Array = new Uint8Array(audioData);
+                if (!this.isValidFLAC(uint8Array)) {
+                    reject(new Error('无效的FLAC文件'));
+                    return;
+                }
+
+                const vorbisComment = this.extractVorbisComment(uint8Array);
+                const coverImage = this.extractCoverImage(uint8Array);
+                const techInfo = this.extractTechInfo(uint8Array);
+
+                const metadata = {
+                    title: vorbisComment['TITLE'] || '',
+                    artist: vorbisComment['ARTIST'] || '',
+                    album: vorbisComment['ALBUM'] || '',
+                    year: vorbisComment['DATE'] || '',
+                    lyrics: vorbisComment['LYRICS'] || '',
+                    cover: coverImage,
+                    ...techInfo
+                };
+
+                resolve(metadata);
+            } catch (error) {
+                console.error('提取FLAC元数据失败:', error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 创建Vorbis Comment元数据块
+     * @param {Object} metadata - 元数据对象
+     * @returns {Uint8Array}
+     */
+    static createVorbisComment(metadata) {
+        const vendor = 'FLAC Metadata Editor';
+        const vendorEncoded = new TextEncoder().encode(vendor);
+        const commentData = [];
+
+        for (const [key, value] of Object.entries(metadata)) {
+            if (value) {
+                const entry = key + '=' + value;
+                commentData.push(new TextEncoder().encode(entry));
+            }
+        }
+
+        let totalLength = 4 + vendorEncoded.length + 4;
+        for (const data of commentData) {
+            totalLength += 4 + data.length;
+        }
+
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+
+        result[offset++] = vendorEncoded.length & 0xFF;
+        result[offset++] = (vendorEncoded.length >> 8) & 0xFF;
+        result[offset++] = (vendorEncoded.length >> 16) & 0xFF;
+        result[offset++] = (vendorEncoded.length >> 24) & 0xFF;
+        result.set(vendorEncoded, offset);
+        offset += vendorEncoded.length;
+
+        result[offset++] = commentData.length & 0xFF;
+        result[offset++] = (commentData.length >> 8) & 0xFF;
+        result[offset++] = (commentData.length >> 16) & 0xFF;
+        result[offset++] = (commentData.length >> 24) & 0xFF;
+
+        for (const data of commentData) {
+            result[offset++] = data.length & 0xFF;
+            result[offset++] = (data.length >> 8) & 0xFF;
+            result[offset++] = (data.length >> 16) & 0xFF;
+            result[offset++] = (data.length >> 24) & 0xFF;
+            result.set(data, offset);
+            offset += data.length;
+        }
+
+        return result;
+    }
+
+    /**
+     * 插入Vorbis Comment块到FLAC文件
+     * @param {Uint8Array} flacData - FLAC文件数据
+     * @param {Uint8Array} commentData - Vorbis Comment数据
+     * @returns {Uint8Array}
+     */
+    static insertVorbisCommentBlock(flacData, commentData) {
+        let pos = 4;
+        let foundCommentBlock = false;
+        let commentBlockStart = 0;
+        let commentBlockEnd = 0;
+
+        while (pos < flacData.length) {
+            const blockType = flacData[pos];
+            const isLast = (blockType & 0x80) !== 0;
+            const type = blockType & 0x7F;
+            const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+            if (type === 4) {
+                foundCommentBlock = true;
+                commentBlockStart = pos;
+                commentBlockEnd = pos + 4 + blockLength;
+                break;
+            }
+
+            pos += 4 + blockLength;
+            if (isLast) break;
+        }
+
+        const headerLength = 4;
+        const commentBlockHeader = new Uint8Array(4);
+        commentBlockHeader[0] = 4;
+        commentBlockHeader[1] = commentData.length >> 16 & 0xFF;
+        commentBlockHeader[2] = commentData.length >> 8 & 0xFF;
+        commentBlockHeader[3] = commentData.length & 0xFF;
+
+        if (foundCommentBlock) {
+            const newData = new Uint8Array(
+                flacData.length - (commentBlockEnd - commentBlockStart) + 4 + commentData.length
+            );
+            newData.set(flacData.slice(0, commentBlockStart), 0);
+            newData.set(commentBlockHeader, commentBlockStart);
+            newData.set(commentData, commentBlockStart + 4);
+            newData.set(flacData.slice(commentBlockEnd), commentBlockStart + 4 + commentData.length);
+            return newData;
+        } else {
+            let vorbisCommentPos = 4;
+            for (let i = 0; i < 10; i++) {
+                const blockType = flacData[vorbisCommentPos];
+                const isLast = (blockType & 0x80) !== 0;
+                const type = blockType & 0x7F;
+                const blockLength = (flacData[vorbisCommentPos + 1] << 16) |
+                                   (flacData[vorbisCommentPos + 2] << 8) |
+                                   flacData[vorbisCommentPos + 3];
+
+                if (type === 4) {
+                    vorbisCommentPos += 4 + blockLength;
+                    break;
+                }
+
+                vorbisCommentPos += 4 + blockLength;
+                if (isLast) break;
+            }
+
+            const newData = new Uint8Array(flacData.length + 4 + commentData.length);
+            newData.set(flacData.slice(0, vorbisCommentPos), 0);
+            newData.set(commentBlockHeader, vorbisCommentPos);
+            newData.set(commentData, vorbisCommentPos + 4);
+            newData.set(flacData.slice(vorbisCommentPos), vorbisCommentPos + 4 + commentData.length);
+            return newData;
+        }
+    }
+
+    /**
+     * 从FLAC中提取Vorbis Comment
+     * @param {Uint8Array} flacData - FLAC数据
+     * @returns {Object}
+     */
+    static extractVorbisComment(flacData) {
+        let pos = 4;
+        const result = {};
+
+        while (pos < flacData.length) {
+            const blockType = flacData[pos];
+            const isLast = (blockType & 0x80) !== 0;
+            const type = blockType & 0x7F;
+            const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+            if (type === 4) {
+                pos += 4;
+                const vendorLength = flacData[pos] | flacData[pos + 1] << 8 |
+                                     flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4 + vendorLength;
+
+                const numComments = flacData[pos] | flacData[pos + 1] << 8 |
+                                   flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                for (let i = 0; i < numComments; i++) {
+                    const commentLength = flacData[pos] | flacData[pos + 1] << 8 |
+                                          flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                    pos += 4;
+
+                    const commentData = flacData.slice(pos, pos + commentLength);
+                    pos += commentLength;
+
+                    const commentStr = new TextDecoder().decode(commentData);
+                    const equalIndex = commentStr.indexOf('=');
+
+                    if (equalIndex > 0) {
+                        const key = commentStr.substring(0, equalIndex).toUpperCase();
+                        const value = commentStr.substring(equalIndex + 1);
+                        result[key] = value;
+                    }
+                }
+                break;
+            }
+
+            pos += 4 + blockLength;
+            if (isLast) break;
+        }
+
+        return result;
+    }
+
+    /**
+     * 从FLAC中提取封面图片
+     * @param {Uint8Array} flacData - FLAC数据
+     * @returns {Blob|null}
+     */
+    static extractCoverImage(flacData) {
+        let pos = 4;
+
+        while (pos < flacData.length) {
+            const blockType = flacData[pos];
+            const isLast = (blockType & 0x80) !== 0;
+            const type = blockType & 0x7F;
+            const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+            if (type === 6) {
+                pos += 4;
+                pos += 4;
+
+                const pictureType = flacData[pos] | flacData[pos + 1] << 8 |
+                                   flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const mimeLength = flacData[pos] | flacData[pos + 1] << 8 |
+                                   flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const mimeType = new TextDecoder().decode(flacData.slice(pos, pos + mimeLength));
+                pos += mimeLength;
+
+                const descLength = flacData[pos] | flacData[pos + 1] << 8 |
+                                   flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4 + descLength;
+
+                const width = flacData[pos] | flacData[pos + 1] << 8 |
+                              flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const height = flacData[pos] | flacData[pos + 1] << 8 |
+                               flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const depth = flacData[pos] | flacData[pos + 1] << 8 |
+                              flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const colors = flacData[pos] | flacData[pos + 1] << 8 |
+                               flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const imageLength = flacData[pos] | flacData[pos + 1] << 8 |
+                                    flacData[pos + 2] << 16 | flacData[pos + 3] << 24;
+                pos += 4;
+
+                const imageData = flacData.slice(pos, pos + imageLength);
+                pos += imageLength;
+
+                return new Blob([imageData], { type: mimeType });
+            }
+
+            pos += 4 + blockLength;
+            if (isLast) break;
+        }
+
+        return null;
+    }
+
+    /**
+     * 添加封面图片到FLAC
+     * @param {Uint8Array} flacData - FLAC数据
+     * @param {Blob} imageBlob - 封面图片
+     * @returns {Promise<Uint8Array>}
+     */
+    static async addCoverImage(flacData, imageBlob) {
+        return new Promise((resolve, reject) => {
+            try {
+                const maxImageSize = 16 * 1024 * 1024;
+
+                if (imageBlob.size > maxImageSize) {
+                    console.log('图片数据过大(' + (imageBlob.size / 1024 / 1024).toFixed(2) + 'MB)，最大支持16MB');
+                    this.compressImage(imageBlob, maxImageSize)
+                        .then(compressedBlob => this.addCoverImage(flacData, compressedBlob))
+                        .then(resolve)
+                        .catch(reject);
+                    return;
+                }
+
+                this.processCoverImage(flacData, imageBlob)
+                    .then(resolve)
+                    .catch(reject);
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 处理封面图片并插入到FLAC
+     * @param {Uint8Array} flacData - FLAC数据
+     * @param {Blob} imageBlob - 图片数据
+     * @returns {Promise<Uint8Array>}
+     */
+    static async processCoverImage(flacData, imageBlob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const imageData = new Uint8Array(reader.result);
+
+                    if (imageData.length > 16 * 1024 * 1024) {
+                        reject(new Error('图片大小超过16MB限制'));
+                        return;
+                    }
+
+                    const mimeType = 'image/jpeg';
+                    const pictureBlock = this.createPictureBlock({
+                        type: 3,
+                        mimeType: mimeType,
+                        description: 'Cover',
+                        width: 0,
+                        height: 0,
+                        depth: 24,
+                        colors: 0,
+                        data: imageData
+                    });
+
+                    const result = this.insertPictureBlock(flacData, pictureBlock);
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(imageBlob);
+        });
+    }
+
+    /**
+     * 压缩图片到指定大小以下
+     * @param {Blob} imageBlob - 原始图片
+     * @param {number} maxSize - 最大大小（字节）
+     * @returns {Promise<Blob>}
+     */
+    static async compressImage(imageBlob, maxSize) {
+        return new Promise((resolve, reject) => {
+            try {
+                const maxDimension = 1024;
+                const img = new Image();
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                img.onload = () => {
+                    let { width, height } = img;
+
+                    if (width > maxDimension || height > maxDimension) {
+                        const scale = Math.min(maxDimension / width, maxDimension / height);
+                        width = Math.floor(width * scale);
+                        height = Math.floor(height * scale);
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    let quality = 0.9;
+
+                    const compress = () => {
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                reject(new Error('图片压缩失败'));
+                                return;
+                            }
+
+                            if (blob.size <= maxSize || quality <= 0.5) {
+                                console.log('图片压缩完成: ' + (blob.size / 1024).toFixed(2) + 'KB');
+                                resolve(blob);
+                            } else {
+                                quality -= 0.1;
+                                canvas.toBlob(compress, 'image/jpeg', quality);
+                            }
+                        }, 'image/jpeg', quality);
+                    };
+
+                    compress();
+                };
+
+                img.onerror = () => reject(new Error('图片加载失败'));
+                img.src = URL.createObjectURL(imageBlob);
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 创建图片元数据块
+     * @param {Object} params - 图片参数
+     * @returns {Uint8Array}
+     */
+    static createPictureBlock(params) {
+        const mimeTypeEncoded = new TextEncoder().encode(params.mimeType);
+        const descriptionEncoded = new TextEncoder().encode(params.description || '');
+
+        const totalLength = 32 + mimeTypeEncoded.length + descriptionEncoded.length + params.data.length;
+        const buffer = new ArrayBuffer(totalLength);
+        const view = new DataView(buffer);
+        let offset = 0;
+
+        view.setUint32(offset, params.type, false);
+        offset += 4;
+
+        view.setUint32(offset, mimeTypeEncoded.length, false);
+        offset += 4;
+
+        for (let i = 0; i < mimeTypeEncoded.length; i++) {
+            view.setUint8(offset, mimeTypeEncoded[i]);
+            offset++;
+        }
+
+        view.setUint32(offset, descriptionEncoded.length, false);
+        offset += 4;
+
+        for (let i = 0; i < descriptionEncoded.length; i++) {
+            view.setUint8(offset, descriptionEncoded[i]);
+            offset++;
+        }
+
+        view.setUint32(offset, params.width, false);
+        offset += 4;
+        view.setUint32(offset, params.height, false);
+        offset += 4;
+        view.setUint32(offset, params.depth, false);
+        offset += 4;
+        view.setUint32(offset, params.colors, false);
+        offset += 4;
+
+        const imageData = params.data.data || params.data;
+        for (let i = 0; i < imageData.length; i++) {
+            view.setUint8(offset, imageData[i]);
+            offset++;
+        }
+
+        return new Uint8Array(buffer);
+    }
+
+    /**
+     * 插入图片块到FLAC
+     * @param {Uint8Array} flacData - FLAC数据
+     * @param {Uint8Array} pictureData - 图片块数据
+     * @returns {Uint8Array}
+     */
+    static insertPictureBlock(flacData, pictureData) {
+        let pos = 4;
+        let foundPictureBlock = false;
+        let pictureBlockStart = 0;
+        let pictureBlockEnd = 0;
+
+        while (pos < flacData.length) {
+            const blockType = flacData[pos];
+            const isLast = (blockType & 0x80) !== 0;
+            const type = blockType & 0x7F;
+            const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+            if (type === 6) {
+                foundPictureBlock = true;
+                pictureBlockStart = pos;
+                pictureBlockEnd = pos + 4 + blockLength;
+                break;
+            }
+
+            pos += 4 + blockLength;
+            if (isLast) break;
+        }
+
+        const headerLength = 4;
+        const pictureBlockHeader = new Uint8Array(4);
+        pictureBlockHeader[0] = 6;
+        pictureBlockHeader[1] = pictureData.length >> 16 & 0xFF;
+        pictureBlockHeader[2] = pictureData.length >> 8 & 0xFF;
+        pictureBlockHeader[3] = pictureData.length & 0xFF;
+
+        if (foundPictureBlock) {
+            const newData = new Uint8Array(
+                flacData.length - (pictureBlockEnd - pictureBlockStart) + 4 + pictureData.length
+            );
+            newData.set(flacData.slice(0, pictureBlockStart), 0);
+            newData.set(pictureBlockHeader, pictureBlockStart);
+            newData.set(pictureData, pictureBlockStart + 4);
+            newData.set(flacData.slice(pictureBlockEnd), pictureBlockStart + 4 + pictureData.length);
+            return newData;
+        } else {
+            let vorbisCommentEnd = 0;
+
+            for (let i = 0; i < 20; i++) {
+                if (pos >= flacData.length) break;
+
+                const blockType = flacData[pos];
+                const isLast = (blockType & 0x80) !== 0;
+                const type = blockType & 0x7F;
+                const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+                if (type === 4) {
+                    vorbisCommentEnd = pos + 4 + blockLength;
+                    break;
+                }
+
+                pos += 4 + blockLength;
+                if (isLast) {
+                    vorbisCommentEnd = pos;
+                    break;
+                }
+            }
+
+            const newData = new Uint8Array(flacData.length + 4 + pictureData.length);
+            newData.set(flacData.slice(0, vorbisCommentEnd), 0);
+            newData.set(pictureBlockHeader, vorbisCommentEnd);
+            newData.set(pictureData, vorbisCommentEnd + 4);
+            newData.set(flacData.slice(vorbisCommentEnd), vorbisCommentEnd + 4 + pictureData.length);
+            return newData;
+        }
+    }
+
+    /**
+     * 提取FLAC技术信息（采样率、位深、声道数等）
+     * @param {Uint8Array} flacData - FLAC数据
+     * @returns {Object}
+     */
+    static extractTechInfo(flacData) {
+        let pos = 4;
+        const info = {
+            sampleRate: 0,
+            channels: 0,
+            bitDepth: 0,
+            duration: 0,
+            fileSize: flacData.length
+        };
+
+        while (pos < flacData.length) {
+            const blockType = flacData[pos];
+            const isLast = (blockType & 0x80) !== 0;
+            const type = blockType & 0x7F;
+            const blockLength = (flacData[pos + 1] << 16) | (flacData[pos + 2] << 8) | flacData[pos + 3];
+
+            if (type === 0) {
+                pos += 4;
+
+                const minBlockSize = flacData[pos] << 8 | flacData[pos + 1];
+                pos += 2;
+
+                const maxBlockSize = flacData[pos] << 8 | flacData[pos + 1];
+                pos += 2;
+
+                const minFrameSize = flacData[pos] << 16 | flacData[pos + 1] << 8 | flacData[pos + 2];
+                pos += 3;
+
+                const maxFrameSize = flacData[pos] << 16 | flacData[pos + 1] << 8 | flacData[pos + 2];
+                pos += 3;
+
+                const sampleInfo = flacData[pos];
+                pos += 1;
+
+                const sampleRate = (sampleInfo & 0xF0) >> 4;
+                const channelInfo = (sampleInfo & 0x0E) >> 1;
+                const bitDepthInfo = ((sampleInfo & 0x01) << 4) | ((flacData[pos] & 0xF0) >> 4);
+
+                info.sampleRate = sampleRate === 0 ? 0 : [88200, 96000, 192000, 0, 0, 44100, 48000, 176400][sampleRate - 1] || 0;
+                info.channels = channelInfo + 1;
+                info.bitDepth = bitDepthInfo === 0 ? 0 : [8, 12, 0, 16, 20, 24, 0, 24][bitDepthInfo - 1] || 0;
+
+                pos += 4;
+
+                const totalSamples = ((flacData[pos] & 0x0F) << 32) | (flacData[pos + 1] << 24) |
+                                    (flacData[pos + 2] << 16) | (flacData[pos + 3] << 8) | flacData[pos + 4];
+                pos += 5;
+
+                if (info.sampleRate > 0) {
+                    info.duration = Math.round(totalSamples / info.sampleRate);
+                }
+
+                break;
+            }
+
+            pos += 4 + blockLength;
+            if (isLast) break;
+        }
+
+        return info;
+    }
+
+    /**
+     * 格式化时长
+     * @param {number} seconds - 秒数
+     * @returns {string}
+     */
+    static formatDuration(seconds) {
+        if (!seconds) return '00:00';
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+
+    /**
+     * 格式化文件大小
+     * @param {number} bytes - 字节数
+     * @returns {string}
+     */
+    static formatFileSize(bytes) {
+        if (!bytes) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const unitIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+        return Math.round(bytes / Math.pow(1024, unitIndex) * 100) / 100 + ' ' + units[unitIndex];
+    }
+}
