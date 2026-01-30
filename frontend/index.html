@@ -1509,6 +1509,46 @@
             }
         }
     </style>
+    
+    <!-- 下载按钮旋转进度样式 -->
+    <style>
+        #download-pack {
+            position: relative;
+            min-width: 160px;
+        }
+        
+        #download-pack .download-btn-content {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        #download-pack .download-icon {
+            font-size: 1.2em;
+        }
+        
+        #download-pack .download-spinner {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        #download-pack .download-spinner i {
+            font-size: 1.1em;
+        }
+        
+        #download-pack .spinner-text {
+            font-size: 0.95em;
+        }
+        
+        #download-pack:disabled {
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+    </style>
+    
     <script src="https://cdn.kanxizai.cn/ajax/libs/blueimp-md5/2.19.0/md5.min.js"></script>
     <script src="https://cdn.kanxizai.cn/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <script src="https://cdn.kanxizai.cn/ajax/libs/browser-id3-writer/4.4.0/browser-id3-writer.min.js"></script>
@@ -2016,7 +2056,14 @@
             <!-- 下载按钮 -->
             <div class="d-grid">
                 <button id="download-pack" class="btn btn-primary btn-lg">
-                    📥 下载歌曲
+                    <span class="download-btn-content">
+                        <span class="download-icon">📥</span>
+                        <span class="download-text">下载歌曲</span>
+                    </span>
+                    <span class="download-spinner d-none">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span class="spinner-text">下载中...</span>
+                    </span>
                 </button>
             </div>
             <!-- 进度条 -->

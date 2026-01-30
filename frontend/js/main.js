@@ -225,7 +225,7 @@ function bindOtherEvents() {
     });
     
     // 绑定下载按钮事件
-    $('#download-pack').on('click', function() {
+    $('#download-pack').on('click', async function() {
         const songData = window.currentSongData;
         if (!songData || !songData.url) {
             Swal.fire({
@@ -239,6 +239,11 @@ function bindOtherEvents() {
             });
             return;
         }
+        
+        // 显示旋转进度，隐藏正常内容
+        $(this).find('.download-btn-content').addClass('d-none');
+        $(this).find('.download-spinner').removeClass('d-none');
+        $(this).prop('disabled', true);
         
         const uiElements = {
             $progressContainer: $('#download-progress-container'),
@@ -260,18 +265,27 @@ function bindOtherEvents() {
             ext: songData.ext || { audio: 'mp3' }
         };
         
-        if (typeof MusicDownloader !== 'undefined') {
-            MusicDownloader.downloadAndPackSong(downloadData, uiElements);
-        } else {
+        try {
+            if (typeof MusicDownloader !== 'undefined') {
+                await MusicDownloader.downloadAndPackSong(downloadData, uiElements);
+            } else {
+                throw new Error('下载模块未加载');
+            }
+        } catch (error) {
             Swal.fire({
                 icon: 'error',
-                title: '下载模块未加载',
-                text: '请刷新页面后重试',
+                title: '下载失败',
+                text: error.message || '请稍后再试',
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
                 timer: 3000
             });
+        } finally {
+            // 隐藏旋转进度，显示正常内容
+            $(this).find('.download-btn-content').removeClass('d-none');
+            $(this).find('.download-spinner').addClass('d-none');
+            $(this).prop('disabled', false);
         }
     });
 }
