@@ -37,7 +37,7 @@ class CookieException(Exception):
 class CookieManager:
     """Cookie管理器主类"""
     
-    def __init__(self, cookie_file: str = "cookie.txt"):
+    def __init__(self, cookie_file: str = "api/cookie.txt"):
         """
         初始化Cookie管理器
         

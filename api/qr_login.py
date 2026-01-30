@@ -25,7 +25,7 @@ except ImportError as e:
 class QRLoginClient:
     """二维码登录客户端"""
     
-    def __init__(self, cookie_file: str = "cookie.txt"):
+    def __init__(self, cookie_file: str = "api/cookie.txt"):
         """
         初始化二维码登录客户端
         
