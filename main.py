@@ -33,13 +33,43 @@ except ImportError as e:
     sys.exit(1)
 
 
+import sys
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv()
+
+# 获取环境变量
+def getenv(key: str, default: str = "") -> str:
+    """获取环境变量，优先从 .env 读取"""
+    return os.getenv(key, default)
+
+def getenv_int(key: str, default: int) -> int:
+    """获取整数环境变量"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+def getenv_bool(key: str, default: bool) -> bool:
+    """获取布尔环境变量"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    return value.lower() in ('true', '1', 'yes', 'on')
+
+
 @dataclass
 class APIConfig:
     """API配置类"""
     host: str = '0.0.0.0'
-    port: int = 5001
-    debug: bool = True
-    downloads_dir: str = 'downloads'
+    port: int = getenv_int('WEB_PORT', 5001)
+    debug: bool = getenv('APP_ENV', "prod") == "dev"
     max_file_size: int = 500 * 1024 * 1024  # 500MB
     request_timeout: int = 30
     log_level: str = 'INFO'
@@ -137,11 +167,10 @@ class MusicAPIService:
         self.netease_api = NeteaseAPI()
         self.downloader = MusicDownloader()
         
-        # 创建下载目录
-        self.downloads_path = Path(config.downloads_dir)
-        self.downloads_path.mkdir(exist_ok=True)
-        
-        self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
+        # 已注释：前端直接下载，不使用后端存储
+        # self.downloads_path = Path(config.downloads_dir)
+        # self.downloads_path.mkdir(exist_ok=True)
+        # self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
     
     def _setup_logger(self) -> logging.Logger:
         """设置日志记录器"""
@@ -746,7 +775,8 @@ def start_api_server():
             host=config.host,
             port=config.port,
             debug=config.debug,
-            threaded=True
+            threaded=True,
+            reload_on_change=config.debug
         )
         
     except KeyboardInterrupt:
