@@ -316,8 +316,6 @@ const MusicParser = {
                 $('#level').val(searchQualityValue);
                 $('#selectedQuality').text(searchQuality);
                 
-                $('#search_results').addClass('d-none');
-                
                 // 修改提交表单前，先保存fee值到表单的隐藏字段
                 // 如果表单中没有该字段，需要先创建
                 if ($('#song_fee').length === 0) {

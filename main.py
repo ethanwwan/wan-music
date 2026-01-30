@@ -82,6 +82,51 @@ class APIResponse:
         )
 
 
+def extract_id_from_input(input_str: str) -> str:
+    """从输入字符串中提取ID（支持URL或纯ID）
+    
+    Args:
+        input_str: 输入字符串（可能是URL或纯ID）
+        
+    Returns:
+        提取的ID字符串
+    """
+    if not input_str:
+        return ''
+    
+    # 如果是纯数字，直接返回
+    if input_str.isdigit():
+        return input_str
+    
+    # 尝试从URL中提取ID
+    import re
+    from urllib.parse import unquote
+    
+    # URL解码
+    decoded = unquote(input_str)
+    
+    # 匹配各种格式的ID
+    patterns = [
+        r'[?&]id=(\d+)',  # 标准格式: ?id=123456
+        r'[?&]id%3D(\d+)',  # 编码格式: ?id%3D123456
+        r'/playlist/(\d+)',  # 路径格式: /playlist/123456
+        r'/song/(\d+)',  # 路径格式: /song/123456
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, decoded)
+        if match:
+            return match.group(1)
+    
+    # 如果没有匹配到，尝试提取所有数字
+    numbers = re.findall(r'\d+', input_str)
+    if numbers:
+        # 返回最长的数字（通常是ID）
+        return max(numbers, key=len)
+    
+    return input_str
+
+
 class MusicAPIService:
     """音乐API服务类"""
     
@@ -460,7 +505,10 @@ def get_playlist():
     try:
         # 获取请求参数
         data = api_service._safe_get_request_data()
-        playlist_id = data.get('id')
+        playlist_input = data.get('id')
+        
+        # 从输入中提取ID（支持URL或纯ID）
+        playlist_id = extract_id_from_input(playlist_input)
         
         # 参数验证
         validation_error = api_service._validate_request_params({'playlist_id': playlist_id})

@@ -48,6 +48,32 @@ const PlaylistParser = (function () {
         }
     }
 
+    /**
+     * 获取歌手名称 - 兼容新旧数据格式
+     * @function getArtistNames
+     * @param {Object|string} track - 歌曲对象或歌手名称字符串
+     * @returns {string} 歌手名称
+     */
+    function getArtistNames(track) {
+        if (!track) return '';
+        // 如果是字符串直接返回
+        if (typeof track.artists === 'string') {
+            return track.artists;
+        }
+        if (typeof track === 'string') {
+            return track;
+        }
+        // 如果有ar数组，映射获取名称
+        if (Array.isArray(track.ar)) {
+            return track.ar.map(a => a.name).join(', ');
+        }
+        // 如果有artist字段
+        if (track.artist) {
+            return track.artist;
+        }
+        return '';
+    }
+
     // 检查链接是否为有效的网易云音乐链接
     function checkValidLink(link) {
         if (link.indexOf("http") === -1 ||
@@ -158,11 +184,9 @@ const PlaylistParser = (function () {
             // 关闭加载提示
             Swal.close();
 
-            if (response.code === 200 && response.playlist) {
-                // 保存歌单数据
-                currentPlaylist = response.playlist;
-                // 显示歌单信息
-                displayPlaylistInfo(response.playlist);
+            if (response.status === 200 && response.data && response.data.playlist) {
+                currentPlaylist = response.data.playlist;
+                displayPlaylistInfo(response.data.playlist);
             } else {
                 throw new Error(response.error || '歌单解析失败');
             }
@@ -186,12 +210,26 @@ const PlaylistParser = (function () {
         // 显示歌单基本信息
         $('#playlist-cover').attr('src', playlist.coverImgUrl);
         $('#playlist-name').text(playlist.name);
-        $('#playlist-creator').text(playlist.creator.nickname);
+
+        // 处理creator字段 - 可能是对象或字符串
+        const creatorName = typeof playlist.creator === 'string'
+            ? playlist.creator
+            : (playlist.creator.nickname || playlist.creator.name || '');
+        $('#playlist-creator').text(creatorName);
+
         $('#playlist-track-count').text(playlist.trackCount);
 
         // 格式化创建时间
-        const createDate = new Date(playlist.createTime);
-        $('#playlist-create-time').text(createDate.toLocaleDateString());
+        if (playlist.createTime) {
+            const createDate = new Date(playlist.createTime);
+            if (!isNaN(createDate.getTime())) {
+                $('#playlist-create-time').text(createDate.toLocaleDateString());
+            } else {
+                $('#playlist-create-time').text('未知');
+            }
+        } else {
+            $('#playlist-create-time').text('未知');
+        }
 
         // 清空并填充歌曲列表
         const $tracksList = $('#playlist-tracks-list');
@@ -200,15 +238,30 @@ const PlaylistParser = (function () {
         if (playlist.tracks && playlist.tracks.length > 0) {
             // 显示所有歌曲，滚动条会自动处理超过容器高度的内容
             playlist.tracks.forEach((track, index) => {
-                // 获取歌手名称
-                const artistNames = track.ar.map(artist => artist.name).join(', ');
+                // 获取歌手名称 - 可能是字符串或数组
+                let artistNames;
+                if (typeof track.artists === 'string') {
+                    artistNames = track.artists;
+                } else if (Array.isArray(track.ar)) {
+                    artistNames = getArtistNames(track);
+                } else {
+                    artistNames = track.artists || '';
+                }
+
+                // 获取封面图片 - 可能是track.al.picUrl或track.picUrl
+                let picUrl;
+                if (track.al && track.al.picUrl) {
+                    picUrl = track.al.picUrl;
+                } else {
+                    picUrl = track.picUrl || '';
+                }
 
                 // 创建歌曲卡片
                 const $card = $(`
                     <div class="track-card">
                     <div class="track-number">${index + 1}</div>
                     <div class="track-image">
-                        <img src="${track.al.picUrl}?param=100y100" alt="${track.name}" referrerpolicy="no-referrer">
+                        <img src="${picUrl}?param=100y100" alt="${track.name}" referrerpolicy="no-referrer">
                     </div>
                     <div class="track-info">
                         <div class="track-name">${track.name}</div>
@@ -758,7 +811,7 @@ const PlaylistParser = (function () {
         try {
             // 更新状态
             $('#batch-status').text(`正在下载 (${completedSongs + 1}/${totalSongs}): ${song.name}`);
-            $('#batch-details').prepend(`<div id="current-download-item"><i class="fas fa-spinner fa-spin me-2"></i>${song.name} - ${song.ar.map(a => a.name).join(', ')}</div>`);
+            $('#batch-details').prepend(`<div id="current-download-item"><i class="fas fa-spinner fa-spin me-2"></i>${song.name} - ${getArtistNames(song)}</div>`);
 
             // 调用音乐解析API - 确保song.id是字符串类型
             const songData = await MusicParser.parseSongById(String(song.id), currentQuality);
@@ -790,7 +843,7 @@ const PlaylistParser = (function () {
             const mimeType = getMimeTypeFromExtension(fileExt);
 
             // 添加元数据
-            $('#current-download-item').html(`<i class="fas fa-cog fa-spin me-2"></i>${song.name} - ${song.ar.map(a => a.name).join(', ')} (写入元数据中...)`);
+            $('#current-download-item').html(`<i class="fas fa-cog fa-spin me-2"></i>${song.name} - ${getArtistNames(song)} (写入元数据中...)`);
             
             // 合并歌词
             const mergedLyrics = mergeLyricsWithTranslation(songData.lyric, songData.tlyric);
@@ -878,7 +931,7 @@ const PlaylistParser = (function () {
             }
 
             // 更新下载状态
-            $('#current-download-item').html(`<i class="fas fa-check-circle text-success me-2"></i>${song.name} - ${song.ar.map(a => a.name).join(', ')}`);
+            $('#current-download-item').html(`<i class="fas fa-check-circle text-success me-2"></i>${song.name} - ${getArtistNames(song)}`);
             $('#current-download-item').removeAttr('id');
 
             // 延迟一段时间再下载下一首，避免请求过于频繁
@@ -890,7 +943,7 @@ const PlaylistParser = (function () {
             console.error('批量下载错误:', error, song);
 
             // 更新失败状态
-            $('#current-download-item').html(`<i class="fas fa-times-circle text-danger me-2"></i>${song.name} - ${song.ar.map(a => a.name).join(', ')} (失败: ${error.message || '未知错误'})`);
+            $('#current-download-item').html(`<i class="fas fa-times-circle text-danger me-2"></i>${song.name} - ${getArtistNames(song)} (失败: ${error.message || '未知错误'})`);
             $('#current-download-item').removeAttr('id');
 
             // 继续处理下一首

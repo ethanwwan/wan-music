@@ -13,3 +13,10 @@ __pycache__
 .DS_Store
 downloads
 music_api.log
+
+
+test/
+
+frontend/dist
+frontend/.cache
+frontend/test
