@@ -497,13 +497,24 @@ const MusicDownloader = (function() {
         try {
             const { name, url, pic, lyric, tlyric, ar_name, al_name, ext } = songData;
             
+            // 记录调试信息
+            logger.debug('原始songData.ext:', ext);
+            
             // 处理文件扩展名 - 确保是字符串
             let fileExt = 'mp3';
             if (ext && ext.audio) {
                 fileExt = String(ext.audio).toLowerCase();
+                logger.debug('从ext.audio获取扩展名:', fileExt);
             } else if (typeof ext === 'string') {
                 fileExt = ext.toLowerCase();
+                logger.debug('从ext字符串获取扩展名:', fileExt);
+            } else {
+                // 使用正确的扩展名获取函数
+                fileExt = getCorrectFileExtension(null, url);
+                logger.debug('从getCorrectFileExtension获取扩展名:', fileExt);
             }
+            
+            logger.info('最终文件扩展名:', fileExt);
             
             // 如果是mp4则改为m4a
             if (fileExt === 'mp4') {
@@ -592,6 +603,12 @@ const MusicDownloader = (function() {
                     $progressBar.css('width', `${percent}%`).attr('aria-valuenow', percent);
                     $progressText.text(`${percent}%`);
                     if (statusText) $status.text(statusText);
+                    
+                    // 更新按钮上的百分比显示
+                    const $btnPercent = $('#download-percent');
+                    if ($btnPercent.length) {
+                        $btnPercent.text(`${percent}%`);
+                    }
                 });
             }
             
@@ -653,13 +670,20 @@ const MusicDownloader = (function() {
                         let coverBlob = null;
                         if (pic) {
                             try {
-                                // 获取封面图片
+                                // 获取封面图片 - 添加更完整的请求头
                                 const coverResponse = await fetch(pic, {
                                     headers: {
-                                        Referer: 'http://music.163.com/'
+                                        'Referer': 'http://music.163.com/',
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
                                     }
                                 });
-                                coverBlob = await coverResponse.blob();
+                                if (coverResponse.ok) {
+                                    coverBlob = await coverResponse.blob();
+                                } else {
+                                    logger.warn(`封面图片请求失败: ${coverResponse.status}`);
+                                }
                             } catch (coverError) {
                                 logger.error('获取封面图片失败:', coverError);
                             }
@@ -705,18 +729,25 @@ const MusicDownloader = (function() {
                         // 如果有封面图片，添加封面
                         if (pic) {
                             try {
-                                // 获取封面图片
+                                // 获取封面图片 - 添加更完整的请求头
                                 const coverResponse = await fetch(pic, {
                                     headers: {
-                                        Referer: 'http://music.163.com/'
+                                        'Referer': 'http://music.163.com/',
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
                                     }
                                 });
-                                const coverArrayBuffer = await coverResponse.arrayBuffer();
-                                writer.setFrame('APIC', {
-                                    type: 3, // 封面图片
-                                    data: coverArrayBuffer,
-                                    description: 'Cover'
-                                });
+                                if (coverResponse.ok) {
+                                    const coverArrayBuffer = await coverResponse.arrayBuffer();
+                                    writer.setFrame('APIC', {
+                                        type: 3, // 封面图片
+                                        data: coverArrayBuffer,
+                                        description: 'Cover'
+                                    });
+                                } else {
+                                    logger.warn(`封面图片请求失败: ${coverResponse.status}`);
+                                }
                             } catch (coverError) {
                                 logger.error('获取封面图片失败:', coverError);
                             }
@@ -832,7 +863,10 @@ const MusicDownloader = (function() {
                 try {
                     const coverResponse = await fetch(pic, {
                         headers: {
-                            Referer: 'http://music.163.com/'
+                            'Referer': 'http://music.163.com/',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
                         }
                     });
                     if (coverResponse.ok) {
@@ -840,6 +874,8 @@ const MusicDownloader = (function() {
                         const coverFileName = `${safeFileName}.jpg`;
                         zip.file(coverFileName, coverBlob);
                         logger.info(`已添加封面图片: ${coverFileName}`);
+                    } else {
+                        logger.warn(`封面图片请求失败: ${coverResponse.status}`);
                     }
                 } catch (coverError) {
                     logger.error('下载封面图片失败:', coverError);

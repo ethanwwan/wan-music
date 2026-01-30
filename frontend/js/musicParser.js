@@ -15,6 +15,36 @@ const getFileExtension = url => {
     }
 };
 
+// 网易云音乐音质到文件扩展名的映射
+const qualityToExtension = {
+    'standard': 'mp3',    // 标准
+    'higher': 'mp3',      // 较高
+    'exhigh': 'mp3',      // 极高
+    'lossless': 'flac',   // 无损
+    'hires': 'flac',      // Hi-Res
+    'jyeffect': 'flac',   // 高清环绕声
+    'sky': 'm4a',         // 天空环绕声
+    'dolby': 'm4a',       // 杜比全景声
+    'jymaster': 'flac'    // 母带
+};
+
+// 根据音质获取正确的文件扩展名
+const getCorrectFileExtension = (level, url) => {
+    // 如果 URL 有实际扩展名（非.data），直接使用
+    const urlExt = getFileExtension(url);
+    if (urlExt && urlExt !== 'data' && urlExt.length <= 5) {
+        return urlExt;
+    }
+    
+    // 根据音质推断扩展名
+    if (level && qualityToExtension[level]) {
+        return qualityToExtension[level];
+    }
+    
+    // 默认返回 mp3
+    return 'mp3';
+};
+
 // 文件名安全处理
 const sanitizeFilename = name =>
     String(name).replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
@@ -530,8 +560,9 @@ const MusicParser = {
             ar_name: songData.ar_name, // 添加歌手名称字段
             al_name: songData.al_name, // 添加专辑名称字段
             fee: feeValue,
+            quality: songData.level, // 保存音质信息
             ext: {
-                audio: getFileExtension(songData.url) || 'mp3',
+                audio: getCorrectFileExtension(songData.level, songData.url),
                 image: getFileExtension(songData.pic) || 'jpg'
             }
         };
@@ -575,6 +606,11 @@ const MusicParser = {
         $('#download-pack').prop('disabled', false);
     }
 };
+
+// 导出辅助函数到全局
+window.getFileExtension = getFileExtension;
+window.sanitizeFilename = sanitizeFilename;
+window.getCorrectFileExtension = getCorrectFileExtension;
 
 // 导出模块
 window.MusicParser = MusicParser;
