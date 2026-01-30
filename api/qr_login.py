@@ -15,7 +15,7 @@ from pathlib import Path
 
 try:
     from .music_api import QRLoginManager, APIException
-    from .cookie_manager import CookieManager, CookieException
+    from .cookie_manager import CookieManager, CookieException, setup_logger
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保 music_api.py 和 cookie_manager.py 文件存在且可用")
@@ -25,24 +25,13 @@ except ImportError as e:
 class QRLoginClient:
     """二维码登录客户端"""
     
-    def __init__(self, cookie_file: str = "api/cookie.txt"):
+    def __init__(self):
         """
         初始化二维码登录客户端
-        
-        Args:
-            cookie_file: Cookie保存文件路径
         """
-        self.cookie_manager = CookieManager(cookie_file)
+        self.cookie_manager = CookieManager()
         self.qr_manager = QRLoginManager()
-        self.logger = logging.getLogger(__name__)
-        
-        # 配置日志
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+        self.logger = setup_logger(__name__)
     
     def check_existing_login(self) -> bool:
         """检查是否已有有效登录

@@ -64,9 +64,9 @@ const HistoryManager = (function() {
         if (index !== -1) {
             songHistory.splice(index, 1);
             save();
-            console.log(`已删除歌曲ID: ${targetId}, 剩余记录数: ${songHistory.length}`);
+            Logger.debug(`已删除歌曲ID: ${targetId}, 剩余记录数: ${songHistory.length}`);
         } else {
-            console.warn(`未找到要删除的歌曲ID: ${targetId}`);
+            Logger.warn(`未找到要删除的歌曲ID: ${targetId}`);
         }
     }
     
@@ -202,8 +202,8 @@ const HistoryManager = (function() {
             const songId = $(this).data('id');
             const songName = $(this).closest('.history-item').find('h6').text();
             
-            console.log('准备删除歌曲:', { songId, songName, type: typeof songId });
-            console.log('删除前历史记录数量:', songHistory.length);
+            Logger.debug('准备删除歌曲:', { songId, songName, type: typeof songId });
+            Logger.debug('删除前历史记录数量:', songHistory.length);
             
             Swal.fire({
                 title: '确认删除',
@@ -216,9 +216,9 @@ const HistoryManager = (function() {
                 cancelButtonText: '取消'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    console.log('用户确认删除，调用remove函数');
+                    Logger.debug('用户确认删除，调用remove函数');
                     remove(songId);
-                    console.log('删除后历史记录数量:', songHistory.length);
+                    Logger.debug('删除后历史记录数量:', songHistory.length);
                     updateHistoryList();
                     Swal.fire({
                         icon: 'success',

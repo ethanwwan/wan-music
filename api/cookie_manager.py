@@ -14,6 +14,35 @@ class CookieException(Exception):
     pass
 
 
+def setup_logger(name: str = None) -> logging.Logger:
+    """配置日志系统
+
+    Args:
+        name: 日志器名称
+
+    Returns:
+        配置好的日志器
+    """
+    env = os.getenv('APP_ENV', 'prod')
+    is_dev = env == 'dev'
+    log_level = logging.DEBUG if is_dev else logging.WARNING
+
+    logger = logging.getLogger(name) if name else logging.getLogger()
+    logger.setLevel(log_level)
+
+    if logger.handlers:
+        return logger
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    return logger
+
+
 class CookieManager:
     """Cookie管理器主类，从环境变量读取Cookie"""
     
@@ -22,7 +51,7 @@ class CookieManager:
         初始化Cookie管理器
         """
         load_dotenv()
-        self.logger = logging.getLogger(__name__)
+        self.logger = setup_logger(__name__)
         
         self.cookie_key = 'MUSIC_COOKIE'
         

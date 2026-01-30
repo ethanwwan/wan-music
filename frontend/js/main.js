@@ -37,8 +37,8 @@ function initModules() {
     if (typeof PlaylistParser !== 'undefined') {
         PlaylistParser.init();
     }
-    
-    console.log('所有模块初始化完成');
+
+    Logger.debug('所有模块初始化完成');
 }
 
 /**
@@ -48,26 +48,26 @@ function bindParseMethodSwitch() {
     // 监听input的change事件
     $('.parse-method-input').on('change', function() {
         const method = $(this).val();
-        console.log('解析方式切换:', method);
-        
+        Logger.debug('解析方式切换:', method);
+
         // 隐藏所有解析方式容器
         $('.card-form').addClass('d-none');
-        
+
         // 显示对应解析方式的容器
         const cardId = `#${method}-parse-card`;
-        console.log('显示卡片:', cardId);
+        Logger.debug('显示卡片:', cardId);
         $(cardId).removeClass('d-none');
-        
+
         // 验证卡片是否存在
         if (!$(cardId).length) {
-            console.error('卡片不存在:', cardId);
+            Logger.error('卡片不存在:', cardId);
         }
     });
-    
+
     // 默认显示搜索解析
     $('.card-form').addClass('d-none');
     $('#search-parse-card').removeClass('d-none');
-    console.log('默认显示搜索解析');
+    Logger.debug('默认显示搜索解析');
 }
 
 /**
@@ -384,11 +384,11 @@ function initPage() {
     
     // 默认显示搜索解析
     $('#search-parse-card').removeClass('d-none');
-    
+
     // 加载页面时的动画效果
     $('.container').fadeIn(500);
-    
-    console.log('页面初始化完成');
+
+    Logger.debug('页面初始化完成');
 }
 
 // 页面加载完成后初始化

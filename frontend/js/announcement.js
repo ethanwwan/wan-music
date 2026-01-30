@@ -49,10 +49,10 @@ const AnnouncementManager = {
 
                 this.showAnnouncement(data.data);
             } else {
-                console.warn('获取公告失败:', data.message);
+                Logger.warn('获取公告失败:', data.message);
             }
         } catch (error) {
-            console.error('加载公告时出错:', error);
+            Logger.error('加载公告时出错:', error);
         }
     },
 
@@ -64,7 +64,7 @@ const AnnouncementManager = {
         const confirmBtn = document.getElementById('confirmBtn');
 
         if (!modal || !systemAnnouncement || !disclaimerContent || !confirmBtn) {
-            console.error('公告弹窗元素未找到');
+            Logger.error('公告弹窗元素未找到');
             return;
         }
 
@@ -135,7 +135,7 @@ const AnnouncementManager = {
                 return false;
             }
         } catch (error) {
-            console.error('解析存储的公告信息失败:', error);
+            Logger.error('解析存储的公告信息失败:', error);
             return false;
         }
 

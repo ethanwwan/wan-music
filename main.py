@@ -64,6 +64,62 @@ def getenv_bool(key: str, default: bool) -> bool:
     return value.lower() in ('true', '1', 'yes', 'on')
 
 
+def setup_logging(name: str = None, env: str = None) -> logging.Logger:
+    """配置日志系统
+
+    Args:
+        name: 日志器名称，None表示根日志器
+        env: 环境变量值，None表示从环境变量读取(APP_ENV)
+
+    Returns:
+        配置好的日志器
+    """
+    if env is None:
+        env = os.getenv('APP_ENV', 'prod')
+
+    is_dev = env == 'dev'
+
+    if is_dev:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.WARNING
+
+    if name:
+        logger = logging.getLogger(name)
+    else:
+        logger = logging.getLogger()
+
+    logger.setLevel(log_level)
+
+    if logger.handlers:
+        return logger
+
+    console_handler = logging.StreamHandler()
+    if is_dev:
+        console_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    else:
+        console_formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s'
+        )
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+
+    if not is_dev:
+        try:
+            file_handler = logging.FileHandler('music_api.log', encoding='utf-8')
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+            )
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
+        except Exception:
+            pass
+
+    return logger
+
+
 @dataclass
 class APIConfig:
     """API配置类"""
@@ -162,7 +218,7 @@ class MusicAPIService:
     
     def __init__(self, config: APIConfig):
         self.config = config
-        self.logger = self._setup_logger()
+        self.logger = setup_logging('music_api')
         self.cookie_manager = CookieManager()
         self.netease_api = NeteaseAPI()
         self.downloader = MusicDownloader()
@@ -171,33 +227,6 @@ class MusicAPIService:
         # self.downloads_path = Path(config.downloads_dir)
         # self.downloads_path.mkdir(exist_ok=True)
         # self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
-    
-    def _setup_logger(self) -> logging.Logger:
-        """设置日志记录器"""
-        logger = logging.getLogger('music_api')
-        logger.setLevel(getattr(logging, self.config.log_level.upper()))
-        
-        if not logger.handlers:
-            # 控制台处理器
-            console_handler = logging.StreamHandler()
-            console_formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            console_handler.setFormatter(console_formatter)
-            logger.addHandler(console_handler)
-            
-            # 文件处理器
-            try:
-                file_handler = logging.FileHandler('music_api.log', encoding='utf-8')
-                file_formatter = logging.Formatter(
-                    '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-                )
-                file_handler.setFormatter(file_formatter)
-                logger.addHandler(file_handler)
-            except Exception as e:
-                logger.warning(f"无法创建日志文件: {e}")
-        
-        return logger
     
     def _get_cookies(self) -> Dict[str, str]:
         """获取Cookie"""
@@ -366,15 +395,14 @@ def health_check():
     try:
         # 检查Cookie状态
         cookie_status = api_service.cookie_manager.is_cookie_valid()
-        
+
         health_info = {
             'service': 'running',
             'timestamp': int(time.time()) if 'time' in sys.modules else None,
             'cookie_status': 'valid' if cookie_status else 'invalid',
-            'downloads_dir': str(api_service.downloads_path.absolute()),
             'version': '2.0.0'
         }
-        
+
         return APIResponse.success(health_info, "API服务运行正常")
         
     except Exception as e:

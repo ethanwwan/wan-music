@@ -142,7 +142,7 @@ const ApiSecurity = (function() {
             const result = await response.json();
             return result;
         } catch (error) {
-            console.error('API请求失败:', error);
+            Logger.error('API请求失败:', error);
             throw error;
         }
     }
@@ -182,7 +182,7 @@ const ApiSecurity = (function() {
      * @param {Error} error - 错误对象
      */
     function handleApiError(error) {
-        console.error('API错误:', error);
+        Logger.error('API错误:', error);
         // 这里可以添加一些错误处理逻辑
         // 例如：显示错误提示、记录错误日志等
     }
@@ -217,7 +217,9 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = ApiSecurity;
 }
 
-console.log('API安全模块加载完成');
+if (Logger.isDev()) {
+    Logger.info('API安全模块加载完成');
+}
 
 // 防止任何形式的重定向
 window.addEventListener('beforeunload', function(e) {
@@ -231,7 +233,7 @@ window.addEventListener('beforeunload', function(e) {
 const originalAssign = window.location.assign;
 window.location.assign = function(url) {
     if (url.includes('kanxizai.cn')) {
-        console.warn('阻止了到kanxizai.cn的重定向:', url);
+        Logger.warn('阻止了到kanxizai.cn的重定向:', url);
         return;
     }
     originalAssign.call(window.location, url);
@@ -241,7 +243,7 @@ window.location.assign = function(url) {
 const originalReplace = window.location.replace;
 window.location.replace = function(url) {
     if (url.includes('kanxizai.cn')) {
-        console.warn('阻止了到kanxizai.cn的重定向:', url);
+        Logger.warn('阻止了到kanxizai.cn的重定向:', url);
         return;
     }
     originalReplace.call(window.location, url);

@@ -41,17 +41,17 @@
                         const response = JSON.parse(xhr.responseText);
                         if (response.success) {
                             hasTracked = true;
-                            console.log('访问统计记录成功');
+                            Logger.debug('访问统计记录成功');
                         } else {
-                            console.warn('访问统计失败:', response.message);
+                            Logger.warn('访问统计失败:', response.message);
                             handleRetry(retryCount);
                         }
                     } catch (e) {
-                        console.error('解析统计响应失败:', e);
+                        Logger.error('解析统计响应失败:', e);
                         handleRetry(retryCount);
                     }
                 } else {
-                    console.warn('统计请求失败，状态码:', xhr.status);
+                    Logger.warn('统计请求失败，状态码:', xhr.status);
                     handleRetry(retryCount);
                 }
             }
@@ -59,13 +59,13 @@
         
         // 监听超时
         xhr.ontimeout = function() {
-            console.warn('统计请求超时');
+            Logger.warn('统计请求超时');
             handleRetry(retryCount);
         };
         
         // 监听错误
         xhr.onerror = function() {
-            console.warn('统计请求出错');
+            Logger.warn('统计请求出错');
             handleRetry(retryCount);
         };
         
@@ -98,7 +98,7 @@
                 sendTrackingRequest(retryCount + 1);
             }, config.retryDelay * (retryCount + 1));
         } else {
-            console.error('统计请求重试次数已达上限');
+            Logger.error('统计请求重试次数已达上限');
         }
     }
     
@@ -119,7 +119,7 @@
         
         for (let bot of bots) {
             if (userAgent.includes(bot)) {
-                console.log('检测到搜索引擎爬虫，跳过统计');
+                Logger.debug('检测到搜索引擎爬虫，跳过统计');
                 return;
             }
         }

@@ -33,7 +33,7 @@ class SettingsManager {
                 this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
             }
         } catch (error) {
-            console.warn('加载设置失败，使用默认设置:', error);
+            Logger.warn('加载设置失败，使用默认设置:', error);
         }
     }
 
@@ -45,7 +45,7 @@ class SettingsManager {
             localStorage.setItem('musicSiteSettings', JSON.stringify(this.settings));
             this.showMessage('设置已保存', 'success');
         } catch (error) {
-            console.error('保存设置失败:', error);
+            Logger.error('保存设置失败:', error);
             this.showMessage('保存设置失败', 'error');
         }
     }

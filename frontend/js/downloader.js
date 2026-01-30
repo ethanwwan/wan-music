@@ -8,73 +8,36 @@
 const MusicDownloader = (function() {
     // 日志系统配置
     const logger = {
-        enabled: false, // 默认关闭日志
+        enabled: false,
         prefix: '[MusicDownloader]',
-        
-        /**
-         * 设置日志开关状态
-         * @param {boolean} status - 是否启用日志
-         */
+        _wrapMessage: function(message, data) {
+            let msg = `${this.prefix} ${message}`;
+            return data !== undefined ? [msg, data] : msg;
+        },
         setEnabled: function(status) {
             this.enabled = !!status;
-            this.info(`日志系统${this.enabled ? '已启用' : '已禁用'}`);
+            Logger.info(`日志系统${this.enabled ? '已启用' : '已禁用'}`);
             return this.enabled;
         },
-        
-        /**
-         * 输出信息日志
-         * @param {string} message - 日志信息
-         * @param {any} data - 附加数据（可选）
-         */
         info: function(message, data) {
             if (!this.enabled) return;
-            if (data !== undefined) {
-                console.log(`${this.prefix} [INFO] ${message}`, data);
-            } else {
-                console.log(`${this.prefix} [INFO] ${message}`);
-            }
+            const wrapped = this._wrapMessage(message, data);
+            Logger.info(wrapped[0], wrapped[1]);
         },
-        
-        /**
-         * 输出调试日志
-         * @param {string} message - 日志信息
-         * @param {any} data - 附加数据（可选）
-         */
         debug: function(message, data) {
             if (!this.enabled) return;
-            if (data !== undefined) {
-                console.debug(`${this.prefix} [DEBUG] ${message}`, data);
-            } else {
-                console.debug(`${this.prefix} [DEBUG] ${message}`);
-            }
+            const wrapped = this._wrapMessage(message, data);
+            Logger.debug(wrapped[0], wrapped[1]);
         },
-        
-        /**
-         * 输出警告日志
-         * @param {string} message - 日志信息
-         * @param {any} data - 附加数据（可选）
-         */
         warn: function(message, data) {
             if (!this.enabled) return;
-            if (data !== undefined) {
-                console.warn(`${this.prefix} [WARN] ${message}`, data);
-            } else {
-                console.warn(`${this.prefix} [WARN] ${message}`);
-            }
+            const wrapped = this._wrapMessage(message, data);
+            Logger.warn(wrapped[0], wrapped[1]);
         },
-        
-        /**
-         * 输出错误日志
-         * @param {string} message - 日志信息
-         * @param {any} data - 附加数据（可选）
-         */
         error: function(message, data) {
             if (!this.enabled) return;
-            if (data !== undefined) {
-                console.error(`${this.prefix} [ERROR] ${message}`, data);
-            } else {
-                console.error(`${this.prefix} [ERROR] ${message}`);
-            }
+            const wrapped = this._wrapMessage(message, data);
+            Logger.error(wrapped[0], wrapped[1]);
         }
     };
     // 下载状态管理对象
@@ -979,15 +942,16 @@ const MusicDownloader = (function() {
 // 导出模块
 window.MusicDownloader = MusicDownloader;
 
-// 控制台提示信息
-console.log("\n %c MusicDownloader v1.1 %c 看戏仔 %c\n", 
-    "background:#35495e; padding: 1px; border-radius: 3px 0 0 3px; color: #fff;", 
-    "background:#41b883; padding: 1px; border-radius: 0 3px 3px 0; color: #fff;", 
-    "background:transparent");
-console.log("提示: 可以通过以下命令控制下载日志输出:");
-console.log(" - MusicDownloader.enableLogs() - 启用日志");
-console.log(" - MusicDownloader.disableLogs() - 禁用日志");
-console.log(" - MusicDownloader.toggleLogs() - 切换日志状态");
-console.log(" - MusicDownloader.isLogsEnabled() - 检查日志状态");
+if (Logger.isDev()) {
+    Logger.info("\n %c MusicDownloader v1.1 %c 看戏仔 %c\n",
+        "background:#35495e; padding: 1px; border-radius: 3px 0 0 3px; color: #fff;",
+        "background:#41b883; padding: 1px; border-radius: 0 3px 3px 0; color: #fff;",
+        "background:transparent");
+    Logger.info("提示: 可以通过以下命令控制下载日志输出:");
+    Logger.info(" - MusicDownloader.enableLogs() - 启用日志");
+    Logger.info(" - MusicDownloader.disableLogs() - 禁用日志");
+    Logger.info(" - MusicDownloader.toggleLogs() - 切换日志状态");
+    Logger.info(" - MusicDownloader.isLogsEnabled() - 检查日志状态");
+}
 
 

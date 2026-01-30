@@ -262,7 +262,7 @@ const MusicParser = {
             if ((response.status === 200 || response.code === 200) && response.data && response.data.length > 0) {
                 this.displaySearchResults(response.data);
             } else {
-                console.log('搜索响应:', response);
+                Logger.debug('搜索响应:', response);
                 $('#results_list').html(`
                     <div class="list-group-item text-center text-muted">
                         <i class="fas fa-info-circle me-2"></i>未找到相关歌曲
@@ -270,7 +270,7 @@ const MusicParser = {
                 `);
             }
         } catch (error) {
-            console.error('搜索错误:', error);
+            Logger.error('搜索错误:', error);
             $('#loading_indicator').addClass('d-none');
             $('#results_list').html(`
                 <div class="list-group-item text-center text-danger">
@@ -399,13 +399,13 @@ const MusicParser = {
                     // 记录错误信息用于重试
                     const errorMsg = response.message || response.msg || '解析失败';
                     lastError = new Error(errorMsg);
-                    console.warn(`歌曲解析失败 (尝试 ${attempt}/${maxRetries}):`, errorMsg);
-                    
+                    Logger.warn(`歌曲解析失败 (尝试 ${attempt}/${maxRetries}):`, errorMsg);
+
                     // 如果不是最后一次尝试，则等待后重试
                     if (attempt < maxRetries) {
                         // 指数退避策略：第一次等待1秒，第二次2秒，第三次4秒
                         const delay = Math.pow(2, attempt - 1) * 1000;
-                        console.log(`等待 ${delay}ms 后重试...`);
+                        Logger.debug(`等待 ${delay}ms 后重试...`);
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue;
                     }
@@ -444,20 +444,20 @@ const MusicParser = {
 
                 // 返回处理后的数据
                 return result;
-                
+
             } catch (error) {
                 lastError = error;
-                
+
                 // 如果是最后一次尝试，直接抛出错误
                 if (attempt === maxRetries) {
-                    console.error(`歌曲解析最终失败 (${maxRetries}次尝试):`, error.message);
+                    Logger.error(`歌曲解析最终失败 (${maxRetries}次尝试):`, error.message);
                     throw new Error(`解析失败: ${error.message} (已重试${maxRetries - 1}次)`);
                 }
-                
+
                 // 网络错误或其他异常，等待后重试
-                console.warn(`歌曲解析异常 (尝试 ${attempt}/${maxRetries}):`, error.message);
+                Logger.warn(`歌曲解析异常 (尝试 ${attempt}/${maxRetries}):`, error.message);
                 const delay = Math.pow(2, attempt - 1) * 1000;
-                console.log(`等待 ${delay}ms 后重试...`);
+                Logger.debug(`等待 ${delay}ms 后重试...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
@@ -576,7 +576,7 @@ const MusicParser = {
      * @description 处理解析过程中的错误并显示给用户
      */
     handleParseError: function(error) {
-        console.error('解析错误:', error);
+        Logger.error('解析错误:', error);
         // 处理API返回的错误信息
         let errorMsg = '未知错误';
         if (error.responseJSON) {

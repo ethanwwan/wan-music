@@ -191,7 +191,7 @@ const PlaylistParser = (function () {
                 throw new Error(response.error || '歌单解析失败');
             }
         } catch (error) {
-            console.error('歌单解析错误:', error);
+            Logger.error('歌单解析错误:', error);
             Swal.fire({
                 icon: 'error',
                 title: '解析失败',
@@ -350,7 +350,7 @@ const PlaylistParser = (function () {
                 scrollTop: $('#song-info').offset().top - 20
             }, 500);
         } catch (error) {
-            console.error('播放歌曲错误:', error);
+            Logger.error('播放歌曲错误:', error);
             Swal.fire({
                 icon: 'error',
                 title: '播放失败',
@@ -458,7 +458,7 @@ const PlaylistParser = (function () {
 
             // 添加下载超时处理
             const downloadTimeout = setTimeout(() => {
-                console.warn('下载似乎没有进度更新，可能是服务器不支持分片下载');
+                Logger.warn('下载似乎没有进度更新，可能是服务器不支持分片下载');
                 updateProgress(10, '下载中，请耐心等待...');
                 // 每10秒更新一次进度，防止用户认为下载卡住
                 let fakeProgress = 15;
@@ -535,7 +535,7 @@ const PlaylistParser = (function () {
                                     });
                                     coverBlob = await coverResponse.blob();
                                 } catch (coverError) {
-                                    console.error('获取封面图片失败:', coverError);
+                                    Logger.error('获取封面图片失败:', coverError);
                                 }
                             }
 
@@ -549,7 +549,7 @@ const PlaylistParser = (function () {
 
                             saveAs(blobWithMetadata, fileName);
                         } catch (metadataError) {
-                            console.error('写入FLAC元数据失败:', metadataError);
+                            Logger.error('写入FLAC元数据失败:', metadataError);
                             // 如果写入元数据失败，仍然保存原始文件
                             const blobWithMime = new Blob([audioBlob], { type: mimeType });
                             saveAs(blobWithMime, fileName);
@@ -585,7 +585,7 @@ const PlaylistParser = (function () {
                                             description: 'Cover'
                                         });
                                     } catch (coverError) {
-                                        console.error('获取封面图片失败:', coverError);
+                                        Logger.error('获取封面图片失败:', coverError);
                                     }
                                 }
 
@@ -594,7 +594,7 @@ const PlaylistParser = (function () {
                             const blobWithMime = new Blob([taggedArrayBuffer], { type: mimeType });
                             saveAs(blobWithMime, fileName);
                         } catch (metadataError) {
-                            console.error('写入元数据失败:', metadataError);
+                            Logger.error('写入元数据失败:', metadataError);
                             // 如果写入元数据失败，仍然保存原始文件
                             const blobWithMime = new Blob([audioBlob], { type: mimeType });
                             saveAs(blobWithMime, fileName);
@@ -625,7 +625,7 @@ const PlaylistParser = (function () {
                 }, 1000);
 
             } catch (downloadError) {
-                console.error('下载过程出错:', downloadError);
+                Logger.error('下载过程出错:', downloadError);
 
                 // 清除超时处理
                 clearTimeout(downloadTimeout);
@@ -679,7 +679,7 @@ const PlaylistParser = (function () {
 
                     xhr.send();
                 } catch (fallbackError) {
-                    console.error('备用下载也失败:', fallbackError);
+                    Logger.error('备用下载也失败:', fallbackError);
                     throw fallbackError; // 继续向外抛出错误
                 }
             }
@@ -689,7 +689,7 @@ const PlaylistParser = (function () {
             $downloadBtn.prop('disabled', false);
 
         } catch (error) {
-            console.error('下载歌曲错误:', error);
+            Logger.error('下载歌曲错误:', error);
 
             // 恢复按钮原始状态（如果存在）
             const $downloadBtn = $(`.download-song[data-id="${songId}"]`);
@@ -798,7 +798,7 @@ const PlaylistParser = (function () {
                 setTimeout(() => {
                     $('#batch-download-progress').addClass('d-none');
                     $('#batch-details').empty(); // 清空下载详情
-                    console.info('批量下载流程结束，UI已重置');
+                    Logger.info('批量下载流程结束，UI已重置');
                 }, 3000); // 延长时间让用户看到完成状态
             });
 
@@ -866,7 +866,7 @@ const PlaylistParser = (function () {
                             });
                             coverBlob = await coverResponse.blob();
                         } catch (coverError) {
-                            console.error('获取封面图片失败:', coverError);
+                            Logger.error('获取封面图片失败:', coverError);
                         }
                     }
 
@@ -880,7 +880,7 @@ const PlaylistParser = (function () {
 
                     saveAs(blobWithMetadata, fileName);
                 } catch (metadataError) {
-                    console.error('写入FLAC元数据失败:', metadataError);
+                    Logger.error('写入FLAC元数据失败:', metadataError);
                     // 如果写入元数据失败，仍然保存原始文件
                     const blobWithMime = new Blob([audioBlob], { type: mimeType });
                     saveAs(blobWithMime, fileName);
@@ -910,7 +910,7 @@ const PlaylistParser = (function () {
                                 description: 'Cover'
                             });
                         } catch (coverError) {
-                            console.error('获取封面图片失败:', coverError);
+                            Logger.error('获取封面图片失败:', coverError);
                         }
                     }
 
@@ -919,7 +919,7 @@ const PlaylistParser = (function () {
                     const blobWithMime = new Blob([taggedArrayBuffer], { type: mimeType });
                     saveAs(blobWithMime, fileName);
                 } catch (metadataError) {
-                    console.error('写入元数据失败:', metadataError);
+                    Logger.error('写入元数据失败:', metadataError);
                     // 如果写入元数据失败，仍然保存原始文件
                     const blobWithMime = new Blob([audioBlob], { type: mimeType });
                     saveAs(blobWithMime, fileName);
@@ -940,7 +940,7 @@ const PlaylistParser = (function () {
             // 递归处理下一首
             await processDownloadQueue();
         } catch (error) {
-            console.error('批量下载错误:', error, song);
+            Logger.error('批量下载错误:', error, song);
 
             // 更新失败状态
             $('#current-download-item').html(`<i class="fas fa-times-circle text-danger me-2"></i>${song.name} - ${getArtistNames(song)} (失败: ${error.message || '未知错误'})`);

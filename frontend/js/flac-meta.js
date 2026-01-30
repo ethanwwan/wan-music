@@ -29,7 +29,7 @@ class FLACMetadata {
      * @returns {Promise<Blob>}
      */
     static async addMetadata(audioData, metadata) {
-        console.log('开始为FLAC文件添加元数据:', metadata);
+        Logger.debug('开始为FLAC文件添加元数据:', metadata);
 
         const uint8Array = new Uint8Array(audioData);
         if (!this.isValidFLAC(uint8Array)) {
@@ -59,7 +59,7 @@ class FLACMetadata {
             newSize: resultData.length
         };
 
-        console.log('✅ FLAC元数据写入成功!', blobInfo);
+        Logger.debug('✅ FLAC元数据写入成功!', blobInfo);
 
         return new Blob([resultData], { type: 'audio/flac' });
     }
@@ -94,7 +94,7 @@ class FLACMetadata {
 
                 resolve(metadata);
             } catch (error) {
-                console.error('提取FLAC元数据失败:', error);
+                Logger.error('提取FLAC元数据失败:', error);
                 reject(error);
             }
         });
@@ -352,7 +352,7 @@ class FLACMetadata {
                 const maxImageSize = 16 * 1024 * 1024;
 
                 if (imageBlob.size > maxImageSize) {
-                    console.log('图片数据过大(' + (imageBlob.size / 1024 / 1024).toFixed(2) + 'MB)，最大支持16MB');
+                    Logger.debug('图片数据过大(' + (imageBlob.size / 1024 / 1024).toFixed(2) + 'MB)，最大支持16MB');
                     this.compressImage(imageBlob, maxImageSize)
                         .then(compressedBlob => this.addCoverImage(flacData, compressedBlob))
                         .then(resolve)
@@ -447,7 +447,7 @@ class FLACMetadata {
                             }
 
                             if (blob.size <= maxSize || quality <= 0.5) {
-                                console.log('图片压缩完成: ' + (blob.size / 1024).toFixed(2) + 'KB');
+                                Logger.debug('图片压缩完成: ' + (blob.size / 1024).toFixed(2) + 'KB');
                                 resolve(blob);
                             } else {
                                 quality -= 0.1;
