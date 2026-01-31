@@ -161,7 +161,7 @@ class NeteaseAPI:
         
         Args:
             song_id: 歌曲ID
-            quality: 音质等级 (standard, exhigh, lossless, hires, sky, jyeffect, jymaster)
+            quality: 音质等级 (standard, exhigh, lossless, hires, sky, jyeffect, jymaster, dolby)
             cookies: 用户cookies
             
         Returns:

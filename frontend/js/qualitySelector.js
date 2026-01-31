@@ -51,6 +51,8 @@ const QualitySelector = (function() {
         if (savedQuality) {
             const savedQualityValue = localStorage.getItem('selectedQualityValue');
             updateQualityUI(savedQualityValue, savedQuality);
+        } else {
+            updateQualityUI(qualityOptions[0].value, qualityOptions[0].text);
         }
     }
     
@@ -137,13 +139,14 @@ const QualitySelector = (function() {
      * @param {string} containerId - 容器ID
      */
     function generateQualityOptionsHTML(targetElement, optionClass, containerId) {
+        const defaultOption = qualityOptions[0];
         let html = `
             <div class="card">
                 <div class="card-header p-0">
                     <button class="btn btn-link w-100 text-start text-decoration-none d-flex justify-content-between align-items-center p-3"
                         type="button" data-bs-toggle="collapse" data-bs-target="#${containerId}">
                         <span><i class="fas fa-music me-2"></i>当前选择：<span id="${getQualitySpanId(containerId)}"
-                                class="fw-bold text-primary">标准音质</span></span>
+                                class="fw-bold text-primary">${defaultOption.text}</span></span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
@@ -166,7 +169,7 @@ const QualitySelector = (function() {
                     </div>
                 </div>
             </div>
-            <input type="hidden" id="${getQualityInputId(containerId)}" value="standard">`;
+            <input type="hidden" id="${getQualityInputId(containerId)}" value="${defaultOption.value}">`;
         
         $(targetElement).html(html);
         
