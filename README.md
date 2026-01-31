@@ -53,16 +53,25 @@
 git clone https://github.com/Awan/wan-music.git
 cd wan-music
 
-# 2. 安装依赖
+# 2. 创建虚拟环境（推荐）
+python -m venv .venv
+
+# 3. 激活虚拟环境
+# macOS/Linux:
+source .venv/bin/activate
+# Windows:
+.venv\Scripts\activate
+
+# 4. 安装依赖
 pip install -r requirements.txt
 
-# 3. 配置Cookie
-# 在 api/cookie.txt 文件中填入黑胶会员账号的Cookie
+# 5. 配置Cookie
+# 在 .env 文件中填入黑胶会员账号的Cookie（参见下方Cookie配置说明）
 
-# 4. 启动服务
+# 6. 启动服务
 python main.py
 
-# 5. 访问界面
+# 7. 访问界面
 # 打开浏览器访问：http://localhost:5001
 ```
 
@@ -230,10 +239,13 @@ Content-Type: application/json
 
 ### Cookie配置
 
-在 `api/cookie.txt` 文件中配置网易云音乐Cookie：
+在 `.env` 文件中配置网易云音乐Cookie：
 
-```text
-MUSIC_U=你的MUSIC_U值; os=pc; appver=8.9.70;
+```bash
+# 复制.env.example为.env（如果存在）
+# 然后编辑.env文件，填入你的Cookie
+
+MUSIC_COOKIE=MUSIC_U=你的MUSIC_U值; os=pc; appver=8.9.70;
 ```
 
 > ⚠️ **重要提示**：
@@ -263,7 +275,7 @@ LOG_LEVEL=INFO
 
 **解决方案**：
 - 确认使用的是黑胶会员账号
-- 重新获取Cookie并更新 `api/cookie.txt`
+- 重新获取Cookie并更新 `.env` 文件中的 `MUSIC_COOKIE` 配置
 - 检查Cookie格式是否正确
 
 #### 2. 无法下载高音质
@@ -308,18 +320,17 @@ wan-music/
 ├── requirements.txt        # Python依赖
 ├── Dockerfile              # Docker构建文件
 ├── docker-compose.yml      # Docker Compose配置
-├── .env                    # 环境配置
+├── .env                    # 环境配置（Cookie等）
+├── .venv/                  # Python虚拟环境（本地开发）
 ├── .github/
 │   └── workflows/
 │       └── docker-publish.yml  # GitHub Actions
 ├── api/
-│   ├── main.py             # Flask主程序
+│   ├── __init__.py
 │   ├── music_api.py        # 音乐API核心模块
 │   ├── music_downloader.py # 音乐下载模块
 │   ├── cookie_manager.py   # Cookie管理模块
-│   ├── qr_login.py         # 二维码登录模块
-│   ├── api_security.py     # API安全模块
-│   └── cookie.txt          # Cookie配置
+│   └── qr_login.py         # 二维码登录模块
 └── frontend/
     ├── index.html          # Web界面
     ├── css/                # 样式文件

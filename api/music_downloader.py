@@ -22,7 +22,8 @@ from enum import Enum
 import requests
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC
+from mutagen.id3 import ID3
+from mutagen.id3._frames import TIT2, TPE1, TALB, TDRC, TRCK, APIC
 from mutagen.mp4 import MP4
 
 from .music_api import NeteaseAPI, APIException
@@ -52,7 +53,7 @@ class QualityLevel(Enum):
 @dataclass
 class MusicInfo:
     """音乐信息数据类"""
-    id: int
+    id: str
     name: str
     artists: str
     album: str
@@ -159,7 +160,7 @@ class MusicDownloader:
         
         return '.mp3'  # 默认
     
-    def get_music_info(self, music_id: int, quality: str = "standard") -> MusicInfo:
+    def get_music_info(self, music_id: str, quality: str = "standard") -> MusicInfo:
         """获取音乐详细信息
         
         Args:
@@ -225,7 +226,7 @@ class MusicDownloader:
         except Exception as e:
             raise DownloadException(f"获取音乐信息时发生错误: {e}")
     
-    def download_music_file(self, music_id: int, quality: str = "standard") -> DownloadResult:
+    def download_music_file(self, music_id: str, quality: str = "standard") -> DownloadResult:
         """下载音乐文件到本地
         
         Args:
@@ -289,7 +290,7 @@ class MusicDownloader:
                 error_message=f"下载过程中发生错误: {e}"
             )
     
-    async def download_music_file_async(self, music_id: int, quality: str = "standard") -> DownloadResult:
+    async def download_music_file_async(self, music_id: str, quality: str = "standard") -> DownloadResult:
         """异步下载音乐文件到本地
         
         Args:
@@ -352,7 +353,7 @@ class MusicDownloader:
                 error_message=f"异步下载过程中发生错误: {e}"
             )
     
-    def download_music_to_memory(self, music_id: int, quality: str = "standard") -> Tuple[bool, BytesIO, MusicInfo]:
+    def download_music_to_memory(self, music_id: str, quality: str = "standard") -> Tuple[bool, BytesIO, MusicInfo]:
         """下载音乐到内存
         
         Args:
@@ -397,11 +398,11 @@ class MusicDownloader:
         """
         semaphore = asyncio.Semaphore(self.max_concurrent)
         
-        async def download_with_semaphore(music_id: int) -> DownloadResult:
+        async def download_with_semaphore(music_id: str) -> DownloadResult:
             async with semaphore:
-                return await self.download_music_file_async(music_id, quality)
+                return await self.download_music_file_async(str(music_id), quality)
         
-        tasks = [download_with_semaphore(music_id) for music_id in music_ids]
+        tasks = [download_with_semaphore(str(music_id)) for music_id in music_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # 处理异常结果
@@ -441,6 +442,9 @@ class MusicDownloader:
         """写入MP3标签"""
         try:
             audio = MP3(str(file_path), ID3=ID3)
+            
+            if audio.tags is None:
+                audio.tags = ID3()
             
             # 添加ID3标签
             audio.tags.add(TIT2(encoding=3, text=music_info.name))
@@ -526,7 +530,7 @@ class MusicDownloader:
         except Exception as e:
             print(f"写入M4A标签失败: {e}")
     
-    def get_download_progress(self, music_id: int, quality: str = "standard") -> Dict[str, Any]:
+    def get_download_progress(self, music_id: str, quality: str = "standard") -> Dict[str, Any]:
         """获取下载进度信息
         
         Args:

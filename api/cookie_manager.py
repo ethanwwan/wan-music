@@ -14,7 +14,7 @@ class CookieException(Exception):
     pass
 
 
-def setup_logger(name: str = None) -> logging.Logger:
+def setup_logger(name: str = "cookie_manager") -> logging.Logger:
     """配置日志系统
 
     Args:

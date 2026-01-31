@@ -156,7 +156,7 @@ class NeteaseAPI:
         self.http_client = HTTPClient()
         self.crypto_utils = CryptoUtils()
     
-    def get_song_url(self, song_id: int, quality: str, cookies: Dict[str, str]) -> Dict[str, Any]:
+    def get_song_url(self, song_id: str, quality: str, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌曲播放URL
         
         Args:
@@ -195,7 +195,7 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析响应数据失败: {e}")
     
-    def get_song_detail(self, song_id: int) -> Dict[str, Any]:
+    def get_song_detail(self, song_id: str) -> Dict[str, Any]:
         """获取歌曲详细信息
         
         Args:
@@ -222,7 +222,7 @@ class NeteaseAPI:
         except json.JSONDecodeError as e:
             raise APIException(f"解析歌曲详情响应失败: {e}")
     
-    def get_lyric(self, song_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+    def get_lyric(self, song_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌词信息
         
         Args:
@@ -313,7 +313,7 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
-    def get_playlist_detail(self, playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+    def get_playlist_detail(self, playlist_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌单详情
         
         Args:
@@ -378,7 +378,7 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析歌单详情响应失败: {e}")
     
-    def get_album_detail(self, album_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+    def get_album_detail(self, album_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取专辑详情
         
         Args:
@@ -613,19 +613,19 @@ class QRLoginManager:
 
 
 # 向后兼容的函数接口
-def url_v1(song_id: int, level: str, cookies: Dict[str, str]) -> Dict[str, Any]:
+def url_v1(song_id: str, level: str, cookies: Dict[str, str]) -> Dict[str, Any]:
     """获取歌曲URL（向后兼容）"""
     api = NeteaseAPI()
     return api.get_song_url(song_id, level, cookies)
 
 
-def name_v1(song_id: int) -> Dict[str, Any]:
+def name_v1(song_id: str) -> Dict[str, Any]:
     """获取歌曲详情（向后兼容）"""
     api = NeteaseAPI()
     return api.get_song_detail(song_id)
 
 
-def lyric_v1(song_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+def lyric_v1(song_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
     """获取歌词（向后兼容）"""
     api = NeteaseAPI()
     return api.get_lyric(song_id, cookies)
@@ -637,13 +637,13 @@ def search_music(keywords: str, cookies: Dict[str, str], limit: int = 10) -> Lis
     return api.search_music(keywords, cookies, limit)
 
 
-def playlist_detail(playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+def playlist_detail(playlist_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
     """获取歌单详情（向后兼容）"""
     api = NeteaseAPI()
     return api.get_playlist_detail(playlist_id, cookies)
 
 
-def album_detail(album_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+def album_detail(album_id: str, cookies: Dict[str, str]) -> Dict[str, Any]:
     """获取专辑详情（向后兼容）"""
     api = NeteaseAPI()
     return api.get_album_detail(album_id, cookies)
