@@ -4,11 +4,11 @@
 *.swp
 *.swo
 *~
+.env
 
 # Python
 venv
 .venv
-.env
 env/
 .ENV
 venv.bak/
