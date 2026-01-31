@@ -124,7 +124,7 @@ def setup_logging(name: str = "music_api", env: str = "prod") -> logging.Logger:
 class APIConfig:
     """API配置类"""
     host: str = '0.0.0.0'
-    port: int = getenv_int('WEB_PORT', 5001)
+    port: int = getenv_int('WEB_PORT', 5020)
     debug: bool = getenv('APP_ENV', "prod") == "dev"
     max_file_size: int = 500 * 1024 * 1024  # 500MB
     request_timeout: int = 30
