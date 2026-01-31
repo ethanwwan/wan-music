@@ -1,0 +1,19 @@
+services:
+  wan-music:
+    image: ethanwwan/wan-music:latest
+    container_name: wan-music
+    restart: always
+    ports:
+      - 5020:5020
+    environment:
+      - APP_ENV=prod
+      - TZ=Asia/Shanghai
+      - WEB_PORT=5020
+      - MUSIC_COOKIE=_ntes_nnid=ec5976e5xxxxx
+
+    networks:
+      - wan-music-network
+
+networks:
+  wan-music-network:
+    driver: bridge
