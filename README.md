@@ -108,6 +108,18 @@ python main.py
 # 打开浏览器访问：http://localhost:5020
 ```
 
+### 🚀 生产环境部署（Gunicorn）
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 直接使用 Gunicorn 启动
+gunicorn main:app --bind 0.0.0.0:5020 --workers 4
+
+```
+
+
 ---
 
 ## � 使用指南

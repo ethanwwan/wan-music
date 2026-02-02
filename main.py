@@ -13,11 +13,12 @@ import logging
 import sys
 import time
 import traceback
+import requests
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from urllib.parse import quote
-from flask import Flask, request, send_file, render_template, Response
+from flask import Flask, request, send_file, Response
 
 try:
     from api.music_api import (
@@ -74,9 +75,6 @@ def setup_logging(name: str = "music_api", env: str = "prod") -> logging.Logger:
     Returns:
         配置好的日志器
     """
-    if env is None:
-        env = os.getenv('APP_ENV', 'prod')
-
     is_dev = env == 'dev'
 
     if is_dev:
@@ -243,7 +241,6 @@ class MusicAPIService:
         try:
             # 处理短链接
             if '163cn.tv' in id_or_url:
-                import requests
                 response = requests.get(id_or_url, allow_redirects=False, timeout=10)
                 id_or_url = response.headers.get('Location', id_or_url)
             
@@ -289,7 +286,7 @@ class MusicAPIService:
         }
         return quality_names.get(quality, f"未知音质({quality})")
     
-    def _validate_request_params(self, required_params: Dict[str, Any]) -> Response | None:
+    def _validate_request_params(self, required_params: Dict[str, Any]) -> Optional[Response]:
         """验证请求参数"""
         for param_name, param_value in required_params.items():
             if not param_value:
@@ -798,12 +795,44 @@ def start_api_server():
         print("🌟 服务已就绪，等待请求...\n")
         
         # 启动Flask应用
-        app.run(
-            host=config.host,
-            port=config.port,
-            debug=config.debug,
-            threaded=True
-        )
+        if config.debug:
+            # 开发环境：使用Flask内置服务器
+            app.run(
+                host=config.host,
+                port=config.port,
+                debug=config.debug,
+                threaded=True
+            )
+        else:
+            # 生产环境：使用Uvicorn
+            print("🔧 生产环境模式：使用 Uvicorn 服务器")
+            try:
+            
+                print(f"🚀 启动 Uvicorn 服务器")
+                print(f"📡 绑定地址: {config.host}:{config.port}")
+                print(f"👥 工作进程: 4")
+                print(f"📋 日志级别: {config.log_level}")
+                print("====================================")
+                
+                # 使用Gunicorn作为WSGI服务器，专门为Flask等WSGI应用设计
+                import subprocess
+                subprocess.run([
+                    "gunicorn",
+                    "main:app",
+                    "--bind", f"{config.host}:{config.port}",
+                    "--workers", "4",
+                    "--log-level", config.log_level.lower(),
+                    "--timeout", str(config.request_timeout),
+                    "--keep-alive", "2"
+                ])
+            except ImportError:
+                print("⚠️  Uvicorn 未安装，使用 Flask 内置服务器")
+                app.run(
+                    host=config.host,
+                    port=config.port,
+                    debug=False,
+                    threaded=True
+                )
         
     except KeyboardInterrupt:
         print("\n\n👋 服务已停止")

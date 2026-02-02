@@ -6,4 +6,5 @@ aiohttp==3.12.15
 aiofiles==24.1.0
 cryptography==40.0.2
 python-dotenv==1.0.1
-mutagen==1.47.0
+uvicorn==0.40.0
+gunicorn==21.2.0
