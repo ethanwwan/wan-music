@@ -1,379 +1,108 @@
-# 网易云音乐无损解析
+# Wan Music - 网易云音乐无损解析
 
-<div align="center">
+基于 Vue 3 的网易云音乐无损解析工具，纯前端实现，无需后端服务。
 
-**功能强大的网易云音乐解析工具**
-
-支持歌曲搜索 | 单曲解析 | 歌单解析 | 专辑解析 | 音乐下载
-
-[在线体验](http://localhost:5001) • [问题反馈](https://github.com/Awan/wan-music/issues)
-
-</div>
-
----
-
-> **⚠️ 重要声明**  
-> 本项目采用 MIT 许可证开源。根据 MIT 许可证的条款，任何个人或组织均可自由使用、修改和分发本项目的源代码，包括用于商业项目。
-
-## ✨ 功能特性
-
-### 🎵 核心功能
-- **🔍 歌曲搜索**：支持关键词搜索网易云音乐库中的歌曲
-- **🎧 单曲解析**：解析单首歌曲的详细信息和下载链接
-- **📋 歌单解析**：批量解析歌单中的所有歌曲信息
-- **💿 专辑解析**：批量解析专辑中的所有歌曲信息
-- **⬇️ 音乐下载**：支持多种音质的音乐文件下载
-
-### 🎼 音质支持
-| 参数 | 说明 |
-|------|------|
-| `standard` | 标准音质 (128kbps) |
-| `exhigh` | 极高音质 (320kbps) |
-| `lossless` | 无损音质 (FLAC) |
-| `hires` | Hi-Res音质 (24bit/96kHz) |
-| `jyeffect` | 高清环绕声 |
-| `sky` | 沉浸环绕声 |
-| `jymaster` | 超清母带 |
-
-> 黑胶VIP音质：standard, exhigh, lossless, hires, jyeffect  
-> 黑胶SVIP音质：sky, jymaster
-
----
-
-## 🚀 快速开始
-
-### 环境要求
-- Python 3.9+
-- 网易云音乐黑胶会员账号
-
-### 安装步骤
-
-```bash
-# 1. 克隆项目
-git clone https://github.com/Awan/wan-music.git
-cd wan-music
-
-# 2. 安装依赖
-pip install -r requirements.txt
-
-# 3. 配置Cookie
-# 在 api/cookie.txt 文件中填入黑胶会员账号的Cookie
-
-# 4. 启动服务
-python main.py
-
-# 5. 访问界面
-# 打开浏览器访问：http://localhost:5001
-```
-
-> 💡 **获取Cookie方法**：登录网易云音乐网页版 → F12开发者工具 → Network标签页 → 复制任意请求的Cookie值
-
-### 🐳 Docker部署
-
-```bash
-# 使用Docker Compose
-docker-compose up -d
-
-# 或使用Docker构建
-docker build -t wan-music .
-docker run -d -p 5001:5001 wan-music
-```
-
----
-
-## 📖 使用指南
-
-### Web界面使用
-
-#### 🔍 歌曲搜索
-1. 选择功能：**歌曲搜索**
-2. 输入关键词（歌曲名、歌手名等）
-3. 点击**搜索**按钮
-4. 在搜索结果中点击**解析**或**下载**按钮
-
-#### 🎧 单曲解析
-1. 选择功能：**单曲解析**
-2. 输入歌曲ID或网易云音乐链接
-   - 支持格式：`1234567890` 或 `https://music.163.com/song?id=1234567890`
-3. 点击**解析**按钮查看歌曲信息
-
-#### 📋 歌单解析
-1. 选择功能：**歌单解析**
-2. 输入歌单ID或网易云音乐歌单链接
-   - 支持格式：`1234567890` 或 `https://music.163.com/playlist?id=1234567890`
-3. 点击**解析**按钮查看歌单中所有歌曲
-4. 点击单首歌曲的**解析**或**下载**按钮
-
-#### 💿 专辑解析
-1. 选择功能：**专辑解析**
-2. 输入专辑ID或网易云音乐专辑链接
-   - 支持格式：`1234567890` 或 `https://music.163.com/album?id=1234567890`
-3. 点击**解析**按钮查看专辑中所有歌曲
-4. 点击单首歌曲的**解析**或**下载**按钮
-
-#### ⬇️ 音乐下载
-1. 选择功能：**音乐下载**
-2. 输入歌曲ID或链接
-3. 选择音质（标准/极高/无损/Hi-Res等）
-4. 点击**下载**按钮
-
-### 支持的链接格式
-
-```bash
-# 歌曲链接
-https://music.163.com/song?id=1234567890
-https://music.163.com/#/song?id=1234567890
-
-# 歌单链接
-https://music.163.com/playlist?id=1234567890
-https://music.163.com/#/playlist?id=1234567890
-
-# 专辑链接
-https://music.163.com/album?id=1234567890
-https://music.163.com/#/album?id=1234567890
-
-# 直接使用ID
-1234567890
-```
-
----
-
-## 🔌 API接口文档
-
-### 基础信息
-- **Base URL**: `http://localhost:5001`
-- **请求方式**: GET / POST
-- **响应格式**: JSON
-
-### 接口列表
-
-#### 1. 健康检查
-```http
-GET /health
-```
-
-**响应示例**:
-```json
-{
-  "status": "ok",
-  "message": "Service is running"
-}
-```
-
-#### 2. 歌曲搜索
-```http
-POST /search
-Content-Type: application/json
-
-{
-  "keywords": "周杰伦 稻香",
-  "limit": 10
-}
-```
-
-**响应示例**:
-```json
-{
-  "code": 200,
-  "result": {
-    "songs": [...]
-  }
-}
-```
-
-#### 3. 单曲解析
-```http
-POST /song
-Content-Type: application/json
-
-{
-  "id": "185668"
-}
-```
-
-#### 4. 歌单解析
-```http
-POST /playlist
-Content-Type: application/json
-
-{
-  "id": "123456789"
-}
-```
-
-#### 5. 专辑解析
-```http
-POST /album
-Content-Type: application/json
-
-{
-  "id": "123456789"
-}
-```
-
-#### 6. 音乐下载
-```http
-POST /download
-Content-Type: application/json
-
-{
-  "id": "185668",
-  "quality": "lossless"
-}
-```
-
-**响应**: 直接返回音频文件流
-
----
-
-## ⚙️ 配置说明
-
-### Cookie配置
-
-在 `api/cookie.txt` 文件中配置网易云音乐Cookie：
-
-```text
-MUSIC_U=你的MUSIC_U值; os=pc; appver=8.9.70;
-```
-
-> ⚠️ **重要提示**：
-> - 必须使用黑胶会员账号的Cookie
-> - Cookie格式必须严格按照示例填写
-> - 定期更新Cookie以保持有效性
-
-### 环境变量
-
-可以通过 `.env` 文件配置服务：
-
-```bash
-HOST=0.0.0.0
-PORT=5001
-DEBUG=false
-LOG_LEVEL=INFO
-```
-
----
-
-## 🔧 故障排除
-
-### 常见问题
-
-#### 1. Cookie无效
-**问题**：提示Cookie无效或过期
-
-**解决方案**：
-- 确认使用的是黑胶会员账号
-- 重新获取Cookie并更新 `api/cookie.txt`
-- 检查Cookie格式是否正确
-
-#### 2. 无法下载高音质
-**问题**：只能下载标准音质
-
-**解决方案**：
-- 确认账号是黑胶会员
-- 检查Cookie是否有效
-- 确认歌曲本身支持高音质
-
-#### 3. 服务启动失败
-**问题**：运行 `python main.py` 报错
-
-**解决方案**：
-- 检查Python版本（需要3.9+）
-- 安装所有依赖：`pip install -r requirements.txt`
-- 检查端口5001是否被占用
-
-#### 4. 下载文件损坏
-**问题**：下载的音频文件无法播放
-
-**解决方案**：
-- 检查网络连接是否稳定
-- 重新下载文件
-- 尝试其他音质选项
-
-### 日志查看
-
-服务运行时会生成日志文件 `music_api.log`：
-
-```bash
-tail -f music_api.log
-```
-
----
-
-## 📁 项目结构
+## 项目结构
 
 ```
 wan-music/
-├── main.py                 # 主程序入口
-├── requirements.txt        # Python依赖
-├── Dockerfile              # Docker构建文件
-├── docker-compose.yml      # Docker Compose配置
-├── .env                    # 环境配置
-├── .github/
-│   └── workflows/
-│       └── docker-publish.yml  # GitHub Actions
-├── api/
-│   ├── main.py             # Flask主程序
-│   ├── music_api.py        # 音乐API核心模块
-│   ├── music_downloader.py # 音乐下载模块
-│   ├── cookie_manager.py   # Cookie管理模块
-│   ├── qr_login.py         # 二维码登录模块
-│   ├── api_security.py     # API安全模块
-│   └── cookie.txt          # Cookie配置
-└── frontend/
-    ├── index.html          # Web界面
-    ├── css/                # 样式文件
-    ├── js/                 # 脚本文件
-    └── imgs/               # 图片资源
+├── src/
+│   ├── components/         # Vue 组件
+│   │   ├── MusicPlayer.vue     # 音乐播放器组件
+│   │   └── PlaylistDetail.vue # 歌单详情组件
+│   ├── services/          # API 服务层
+│   │   ├── musicApi.js        # 音乐 API 调用
+│   │   └── metadataWriter.js  # 元数据写入
+│   ├── utils/             # 工具函数
+│   │   ├── cookies.js         # Cookie 管理
+│   │   ├── downloadHelper.js  # 下载辅助
+│   │   ├── parseManager.js    # 解析管理
+│   │   ├── paginationManager.js # 分页管理
+│   │   ├── settingsManager.js # 设置管理
+│   │   ├── themeManager.js    # 主题管理
+│   │   ├── deviceDetector.js  # 设备检测
+│   │   ├── exampleData.js     # 示例数据
+│   │   └── lyricsConverter.js # 歌词转换
+│   ├── styles/            # 样式文件
+│   │   └── global.css        # 全局样式
+│   ├── App.vue            # 根组件
+│   └── main.js            # 入口文件
+├── public/               # 静态资源
+├── index.html           # HTML 入口
+├── vite.config.js      # Vite 配置
+└── package.json        # 依赖配置
 ```
 
-### 技术栈
+## 功能特性
 
-- **后端**：Flask + Python
-- **前端**：Bootstrap + jQuery
-- **音频处理**：mutagen, FLACMetadata, ID3Writer
-- **HTTP客户端**：aiohttp + requests
-- **容器化**：Docker + GitHub Actions
+- 🎵 单曲解析 - 支持多种音质（母带、Hi-Res、无损、高品质）
+- 📋 歌单解析 - 一键解析整个歌单
+- 💿 专辑解析 - 支持专辑解析
+- 🎨 主题切换 - 支持浅色/深色模式
+- 📱 响应式设计 - 完美适配桌面和移动端
+- ⚡ 快速下载 - 支持批量下载和 ZIP 打包
+- 🎼 元数据写入 - 自动写入歌曲信息、封面、歌词
+- 🔒 安全下载 - 纯前端实现，无需后端
 
----
+## 技术栈
 
-## 🤖 CI/CD
+- Vue 3 - 渐进式 JavaScript 框架
+- Element Plus - Vue 3 UI 组件库
+- Vite - 新一代前端构建工具
+- JavaScript ES6+ - 现代 JavaScript 语法
 
-### GitHub Actions
+## 快速开始
 
-推送版本标签自动构建并推送到 Docker Hub：
+### 安装依赖
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+npm install
 ```
 
-这将构建并推送 `awan1987/wan-music:1.0.0` 到 Docker Hub。
+### 开发模式
 
----
+```bash
+npm run dev
+```
 
-## 📄 许可证
+访问 http://localhost:5173/
 
-本项目采用 MIT 许可证开源。
+### 构建生产版本
 
----
+```bash
+npm run build
+```
 
-## 🤝 贡献指南
+### 预览生产版本
 
-欢迎提交 Issue 和 Pull Request！
+```bash
+npm run preview
+```
 
-1. Fork 本项目
-2. 创建特性分支：`git checkout -b feature/new-feature`
-3. 提交更改：`git commit -am 'Add new feature'`
-4. 推送分支：`git push origin feature/new-feature`
-5. 提交 Pull Request
+## 使用说明
 
----
+1. 打开应用，选择解析模式（单曲/歌单/专辑）
+2. 输入网易云音乐链接
+3. 选择音质等级
+4. 点击解析按钮
+5. 解析完成后可在线播放或下载
 
-## 📞 联系方式
+## 配置说明
 
-- **GitHub Issues**：[提交问题](https://github.com/Awan/wan-music/issues)
+应用支持丰富的配置选项：
 
----
+- 文件命名格式
+- 元数据写入开关
+- ZIP 打包下载
+- 歌词格式选择（LRC/SRT）
+- 播放链接缓存
+- 主题模式切换
+- 布局模式切换（双栏/单栏）
 
-欢迎 Star、Fork 和 PR！
+## 注意事项
+
+⚠️ 本工具仅供学习交流使用，请支持正版音乐。
+
+## License
+
+MIT License
