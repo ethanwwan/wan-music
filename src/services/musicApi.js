@@ -1,8 +1,15 @@
+/**
+ * 音乐API服务
+ * 使用纯JavaScript实现的网易云音乐API，无需后端
+ */
+
 import { embedMetadata } from './metadataWriter.js'
 import { saveBlob, ensureBlobType, getMimeByExtension, sanitizeFilename } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
+import NeteaseAPI from './neteaseApi.js'
 
-// 音乐信息接口 (JSDoc 类型定义)
+const neteaseApi = new NeteaseAPI()
+
 /**
  * @typedef {Object} MusicInfo
  * @property {string} id - 歌曲ID
@@ -15,130 +22,9 @@ import { settings } from '../utils/settingsManager.js'
  * @property {string} [lrc] - 歌词内容
  */
 
-// 创建 fetch 请求的通用配置（不再使用超时中断，避免长耗时请求被取消）
-const createFetchOptions = (data = null) => {
-  const options = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  }
-
-  if (data) {
-    options.body = JSON.stringify(data)
-  }
-
-  return options
-}
-
-// 固定 API 基础 URL（不再支持接口版本切换）
-const getApiBase = () => 'https://127.0.0.1:8000'
-
-// 可用性检测与故障切换支持
-const FALLBACK_BASES = [
-  'https://127.0.0.1:8000',
-  'https://127.0.0.1:8000',
-  'https://127.0.0.1:8000'
-]
-
-const getPreferredBaseList = () => FALLBACK_BASES
-
-let resolvedBase = null
-let lastResolveAt = 0
-const baseResolveTTL = 5 * 60 * 1000 // 5分钟缓存
-
-// 以 HEAD + no-cors 快速探测域名可达性（仅检测网络连通，不读取状态码）
-const isReachable = async (base, timeoutMs = 2500) => {
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    // 使用 HEAD 并且 no-cors，避免跨域错误；成功返回即视为可达
-    await fetch(base, { method: 'HEAD', mode: 'no-cors', signal: controller.signal })
-    clearTimeout(timer)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const resolveApiBaseAsync = async () => {
-  if (resolvedBase && (Date.now() - lastResolveAt) < baseResolveTTL) {
-    return resolvedBase
-  }
-  for (const base of getPreferredBaseList()) {
-    if (await isReachable(base)) {
-      resolvedBase = base
-      lastResolveAt = Date.now()
-      return resolvedBase
-    }
-  }
-  // 都不可达时，仍返回首选，以便上层错误处理
-  resolvedBase = getApiBase()
-  lastResolveAt = Date.now()
-  return resolvedBase
-}
-
-// 构建 API URL（拼接为绝对地址）
-const buildApiUrl = (path) => {
-  const clean = String(path).replace(/^\/+/, '')
-  // 优先使用已解析的可用域，否则用当前设置域
-  const base = resolvedBase || getApiBase()
-  return `${base}/${clean}`
-}
-
-// 通用的 fetch 请求函数（含域名故障切换）
-const fetchApi = async (url, data = null) => {
-  const options = createFetchOptions(data)
-  try {
-    // 确保已解析可用域（异步懒加载，不阻塞过久）
-    // 若解析失败，不影响首次请求，失败后会走下面的故障切换
-    resolveApiBaseAsync().catch(() => {})
-
-    const response = await fetch(url, options)
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const result = await response.json()
-    return { data: result }
-  } catch (error) {
-    // 若为绝对地址，则尝试其他可用域进行故障切换
-    try {
-      const isAbsolute = /^https?:\/\//i.test(url)
-      const cleanPath = isAbsolute ? String(new URL(url).pathname).replace(/^\/+/, '') : String(url).replace(/^\/+/, '')
-      const bases = getPreferredBaseList()
-      for (const base of bases) {
-        const candidate = `${base}/${cleanPath}`
-        if (candidate === url) continue
-        try {
-          const resp = await fetch(candidate, options)
-          if (resp.ok) {
-            const result = await resp.json()
-            // 更新已解析域，提升后续请求命中率
-            resolvedBase = base
-            lastResolveAt = Date.now()
-            return { data: result }
-          }
-        } catch {
-          // 忽略单次失败，尝试下一个候选域
-        }
-      }
-    } catch {
-      // 忽略解析候选域时的错误
-    }
-    // 所有候选域均失败，抛出原始错误
-    throw error
-  }
-}
-
-// 主动探测所有候选域的可用性（供设置页或调试使用）
- 
-
 // 从文本中提取URL
 const extractUrlFromText = (text) => {
   if (!text) return text
-  // 确保text是字符串类型
   if (typeof text !== 'string') {
     text = String(text)
   }
@@ -147,10 +33,9 @@ const extractUrlFromText = (text) => {
   return match ? match[0] : text
 }
 
-// 统一的ID提取函数 - 支持音乐和歌单链接
+// 统一的ID提取函数
 export const extractIdFromUrl = async (text) => {
   try {
-    // 确保输入不为空且为字符串
     if (!text) return null
     if (typeof text !== 'string') {
       text = String(text)
@@ -159,7 +44,7 @@ export const extractIdFromUrl = async (text) => {
     const url = extractUrlFromText(text)
     if (!url) return null
     
-    // 短链接模式 - 直接返回原链接让后端处理
+    // 短链接模式
     if (/https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/.test(url)) {
       return url
     }
@@ -190,7 +75,6 @@ export const extractIdFromUrl = async (text) => {
       /https?:\/\/music\.163\.com\/#\/album\/(\d+)/
     ]
     
-    // 尝试从URL提取ID
     for (const pattern of [...musicPatterns, ...playlistPatterns, ...albumPatterns]) {
       const match = url.match(pattern)
       if (match) {
@@ -204,33 +88,28 @@ export const extractIdFromUrl = async (text) => {
   }
 }
 
-// 验证链接格式 - 统一处理音乐和歌单链接
+// 验证链接格式
 export const validateUrl = (url) => {
   try {
-    // 确保输入为字符串
     if (!url || typeof url !== 'string') {
       return false
     }
     
     const patterns = [
-      // 音乐链接
       /https?:\/\/music\.163\.com\/song\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/song\?id=(\d+)/,
-      // 歌单链接
       /https?:\/\/music\.163\.com\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\/(\d+)/,
       /https?:\/\/music\.163\.com\/#\/playlist\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/discover\/toplist\?id=(\d+)/,
-      // 专辑链接
       /https?:\/\/music\.163\.com\/album\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/album\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/album\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/album\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/album\/(\d+)/,
-      // 短链接 - 直接验证格式，不解析
       /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
     ]
     
@@ -240,7 +119,6 @@ export const validateUrl = (url) => {
   }
 }
 
-// 严格类型校验：分别限定歌曲 / 歌单 / 专辑链接
 export const validateMusicUrl = (url) => {
   try {
     const patterns = [
@@ -248,7 +126,6 @@ export const validateMusicUrl = (url) => {
       /https?:\/\/y\.music\.163\.com\/m\/song\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/song\?id=(\d+)/,
-      // 支持网易云短链接（交由后端解析指向的具体类型）
       /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
     ]
     return patterns.some(p => p.test(url))
@@ -288,6 +165,7 @@ export const validateAlbumUrl = (url) => {
     return false
   }
 }
+
 export const getMusicIdFromUrl = extractIdFromUrl
 export const extractPlaylistId = extractIdFromUrl
 export const extractAlbumId = extractIdFromUrl
@@ -304,7 +182,7 @@ export const QUALITY_LEVELS = {
   'standard': '标准(128k)'
 }
 
-// 播放链接内存缓存（基于歌曲ID与音质），减少重复接口请求
+// 播放链接内存缓存
 const urlCache = new Map()
 const getUrlCacheKey = (id, quality) => `${id}|${quality}`
 const getCachedUrlData = (id, quality) => {
@@ -330,33 +208,34 @@ const setCachedUrlData = (id, quality, data) => {
 // 获取音乐播放链接
 export const getMusicUrl = async (musicId, quality = 'lossless', options = {}) => {
   const { bypassCache = false, updateCache = true } = options
-    // 先查缓存，避免每次都请求接口（可通过 bypassCache 跳过）
-    if (settings?.enableUrlCache && !bypassCache) {
-      const cached = getCachedUrlData(musicId, quality)
-      if (cached && cached.url) {
-        return cached
-      }
+  
+  if (settings?.enableUrlCache && !bypassCache) {
+    const cached = getCachedUrlData(musicId, quality)
+    if (cached && cached.url) {
+      return cached
     }
+  }
 
-    const response = await fetchApi(buildApiUrl(`api/music/url`), {
-      id: musicId,
-      level: quality
-    })
+  try {
+    const result = await neteaseApi.getSongUrl(musicId, quality)
     
-    if (response.data.code !== 200) {
-      throw new Error(response.data.msg || '获取音乐链接失败')
+    if (result.code !== 200) {
+      throw new Error(result.message || '获取音乐链接失败')
     }
 
-    const urlData = response.data.data[0]
-    if (!urlData || urlData.length === 0) {
+    const urlData = result.data?.[0]
+    if (!urlData || !urlData.url) {
       throw new Error('该音质的音乐链接不可用')
     }
-    // 写入缓存（可通过 updateCache 控制是否更新缓存）
+
     if (settings?.enableUrlCache && updateCache) {
       setCachedUrlData(musicId, quality, urlData)
     }
 
     return urlData
+  } catch (error) {
+    throw new Error(error.message || '获取音乐链接失败')
+  }
 }
 
 // 解析音乐信息
@@ -368,48 +247,40 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
     }
 
     // 获取歌曲基本信息
-    const detailResponse = await fetchApi(buildApiUrl(`api/music/detail`), {
-      id: musicId
-    })
+    const detailResult = await neteaseApi.getSongDetail(musicId)
     
-    if (detailResponse.data.code !== 200) {
-      throw new Error(detailResponse.data.msg || '获取歌曲信息失败')
+    if (detailResult.code !== 200) {
+      throw new Error(detailResult.message || '获取歌曲信息失败')
     }
 
-    const songData = detailResponse.data.data
-    
-    // 转换时长格式
-    const durationParts = songData.duration.split(':')
-    const durationMs = (parseInt(durationParts[0]) * 60 + parseInt(durationParts[1])) * 1000
+    const songData = detailResult.data?.[0]
+    if (!songData) {
+      throw new Error('未找到歌曲详情')
+    }
 
-    // 获取音乐播放链接（若拿不到链接则按“下架或无法获取”处理，不再回退默认链接）
+    // 获取音乐播放链接
     let musicUrl = null
-    let actualQuality = 'standard'
+    let actualQuality = quality
     let fileSize = 0
     let bitRate = 0
-    let fileType = 'mp3' // Default file type
+    let fileType = 'mp3'
 
     try {
-      const urlData = await getMusicUrl(songData.id, quality)
+      const urlData = await getMusicUrl(musicId, quality)
       if (urlData && urlData.url) {
         musicUrl = urlData.url
         actualQuality = urlData.level || quality
         fileSize = urlData.size || 0
         bitRate = urlData.br || 0
         
-        const flacQualities = ['lossless', 'hires', 'jymaster', 'sky', 'jyeffect']
-        const returnedLevel = urlData.level || 'standard'
-
         if (urlData.type) {
           fileType = urlData.type.toLowerCase()
         } else {
           const urlExtensionMatch = musicUrl.match(/\.([a-zA-Z0-9]+)(?=\?|$)/)
           if (urlExtensionMatch && urlExtensionMatch[1]) {
             fileType = urlExtensionMatch[1].toLowerCase()
-          } else if (flacQualities.includes(returnedLevel)) {
+          } else if (['lossless', 'hires', 'jymaster', 'sky', 'jyeffect'].includes(actualQuality)) {
             fileType = 'flac'
-          } else {
-            fileType = 'mp3'
           }
         }
       } else {
@@ -423,10 +294,10 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
     const musicInfo = {
       id: songData.id.toString(),
       name: songData.name,
-      artist: songData.singer,
-      album: songData.album,
-      cover: songData.picimg,
-      duration: durationMs,
+      artist: songData.ar?.map(a => a.name).join('/') || '',
+      album: songData.al?.name || '',
+      cover: songData.al?.picUrl || '',
+      duration: songData.dt || 0,
       url: musicUrl,
       quality: actualQuality,
       qualityName: QUALITY_LEVELS[actualQuality] || actualQuality,
@@ -438,36 +309,20 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
 
     // 尝试获取歌词
     try {
-      const lyricsData = await getLyrics(songData.id)
-      if (lyricsData && lyricsData.lrc) {
-        musicInfo.lrc = lyricsData.lrc
-        musicInfo.tlyric = lyricsData.tlyric || ''
-        musicInfo.romalrc = lyricsData.romalrc || ''
-        musicInfo.klyric = lyricsData.klyric || ''
+      const lyricsResult = await neteaseApi.getLyric(musicId)
+      if (lyricsResult.code === 200 && lyricsResult.lrc) {
+        musicInfo.lrc = lyricsResult.lrc
+        musicInfo.tlyric = lyricsResult.tlyric || ''
+        musicInfo.romalrc = lyricsResult.romalrc || ''
+        musicInfo.klyric = lyricsResult.klyric || ''
       }
     } catch {
-      void 0
+      // 歌词获取失败不影响主功能
     }
 
     return musicInfo
 
   } catch (error) {
-    
-    if (error.response) {
-      const status = error.response.status
-      const data = error.response.data
-      
-      if (status === 404) {
-        throw new Error('歌曲不存在或已被删除')
-      } else if (status >= 500) {
-        throw new Error('服务器暂时不可用，请稍后重试')
-      } else if (data && data.msg) {
-        throw new Error(data.msg)
-      }
-    } else if (error.request) {
-      throw new Error('网络连接失败，请检查网络连接')
-    }
-    
     throw new Error(error.message || '解析失败，请检查链接是否正确或稍后重试')
   }
 }
@@ -482,21 +337,17 @@ export const getLyrics = async (musicId) => {
       musicId = String(musicId)
     }
     
-    const response = await fetchApi(buildApiUrl(`api/music/lyric`), {
-      id: musicId
-    })
+    const result = await neteaseApi.getLyric(musicId)
     
-    if (response.data.code !== 200) {
-      throw new Error(response.data.msg || '获取歌词失败')
+    if (result.code !== 200) {
+      throw new Error(result.message || '获取歌词失败')
     }
 
-    const lyricsData = response.data.data
-    
     return {
-      lrc: lyricsData.lrc || '',
-      tlyric: lyricsData.tlyric || '',
-      romalrc: lyricsData.romalrc || '',
-      klyric: lyricsData.klyric || ''
+      lrc: result.lrc || '',
+      tlyric: result.tlyric || '',
+      romalrc: result.romalrc || '',
+      klyric: result.klyric || ''
     }
   } catch {
     return { 
@@ -515,7 +366,6 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
     writeMetadata = false
   } = settings
 
-  // 1. 确定文件名
   const extension = musicInfo.fileExtension || '.mp3'
   let filename
   if (filenameFormat === 'artist-song') {
@@ -525,14 +375,12 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
   }
 
   try {
-    // 2. 使用 fetch 下载音频数据
     const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
     if (!response.ok) {
       throw new Error(`下载音频文件失败: ${response.statusText}`)
     }
     let audioBuffer = await response.arrayBuffer()
 
-    // 3. 如果启用，则嵌入元数据
     if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
       try {
         const metadata = {
@@ -545,11 +393,10 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
         }
         audioBuffer = await embedMetadata(audioBuffer, metadata, extension)
       } catch {
-        // 可选：通知用户元数据写入失败，但下载将继续
+        // 元数据写入失败，但下载继续
       }
     }
 
-    // 4. 触发下载
     const mime = response.headers.get('Content-Type') || getMimeByExtension(extension)
     const typedBlob = ensureBlobType(new Blob([audioBuffer], { type: mime }), mime)
     saveBlob(typedBlob, sanitizeFilename(filename))
@@ -563,48 +410,28 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
 // 获取歌单详情
 export const getPlaylistDetail = async (url) => {
   try {
-    const musicId = await extractIdFromUrl(url)
-    if (!musicId) {
+    const playlistId = await extractIdFromUrl(url)
+    if (!playlistId) {
       throw new Error('无法从链接中提取歌单ID')
     }
-    // 从原始链接中解析页码参数 p（如 ?p=2 或 &p=2），未提供则不传递 page 字段
-    const pageMatch = String(url).match(/[?&]p=(\d+)/)
-    const requestData = pageMatch
-      ? { id: musicId, page: parseInt(pageMatch[1], 10) }
-      : { id: musicId }
+
+    const result = await neteaseApi.getPlaylistDetail(playlistId)
     
-    const response = await fetchApi(buildApiUrl(`api/music/playlist`), requestData)
-    
-    if (response.data && response.data.code === 200) {
+    if (result.code === 200) {
       return {
         success: true,
-        data: response.data.data
+        data: result.playlist
       }
     } else {
       return {
         success: false,
-        error: response.data?.msg || '获取歌单信息失败'
+        error: result.message || '获取歌单信息失败'
       }
     }
   } catch (error) {
-    
-    if (error.message && error.message.includes('ERR_HTTP2_PROTOCOL_ERROR')) {
-      return {
-        success: false,
-        error: 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'
-      }
-    }
-    
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      return {
-        success: false,
-        error: 'API服务器无法连接，请检查网络连接或稍后重试'
-      }
-    }
-    
     return {
       success: false,
-      error: `网络请求失败: ${error.message || '未知错误'}，请稍后重试`
+      error: `网络请求失败: ${error.message || '未知错误'}`
     }
   }
 }
@@ -617,52 +444,23 @@ export const getAlbumDetail = async (url) => {
       throw new Error('无法从链接中提取专辑ID')
     }
     
-    const requestData = { id: albumId }
+    const result = await neteaseApi.getAlbumDetail(albumId)
     
-    const response = await fetchApi(buildApiUrl(`api/music/album`), requestData)
-    
-    if (response.data && response.data.code === 200) {
+    if (result.code === 200) {
       return {
         success: true,
-        data: response.data.data
+        data: result
       }
     } else {
       return {
         success: false,
-        error: response.data?.msg || '获取专辑信息失败'
+        error: result.message || '获取专辑信息失败'
       }
     }
   } catch (error) {
     return {
       success: false,
-      error: `网络请求失败: ${error.message || '未知错误'}，请稍后重试`
-    }
-  }
-}
-
-// 获取单首歌曲信息
-export const getMusicInfo = async (musicId) => {
-  try {
-    const endpoint = buildApiUrl(`api/getMusicInfo`)
-    const response = await fetchApi(endpoint, {
-      id: musicId
-    })
-    
-    if (response.data && response.data.code === 200) {
-      return {
-        success: true,
-        data: response.data.data
-      }
-    } else {
-      return {
-        success: false,
-        error: response.data?.msg || '获取歌曲信息失败'
-      }
-    }
-  } catch {
-    return {
-      success: false,
-      error: '网络请求失败'
+      error: `网络请求失败: ${error.message || '未知错误'}`
     }
   }
 }
@@ -670,16 +468,13 @@ export const getMusicInfo = async (musicId) => {
 // 搜索音乐
 export const searchMusic = async (keyword) => {
   try {
-    const response = await fetchApi(`netease/search`, {
-      keywords: keyword,
-      limit: 20
-    })
+    const songs = await neteaseApi.searchMusic(keyword)
     
-    if (response.data && response.data.result && response.data.result.songs) {
+    if (songs && songs.length > 0) {
       return {
         success: true,
         data: {
-          songs: response.data.result.songs.map(song => ({
+          songs: songs.map(song => ({
             id: song.id,
             name: song.name,
             artists: song.artists || [],
@@ -716,6 +511,5 @@ export default {
   downloadMusic,
   getPlaylistDetail,
   getAlbumDetail,
-  getMusicInfo,
   searchMusic
 }
