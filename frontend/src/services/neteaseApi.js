@@ -26,6 +26,7 @@ export class NeteaseAPI {
 
   /**
    * 发送 POST 请求
+   * 使用相对路径，通过Vite代理转发到Express服务器
    */
   async postRequest(url, data = {}, headers = {}) {
     const defaultHeaders = {
@@ -35,7 +36,10 @@ export class NeteaseAPI {
     }
 
     try {
-      const response = await fetch(url, {
+      // 使用相对路径，让Vite代理处理
+      const fullUrl = url.startsWith('/') ? url : `/${url}`
+
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: { ...defaultHeaders, ...headers },
         body: new URLSearchParams(data).toString(),
@@ -262,7 +266,7 @@ export class NeteaseAPI {
   async getSingleSongDetail(songId, cookies = {}) {
     try {
       const songDetail = await this.getSongDetail(songId)
-      const detail = songDetail.data?.[0]
+      const detail = songDetail.songs?.[0]
 
       if (!detail) {
         throw new APIException('未找到歌曲详情')

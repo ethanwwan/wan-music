@@ -205,7 +205,12 @@ export class CryptoUtils {
    */
   static async encryptParams(url, payload) {
     try {
-      const urlPath = new URL(url).pathname.replace('/eapi/', '/api/')
+      let urlPath
+      if (url.startsWith('http')) {
+        urlPath = new URL(url).pathname.replace('/eapi/', '/api/')
+      } else {
+        urlPath = url.replace('/eapi/', '/api/')
+      }
       const dataString = JSON.stringify(payload)
       
       const digest = await CryptoUtils.md5(`nobody${urlPath}use${dataString}md5forencrypt`)
@@ -229,14 +234,15 @@ export const APIConstants = {
   USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
   REFERER: 'https://music.163.com/',
 
-  SONG_URL_V1: '/api/netease/song/enhance/player/url/v1',
-  SONG_DETAIL_V3: '/api/song',
-  LYRIC_API: '/api/lyric',
-  SEARCH_API: '/api/search',
-  PLAYLIST_DETAIL_API: '/api/playlist',
-  ALBUM_DETAIL_API: '/api/album',
-  QR_UNIKEY_API: '/api/netease/login/qrcode/unikey',
-  QR_LOGIN_API: '/api/netease/login/qrcode/client/login',
+  // 网易云音乐真实API URL（Express服务器会直接访问这些）
+  SONG_URL_V1: '/eapi/song/enhance/player/url/v1',
+  SONG_DETAIL_V3: '/api/v3/song/detail',
+  LYRIC_API: '/api/song/lyric',
+  SEARCH_API: '/api/cloudsearch/pc',
+  PLAYLIST_DETAIL_API: '/api/v6/playlist/detail',
+  ALBUM_DETAIL_API: '/api/v1/album/',
+  QR_UNIKEY_API: '/eapi/login/qrcode/unikey',
+  QR_LOGIN_API: '/eapi/login/qrcode/client/login',
 
   DEFAULT_CONFIG: {
     os: 'pc',
@@ -249,7 +255,7 @@ export const APIConstants = {
     standard: 'standard',
     exhigh: 'exhigh',
     lossless: 'lossless',
-    hires: 'hires',
+    hires: ' hires',
     sky: 'sky',
     jyeffect: 'jyeffect',
     jymaster: 'jymaster',

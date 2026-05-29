@@ -6,7 +6,7 @@
 import { embedMetadata } from './metadataWriter.js'
 import { saveBlob, ensureBlobType, getMimeByExtension, sanitizeFilename } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
-import NeteaseAPI from './neteaseApi.js'
+import { NeteaseAPI } from './neteaseApi.js'
 
 const neteaseApi = new NeteaseAPI()
 
@@ -253,7 +253,7 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
       throw new Error(detailResult.message || '获取歌曲信息失败')
     }
 
-    const songData = detailResult.data?.[0]
+    const songData = detailResult.songs?.[0]
     if (!songData) {
       throw new Error('未找到歌曲详情')
     }

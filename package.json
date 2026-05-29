@@ -2,34 +2,24 @@
   "name": "wan-music",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "dev:lan": "vite --host 0.0.0.0 --port 5173",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node test-core.mjs",
-    "test:watch": "node --watch test-core.mjs",
-    "test:ui": "playwright test",
-    "test:ui:headed": "playwright test --headed",
-    "test:ui:debug": "playwright test --debug",
-    "test:install": "playwright install --with-deps"
-  },
-  "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
-    "@vueuse/core": "^10.7.0",
-    "axios": "^1.12.2",
-    "browser-id3-writer": "^6.3.1",
-    "element-plus": "^2.11.2",
-    "jszip": "^3.10.1",
-    "pinia": "^2.1.7",
-    "vue": "^3.5.18"
+    "dev": "npm run dev --workspace=frontend & npm run dev --workspace=backend",
+    "dev:api": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend",
+    "preview": "npm run preview --workspace=frontend",
+    "test": "npm run test --workspace=backend",
+    "test:watch": "npm run test:watch --workspace=backend",
+    "test:ui": "npm run test:ui --workspace=frontend",
+    "test:ui:headed": "npm run test:ui:headed --workspace=frontend",
+    "test:ui:debug": "npm run test:ui:debug --workspace=frontend",
+    "test:install": "npm run test:install --workspace=frontend"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@vitejs/plugin-vue": "^6.0.1",
-    "vite": "npm:rolldown-vite@latest",
-    "vite-plugin-compression": "^0.5.1",
-    "vite-plugin-compression2": "^2.2.1"
+    "concurrently": "^10.0.0"
   }
 }

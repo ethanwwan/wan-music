@@ -7,11 +7,9 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './frontend/src')
+      '@': path.resolve(__dirname, './src')
     }
   },
-  root: 'frontend',
-  publicDir: path.resolve(__dirname, 'frontend/public'),
   server: {
     host: '0.0.0.0',
     port: 5173,

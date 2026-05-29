@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification, ElLoading } from 'element-plus'
 import { Microphone, Moon, Sunny, Search, Link, VideoPlay, InfoFilled, Setting, User, Download, Document, Check, FolderOpened, Loading, List, Refresh, ElementPlus } from '@element-plus/icons-vue'
+import { ElSkeleton, ElAside } from 'element-plus'
 // 使用懒加载导入组件以减少初始包大小
 import MusicPlayer from './components/MusicPlayer.vue'
 import PlaylistDetail from './components/PlaylistDetail.vue'
@@ -26,7 +27,7 @@ import { getCurrentExampleLinks } from './utils/exampleData.js'
 // 本地组件状态
 const selectedQuality = ref('lossless') // 默认无损音质
 const showSettingsDialog = ref(false)
-const showWelcomeDialog = ref(false)
+const showWelcomeDialog = ref(false) // 默认关闭系统公告弹窗
  
  
 // 已移除极验弹窗相关状态
@@ -88,13 +89,13 @@ onMounted(() => {
   // 初始化主题（仅使用本地存储，不跟随系统）
   initThemeFromLocalStorage()
   
-  // 检查是否需要显示欢迎弹窗
-  setTimeout(() => {
-    const hasSeenWelcome = getCookie('hasSeenWelcome')
-    if (!hasSeenWelcome) {
-      showWelcomeDialog.value = true
-    }
-  }, 1000)
+  // 检查是否需要显示欢迎弹窗（已禁用默认不显示）
+  // setTimeout(() => {
+  //   const hasSeenWelcome = getCookie('hasSeenWelcome')
+  //   if (!hasSeenWelcome) {
+  //     showWelcomeDialog.value = true
+  //   }
+  // }, 1000)
 })
 
 // 切换视图
@@ -208,9 +209,8 @@ const computedPlaylistInfo = computed(() => {
         </div>
         
         <div class="header-right">
-          <el-button 
-            @click="showSettingsDialog = true" 
-            type="text" 
+          <el-button
+            @click="showSettingsDialog = true"
             class="settings-btn"
             :icon="Setting"
             circle
@@ -501,7 +501,7 @@ const computedPlaylistInfo = computed(() => {
                       <div class="example-name">{{ example.name }}</div>
                       <div class="example-artist">{{ currentView === 'playlist' ? example.creator : example.artist }}</div>
                     </div>
-                    <el-button type="text" size="small">使用</el-button>
+                    <el-button type="info" size="small">使用</el-button>
                   </div>
                 </div>
               </div>
@@ -612,7 +612,7 @@ const computedPlaylistInfo = computed(() => {
                       <div class="example-name">{{ example.name }}</div>
                       <div class="example-artist">{{ currentView === 'playlist' ? example.creator : example.artist }}</div>
                     </div>
-                    <el-button type="text" size="small">使用</el-button>
+                    <el-button type="info" size="small">使用</el-button>
                   </div>
                 </div>
               </div>
@@ -668,15 +668,15 @@ const computedPlaylistInfo = computed(() => {
         <div class="footer-info">
           <div class="footer-links">
             <el-space :size="20" wrap>
-              <el-link href="https://github.com/Suxiaoqinx/Netease_url" target="_blank" :underline="false">
+              <el-link href="https://github.com/Suxiaoqinx/Netease_url" target="_blank" underline="never">
                 <el-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"/></svg></el-icon>
                 GitHub
               </el-link>
-              <el-link href="https://music.163.com" target="_blank" :underline="false">
+              <el-link href="https://music.163.com" target="_blank" underline="never">
                 <el-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4c-2.93 1.346-5 5.046-5 8.492C4 17 8 20 12 20s8-3 8-7c0-3.513-3.5-5.513-6-5.513S9 9 9 12c0 2 1.5 3 3 3s3-1 3-3c0-3.513-2-4.508-2-6.515c0-3.504 3.5-2.603 4-1.502"/></svg></el-icon>
                 网易云音乐
               </el-link>
-              <el-link href="https://element-plus.org" target="_blank" :underline="false">
+              <el-link href="https://element-plus.org" target="_blank" underline="never">
                 <el-icon><ElementPlus /></el-icon>
                 Element Plus
               </el-link>
