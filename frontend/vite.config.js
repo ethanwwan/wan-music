@@ -27,7 +27,11 @@ export default defineConfig({
         changeOrigin: true
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/Song_V1': {
+        target: 'http://localhost:5002',
         changeOrigin: true
       }
     }
