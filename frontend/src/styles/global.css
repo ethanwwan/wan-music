@@ -1,4 +1,4 @@
-/* 全局主题变量与基础样式 */
+/* 全局主题变量与基础样式 - UI改版 */
 
 /* CSS 基础设置 */
 * {
@@ -9,7 +9,7 @@ html, body, #app {
 }
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -17,150 +17,238 @@ body {
 }
 
 :root {
-  --app-max-width: 1120px;
-  --app-radius: 10px;
-  --app-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
-  /* Element Plus 间距尺度（参考 8/12/16/20） */
+  /* 网易云主题色 */
+  --netease-red: #C20C0C;
+  --netease-red-light: #E53935;
+  --netease-red-dark: #A00A0A;
+
+  /* 应用主色调 */
+  --app-primary: var(--netease-red);
+  --app-primary-light: var(--netease-red-light);
+  --app-primary-dark: var(--netease-red-dark);
+
+  /* 应用布局 */
+  --app-max-width: 1200px;
+  --app-radius: 12px;
+  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* Element Plus 间距尺度 */
   --space-1: 8px;
   --space-2: 12px;
   --space-3: 16px;
   --space-4: 20px;
+  --space-5: 24px;
+
   /* 应用层统一间距与内边距（桌面默认） */
-  --app-padding-x: var(--space-3);
-  --app-gap: var(--space-3);
-  --app-header-bg: rgba(255, 255, 255, 0.45);
-  --app-bg: #f7f8fa;
+  --app-padding-x: var(--space-4);
+  --app-gap: var(--space-4);
+
+  /* 背景色 */
+  --app-bg: #F5F7FA;
+  --app-header-bg: rgba(255, 255, 255, 0.95);
+  --app-card-bg: #FFFFFF;
+
+  /* 文字颜色 */
+  --app-text-primary: #333333;
+  --app-text-secondary: #666666;
+  --app-text-muted: #999999;
+
+  /* 边框 */
+  --app-border-color: #E8E8E8;
 }
 
 .dark :root,
 .dark {
-  --app-header-bg: rgba(18, 18, 20, 0.55);
-  --app-bg: #0f1115;
+  --app-bg: #1A1A1A;
+  --app-header-bg: rgba(26, 26, 26, 0.95);
+  --app-card-bg: #242424;
+  --app-text-primary: #FFFFFF;
+  --app-text-secondary: #B3B3B3;
+  --app-text-muted: #808080;
+  --app-border-color: #333333;
+  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-/* 顶部吸顶与模糊背景 */
+/* 顶部导航栏 */
 .el-header.app-header {
   position: sticky;
   top: 0;
   z-index: 1000;
-  backdrop-filter: saturate(1.2) blur(10px);
-  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  backdrop-filter: saturate(1.2) blur(12px);
+  -webkit-backdrop-filter: saturate(1.2) blur(12px);
   background: var(--app-header-bg);
-  border-bottom: 1px solid var(--el-border-color-light);
+  border-bottom: 1px solid var(--app-border-color);
+  height: 64px !important;
+  line-height: 64px;
 }
 
-/* 布局：容器占满视口，使底部固定 */
+/* 容器布局 */
 .el-container.app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* 主内容最大宽度与内边距统一 */
+/* 主内容区域 */
 .el-main.app-main {
   max-width: var(--app-max-width);
   margin: 0 auto;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-5) var(--app-padding-x);
   flex: 1;
+  width: 100%;
 }
 
-/* 移动端变量与主内容间距统一（≤768px） */
+/* 移动端响应式 */
 @media (max-width: 768px) {
-  :root { 
-    --app-padding-x: var(--space-2); 
-    --app-gap: var(--space-2); 
+  :root {
+    --app-padding-x: var(--space-3);
+    --app-gap: var(--space-3);
   }
-  .el-main.app-main { 
-    padding: var(--space-2); 
+  .el-main.app-main {
+    padding: var(--space-3);
+  }
+  .el-header.app-header {
+    height: 56px !important;
+    line-height: 56px;
   }
 }
 
-/* 侧栏分隔与粘性（桌面端） */
-.el-aside.app-aside {
-  border-left: 1px solid var(--el-border-color-light);
-}
-
-/* 卡片统一圆角与阴影 */
+/* 卡片统一样式 */
 .el-card,
 .el-card.is-always-shadow,
 .el-card.is-hover-shadow {
   border-radius: var(--app-radius);
   box-shadow: var(--app-shadow);
+  border: none;
+  background: var(--app-card-bg);
 }
 
-/* 底部样式优化 */
+/* 主色调按钮 */
+.el-button--primary {
+  background-color: var(--app-primary) !important;
+  border-color: var(--app-primary) !important;
+}
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background-color: var(--app-primary-light) !important;
+  border-color: var(--app-primary-light) !important;
+}
+
+/* 导航按钮样式 */
+.nav-btn {
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+.nav-btn:hover {
+  background-color: rgba(194, 12, 12, 0.1);
+  color: var(--app-primary);
+}
+.nav-btn.active {
+  background-color: var(--app-primary);
+  color: white;
+}
+
+/* 播放器底部固定 */
 .el-footer.app-footer {
-  border-top: 1px solid var(--el-border-color-light);
-  background: var(--el-bg-color);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--app-border-color);
+  background: var(--app-card-bg);
+  z-index: 1000;
+  padding: 0;
 }
 
-/* 交互过渡 */
-.el-button,
-.el-card,
-.el-link {
-  transition: all .2s ease;
+/* 页面标题卡片 */
+.page-header-card {
+  text-align: center;
+  margin-bottom: var(--space-5);
+  padding: var(--space-5) var(--space-4);
 }
-.el-button:hover {
-  transform: translateY(-1px);
+.page-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+  margin: 0 0 var(--space-2) 0;
 }
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .el-main.app-main {
-    padding: var(--space-2);
-  }
-}
-
-/* 滚动条样式统一（全局） */
-/* Firefox 原生滚动条 */
-html, body, #app {
-  scrollbar-width: thin; /* auto | thin | none */
-  scrollbar-color: var(--el-text-color-disabled) transparent; /* thumb | track */
-  scrollbar-gutter: stable; /* 保持布局稳定，避免出现/消失导致抖动 */
+.page-description {
+  font-size: 14px;
+  color: var(--app-text-secondary);
+  margin: 0;
 }
 
-/* WebKit 原生滚动条（Chrome/Edge/新版本Safari） */
-/* 宽度与圆角 */
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* 功能模块卡片 */
+.module-card {
+  margin-bottom: var(--space-4);
 }
-*::-webkit-scrollbar-thumb {
-  background-color: var(--el-text-color-disabled);
-  border-radius: var(--app-radius);
-  border: 2px solid transparent; /* 形成内边距效果，避免太粘手 */
-  background-clip: content-box;
+.module-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* 悬停与活跃状态提升可见性 */
-@media (pointer: fine) {
-  *:hover::-webkit-scrollbar-thumb {
-    background-color: var(--el-color-primary-light-5);
-  }
+.module-title .el-icon {
+  color: var(--app-primary);
 }
 
-/* 深色模式适配 */
-.dark *::-webkit-scrollbar-thumb {
-  background-color: var(--el-text-color-disabled);
+/* 示例歌曲标签 */
+.example-tag {
+  margin: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
-.dark html, .dark body, .dark #app {
-  scrollbar-color: var(--el-text-color-disabled) transparent;
+.example-tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.2);
 }
 
-/* Element Plus 的 el-scrollbar 统一外观 */
-.el-scrollbar__bar.is-vertical {
-  width: 10px;
-}
-.el-scrollbar__bar.is-horizontal {
-  height: 10px;
-}
-.el-scrollbar__thumb {
-  background-color: var(--el-text-color-disabled);
+/* 输入框优化 */
+.el-input__wrapper {
   border-radius: var(--app-radius);
 }
-.dark .el-scrollbar__thumb {
-  background-color: var(--el-text-color-disabled);
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--app-primary) inset;
+}
+
+/* 加载动画 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* 表格样式优化 */
+.el-table {
+  border-radius: var(--app-radius);
+  overflow: hidden;
+}
+.el-table th {
+  background-color: var(--app-bg) !important;
+  font-weight: 600;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-text-muted);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-secondary);
 }
