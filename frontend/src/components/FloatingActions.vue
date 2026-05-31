@@ -74,7 +74,7 @@ onUnmounted(() => {
   height: 2.5rem;
   background: var(--color-surface-white);
   border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 0.25rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
@@ -85,15 +85,14 @@ onUnmounted(() => {
 
 .action-btn:hover {
   background: var(--color-surface-container);
-  transform: scale(0.95);
 }
 
 .action-btn:active {
-  transform: scale(0.9);
+  transform: scale(0.95);
 }
 
 .action-icon {
-  color: var(--color-text-muted);
-  font-size: 1.25rem;
+  color: var(--color-on-surface-variant);
+  font-size: 1.5rem;
 }
 </style>
