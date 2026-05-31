@@ -655,13 +655,13 @@ body {
 
 /* 设置抽屉样式 */
 .settings-drawer.el-drawer {
-  width: 300px !important;
-  max-width: 300px !important;
+  width: 420px !important;
+  max-width: 420px !important;
 }
 
 .settings-drawer .el-drawer__container {
-  width: 300px !important;
-  max-width: 300px !important;
+  width: 420px !important;
+  max-width: 420px !important;
 }
 
 
