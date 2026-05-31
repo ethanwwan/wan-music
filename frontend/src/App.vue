@@ -74,13 +74,7 @@
       <FloatingActions @open-settings="showSettingsDialog = true" />
 
       <!-- 设置对话框 -->
-      <el-dialog
-        v-model="showSettingsDialog"
-        title="设置"
-        width="500px"
-      >
-        <!-- 设置内容 -->
-      </el-dialog>
+      <SettingsDialog v-model="showSettingsDialog" />
     </el-container>
   </el-config-provider>
 </template>
@@ -97,6 +91,7 @@ import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
 import Footer from './components/Footer.vue'
 import FloatingActions from './components/FloatingActions.vue'
+import SettingsDialog from './components/SettingsDialog.vue'
 
 // 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
