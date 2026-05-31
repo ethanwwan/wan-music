@@ -126,15 +126,16 @@ const handleClose = () => {
 
 <style scoped>
 .settings-dialog {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  left: auto;
-  width: 450px;
-  margin: 0;
-  height: 100vh;
-  border-radius: 0;
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  left: auto !important;
+  width: 450px !important;
+  margin: 0 !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  transform: none !important;
 }
 
 .settings-dialog :deep(.el-dialog__header) {
