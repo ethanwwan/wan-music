@@ -2,7 +2,7 @@
   <el-drawer
     v-model="drawerVisible"
     title="设置"
-    :width="450"
+    :width="300"
     direction="rtl"
     :close-on-click-modal="true"
     :show-close="true"
