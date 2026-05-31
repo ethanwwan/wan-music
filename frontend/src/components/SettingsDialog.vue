@@ -2,35 +2,12 @@
   <el-dialog
     v-model="dialogVisible"
     title="设置"
-    width="500px"
+    width="450px"
     :close-on-click-modal="true"
     :show-close="true"
     class="settings-dialog"
   >
     <div class="settings-content">
-      <!-- UI布局设置 -->
-      <div class="setting-section">
-        <div class="section-title">
-          <el-icon><Setting /></el-icon>
-          <span>界面设置</span>
-        </div>
-        <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
-          <el-form-item label="PC端布局模式">
-            <el-select
-              v-model="settings.layoutMode"
-              @change="handleSave"
-              style="width: 160px;"
-            >
-              <el-option label="双栏" value="dual-column" />
-              <el-option label="单栏" value="single-column" />
-            </el-select>
-            <div class="form-item-hint">
-              <el-text type="info" size="small">仅在PC端生效；用于切换双栏或单栏布局</el-text>
-            </div>
-          </el-form-item>
-        </el-form>
-      </div>
-
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
@@ -119,7 +96,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Setting, Download, Link } from '@element-plus/icons-vue'
+import { Download, Link } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 
 const props = defineProps({
@@ -148,6 +125,33 @@ const handleClose = () => {
 </script>
 
 <style scoped>
+.settings-dialog {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: auto;
+  width: 450px;
+  margin: 0;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.settings-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-dialog :deep(.el-dialog__body) {
+  overflow-y: auto;
+  height: calc(100vh - 130px);
+  padding: 20px;
+}
+
+.settings-dialog :deep(.el-dialog__footer) {
+  border-top: 1px solid var(--color-border);
+  padding: 16px;
+}
+
 .settings-content {
   padding: 0;
 }
