@@ -9,6 +9,30 @@
     class="settings-drawer"
   >
     <div class="settings-content">
+      <!-- 主题设置 -->
+      <div class="setting-section">
+        <div class="section-title">
+          <el-icon><Palette /></el-icon>
+          <span>主题设置</span>
+        </div>
+        <div class="theme-options">
+          <div 
+            v-for="theme in themes" 
+            :key="theme.id"
+            class="theme-option"
+            :class="{ active: currentTheme === theme.id }"
+            @click="handleThemeChange(theme.id)"
+          >
+            <div class="theme-preview">
+              <div class="preview-primary" :style="{ background: theme.primary }"></div>
+              <div class="preview-secondary" :style="{ background: theme.secondary }"></div>
+              <div class="preview-accent" :style="{ background: theme.accent }"></div>
+            </div>
+            <span class="theme-name">{{ theme.name }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
@@ -90,10 +114,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Link } from '@element-plus/icons-vue'
+import { Download, Link, Palette } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
+import { isDark, toggleTheme, setTheme } from '../utils/themeManager.js'
 
 const props = defineProps({
   modelValue: {
@@ -108,6 +133,60 @@ const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
+
+const themes = [
+  {
+    id: 'light',
+    name: '简约白',
+    primary: '#0057c2',
+    secondary: '#f5f5f5',
+    accent: '#ffffff'
+  },
+  {
+    id: 'dark',
+    name: '深邃黑',
+    primary: '#1a1a1a',
+    secondary: '#2d2d2d',
+    accent: '#3d3d3d'
+  },
+  {
+    id: 'blue',
+    name: '海洋蓝',
+    primary: '#1e88e5',
+    secondary: '#e3f2fd',
+    accent: '#90caf9'
+  },
+  {
+    id: 'purple',
+    name: '优雅紫',
+    primary: '#7c4dff',
+    secondary: '#f3e5f5',
+    accent: '#ce93d8'
+  },
+  {
+    id: 'green',
+    name: '清新绿',
+    primary: '#43a047',
+    secondary: '#e8f5e9',
+    accent: '#81c784'
+  }
+]
+
+const currentTheme = computed(() => {
+  return isDark.value ? 'dark' : 'light'
+})
+
+const handleThemeChange = (themeId) => {
+  if (themeId === 'dark') {
+    setTheme('dark')
+  } else if (themeId === 'light') {
+    setTheme('light')
+  } else {
+    setTheme('light')
+    document.documentElement.style.setProperty('--color-primary', themes.find(t => t.id === themeId)?.primary || '#0057c2')
+  }
+  ElMessage.success('主题已切换')
+}
 
 const handleSave = () => {
   saveSettings()
@@ -179,5 +258,72 @@ const handleClose = () => {
 
 .form-item-hint {
   margin-top: 4px;
+}
+
+/* 主题选项样式 */
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--color-surface-container-low);
+}
+
+.theme-option:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.theme-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.theme-preview {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.preview-primary {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.preview-secondary {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.preview-accent {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 12px;
+}
+
+.theme-name {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  text-align: center;
+}
+
+.theme-option.active .theme-name {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 </style>
