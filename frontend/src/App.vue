@@ -70,6 +70,9 @@
       <!-- 底部组件 -->
       <Footer />
 
+      <!-- 浮动操作按钮 -->
+      <FloatingActions @open-settings="showSettingsDialog = true" />
+
       <!-- 设置对话框 -->
       <el-dialog
         v-model="showSettingsDialog"
@@ -93,6 +96,7 @@ import SystemNotice from './components/SystemNotice.vue'
 import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
 import Footer from './components/Footer.vue'
+import FloatingActions from './components/FloatingActions.vue'
 
 // 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
