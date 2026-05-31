@@ -125,34 +125,6 @@ const handleClose = () => {
 </script>
 
 <style scoped>
-.settings-dialog {
-  position: fixed !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  right: 0 !important;
-  left: auto !important;
-  width: 450px !important;
-  margin: 0 !important;
-  height: 100vh !important;
-  border-radius: 0 !important;
-  transform: none !important;
-}
-
-.settings-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.settings-dialog :deep(.el-dialog__body) {
-  overflow-y: auto;
-  height: calc(100vh - 130px);
-  padding: 20px;
-}
-
-.settings-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid var(--color-border);
-  padding: 16px;
-}
-
 .settings-content {
   padding: 0;
 }
@@ -201,9 +173,5 @@ const handleClose = () => {
 
 .form-item-hint {
   margin-top: 4px;
-}
-
-.dialog-footer {
-  text-align: center;
 }
 </style>
