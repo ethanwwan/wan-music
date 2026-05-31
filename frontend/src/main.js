@@ -69,7 +69,7 @@ import 'element-plus/es/components/tour/style/css'
 // 导入深色主题变量
 import 'element-plus/theme-chalk/dark/css-vars.css'
 
-// 全局样式与主题变量
+// 全局样式与主题变量（统一管理）
 import './styles/global.css'
 
 

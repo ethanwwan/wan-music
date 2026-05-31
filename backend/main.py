@@ -37,7 +37,7 @@ except ImportError as e:
 class APIConfig:
     """API配置类"""
     host: str = '0.0.0.0'
-    port: int = 5001
+    port: int = 5002
     debug: bool = True
     downloads_dir: str = 'downloads'
     max_file_size: int = 500 * 1024 * 1024  # 500MB

@@ -12,18 +12,18 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: 5175,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/eapi': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/weapi': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/health': {
@@ -31,6 +31,26 @@ export default defineConfig({
         changeOrigin: true
       },
       '/Song_V1': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/song': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/search': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/playlist': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/album': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/download': {
         target: 'http://localhost:5002',
         changeOrigin: true
       }

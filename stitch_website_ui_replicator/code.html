@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>网易云音乐解析工具 - 高效音乐解析服务</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#1b1b1b",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f9f9f9",
+                    "on-primary-fixed-variant": "#004398",
+                    "secondary-fixed": "#e2e2e2",
+                    "primary": "#0057c2",
+                    "surface-tint": "#0059c7",
+                    "on-secondary-fixed-variant": "#454747",
+                    "on-primary-container": "#fefcff",
+                    "tertiary-container": "#c64f00",
+                    "on-secondary": "#ffffff",
+                    "on-surface-variant": "#414755",
+                    "tertiary-fixed-dim": "#ffb695",
+                    "secondary-fixed-dim": "#c6c6c7",
+                    "surface-white": "#FFFFFF",
+                    "tertiary-fixed": "#ffdbcc",
+                    "secondary-container": "#dcdddd",
+                    "secondary": "#5d5f5f",
+                    "tertiary": "#9e3d00",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-primary": "#ffffff",
+                    "surface-variant": "#e2e2e2",
+                    "on-secondary-container": "#5f6161",
+                    "on-tertiary-fixed": "#351000",
+                    "on-error": "#ffffff",
+                    "on-tertiary-fixed-variant": "#7c2e00",
+                    "inverse-primary": "#afc6ff",
+                    "surface-dim": "#dadada",
+                    "surface-container-low": "#f3f3f3",
+                    "outline": "#727786",
+                    "text-muted": "#595959",
+                    "on-secondary-fixed": "#1a1c1c",
+                    "primary-fixed-dim": "#afc6ff",
+                    "on-tertiary": "#ffffff",
+                    "primary-fixed": "#d9e2ff",
+                    "surface-container-high": "#e8e8e8",
+                    "on-primary-fixed": "#001a43",
+                    "surface-container": "#eeeeee",
+                    "on-tertiary-container": "#fffbff",
+                    "on-background": "#1b1b1b",
+                    "surface-container-highest": "#e2e2e2",
+                    "inverse-surface": "#303030",
+                    "background": "#f9f9f9",
+                    "primary-container": "#006ef2",
+                    "border-subtle": "#E5E5E5",
+                    "error-container": "#ffdad6",
+                    "outline-variant": "#c1c6d7",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "surface-bright": "#f9f9f9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-desktop": "48px",
+                    "max-width": "1200px",
+                    "margin-mobile": "16px",
+                    "gutter": "24px",
+                    "unit": "4px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "label-caps": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-lg": ["36px", {"lineHeight": "1.2", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #F5F5F5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .tab-active {
+            border-color: #0057c2;
+            color: #0057c2;
+            background-color: #ebf5ff;
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .result-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: #595959;
+            font-weight: 500;
+        }
+        .result-table td {
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface flex flex-col items-center">
+<main class="flex-grow max-w-[1000px] mx-auto px-margin-mobile md:px-margin-desktop py-12 w-full flex flex-col" style="opacity: 1; transition: opacity 0.6s ease-out;">
+<!-- Hero Header -->
+<div class="text-center mb-10">
+<h1 class="font-headline-lg text-headline-lg mb-2">网易云音乐解析工具</h1>
+<p class="text-text-muted font-body-lg">实时解析网易云音乐单曲、获取真实下载地址及封面信息。</p>
+</div>
+<!-- System Notice -->
+<div class="bg-[#e7f3ff] border border-[#d1e9ff] rounded-lg p-4 mb-8 flex justify-between items-start" id="system-notice">
+<div class="flex gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="info">info</span>
+<div>
+<span class="font-bold text-primary block mb-1">系统公告</span>
+<p class="text-on-surface-variant text-sm">欢迎使用网易云音乐解析工具！如需反馈问题 请添加QQ群：1036593883</p>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-on-surface transition-colors" data-icon="close" onclick="document.getElementById('system-notice').style.display='none'">close</button>
+</div>
+<!-- Mode Navigation Tabs -->
+<nav class="grid grid-cols-5 gap-3 mb-8" id="mode-tabs">
+<button class="mode-tab px-4 py-3 rounded-lg border border-border-subtle bg-white font-semibold text-center transition-all tab-active" data-mode="single" onclick="switchMode('single')">单曲</button>
+<button class="mode-tab px-4 py-3 rounded-lg border border-border-subtle bg-white font-semibold text-center hover:bg-surface-container-low transition-all text-secondary" data-mode="album" onclick="switchMode('album')">专辑</button>
+<button class="mode-tab px-4 py-3 rounded-lg border border-border-subtle bg-white font-semibold text-center hover:bg-surface-container-low transition-all text-secondary" data-mode="lyrics" onclick="switchMode('lyrics')">歌单</button>
+<button class="mode-tab px-4 py-3 rounded-lg border border-border-subtle bg-white font-semibold text-center hover:bg-surface-container-low transition-all text-secondary" data-mode="search" onclick="switchMode('search')">搜索</button>
+<button class="mode-tab px-4 py-3 rounded-lg border border-border-subtle bg-white font-semibold text-center hover:bg-surface-container-low transition-all text-secondary" data-mode="charts" onclick="switchMode('charts')">榜单</button>
+</nav>
+<!-- Main Tool Card -->
+<div class="bg-surface-white border border-border-subtle rounded-xl shadow-sm p-8">
+<div class="flex justify-between items-start mb-6" id="input-header">
+<div>
+<h2 class="font-headline-md text-headline-md mb-1" id="input-title">输入歌曲 URL 或 ID</h2>
+<p class="text-text-muted text-body-md" id="input-desc">支持单曲分享链接或直接输入数字ID</p>
+</div>
+<div class="relative min-w-[140px]" id="quality-selector">
+<select class="w-full h-11 px-4 pr-10 rounded-lg border border-border-subtle focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none appearance-none bg-surface-white cursor-pointer font-body-md text-sm">
+<option>标准音质</option>
+<option>极高音质</option>
+<option>无损音质</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 pointer-events-none text-outline text-lg" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Charts Specific Select (Hidden by default) -->
+<div class="mb-4 hidden" id="charts-select-container">
+<div class="relative w-full">
+<select class="w-full h-12 px-6 pr-12 rounded-lg border border-primary/20 bg-primary/5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none appearance-none cursor-pointer text-body-md font-semibold text-primary">
+<option>飙升榜 (每天更新)</option>
+<option>新歌榜 (每天更新)</option>
+<option>原创榜 (每周四更新)</option>
+<option>热歌榜 (每周四更新)</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-3 pointer-events-none text-primary" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Standard Input Section -->
+<div id="standard-input-section">
+<div class="flex flex-col md:flex-row gap-4 mb-6">
+<div class="flex-grow relative">
+<input class="w-full h-12 px-6 pr-12 rounded-lg border border-border-subtle focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-body-md transition-all placeholder:text-[#8C8C8C]" id="main-input" placeholder="在此输入网易云音乐单曲链接或ID" type="text" value="66525"/>
+<button class="absolute right-4 top-3 text-outline hover:text-on-surface material-symbols-outlined" onclick="document.getElementById('main-input').value=''">close</button>
+</div>
+<button class="h-12 px-8 bg-primary text-white hover:opacity-90 active:scale-95 transition-all rounded-lg font-bold text-body-md shadow-sm">
+                    开始解析
+                </button>
+</div>
+<!-- Example Chips -->
+<div class="flex flex-wrap items-center gap-3" id="example-chips">
+<span class="text-text-muted text-sm mr-1">示例歌曲</span>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">九万字</button>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">孤勇者</button>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">句号</button>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">错位时空</button>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">悬溺</button>
+<button class="px-3 py-1 bg-surface-container border border-border-subtle rounded text-secondary hover:border-primary hover:text-primary transition-all text-xs">海阔天空</button>
+</div>
+<!-- History Section -->
+<div class="mt-6 pt-6 border-t border-border-subtle" id="history-section">
+<div class="flex justify-between items-center mb-3">
+<span class="text-text-muted text-xs">历史解析</span>
+<button class="text-text-muted text-xs hover:text-error transition-colors">清除历史</button>
+</div>
+<div class="flex flex-wrap gap-2">
+<button class="px-3 py-1 border border-primary/40 text-primary text-xs rounded hover:bg-primary/5">野花</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Results Display Area -->
+<div class="mt-8 bg-white border border-border-subtle rounded-xl shadow-sm overflow-hidden hidden" id="results-area">
+<div class="p-6 border-b border-border-subtle flex justify-between items-center">
+<div>
+<h3 class="font-headline-md text-lg" id="result-header-title">飙升榜</h3>
+<div class="flex items-center gap-3 mt-1">
+<span class="px-2 py-0.5 bg-blue-50 text-primary text-[10px] font-bold rounded" id="result-tag">榜单</span>
+<span class="text-text-muted text-xs" id="result-count">共 100 首歌曲</span>
+</div>
+</div>
+<button class="h-9 px-4 bg-primary text-white rounded-lg flex items-center gap-2 text-sm hover:opacity-90">
+<span class="material-symbols-outlined text-lg" data-icon="download">download</span>
+                    批量打包下载
+                </button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full result-table">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="w-16">序号</th>
+<th class="">歌名</th>
+<th class="">歌手</th>
+<th class="">专辑</th>
+<th class="text-center w-32">操作</th>
+</tr>
+</thead>
+<tbody id="result-tbody">
+<!-- Sample data row -->
+<tr>
+<td class="text-text-muted text-sm">1</td>
+<td class="">
+<div class="flex items-center gap-3">
+<img alt="cover" class="w-10 h-10 rounded shadow-sm object-cover" src="https://lh3.googleusercontent.com/aida-public/AIBO8L1n-WpM3489mK7_E6_v0-j92iYf16_9fE_r_n6_WkXyZ1_W16_9fE_r_n6_WkXyZ1_W16_9fE_r_n6_WkXyZ1"/>
+<span class="font-medium">有没有人告诉你</span>
+</div>
+</td>
+<td class="text-text-muted text-sm">陈楚生</td>
+<td class="text-text-muted text-sm">原来我一直都不孤单</td>
+<td class="text-center">
+<button class="px-3 py-1.5 border border-primary text-primary text-xs rounded-md hover:bg-primary/5 transition-colors">解析单曲</button>
+</td>
+</tr>
+<!-- More rows would be here -->
+</tbody>
+</table>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full mt-auto bg-transparent"><div class="max-w-[1000px] mx-auto px-margin-desktop text-center py-12 flex flex-col gap-1">
+<p class="text-secondary text-sm">© 2026 网易云解析工具. All rights reserved.</p>
+<p class="text-secondary text-sm">开源项目 | 仅供学习</p>
+<p class="text-secondary text-sm">Version 1.3.6 · 构建时间: 2026.5.24</p>
+</div></footer>
+<!-- Floating Actions -->
+<aside class="fixed right-6 bottom-8 flex flex-col gap-2 z-40">
+<button class="w-10 h-10 bg-white border border-border-subtle rounded shadow-sm flex items-center justify-center hover:bg-surface-container transition-all active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant text-xl" data-icon="help">help</span>
+</button>
+<button class="w-10 h-10 bg-white border border-border-subtle rounded shadow-sm flex items-center justify-center hover:bg-surface-container transition-all active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant text-xl" data-icon="favorite">favorite</span>
+</button>
+<button class="w-10 h-10 bg-white border border-border-subtle rounded shadow-sm flex items-center justify-center hover:bg-surface-container transition-all active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant text-xl" data-icon="refresh">refresh</span>
+</button>
+<button class="w-10 h-10 bg-white border border-border-subtle rounded shadow-sm flex items-center justify-center hover:bg-surface-container transition-all active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant text-xl" data-icon="settings">settings</span>
+</button>
+</aside>
+<script>
+        const modes = {
+            single: {
+                title: "输入歌曲 URL 或 ID",
+                desc: "支持单曲分享链接或直接输入数字ID",
+                placeholder: "在此输入网易云音乐单曲链接或ID",
+                showCharts: false,
+                showResults: false
+            },
+            album: {
+                title: "输入专辑 URL 或 ID",
+                desc: "支持专辑分享链接或直接输入数字ID",
+                placeholder: "在此输入网易云音乐专辑链接或ID",
+                showCharts: false,
+                showResults: false
+            },
+            lyrics: {
+                title: "输入歌单 URL 或 ID",
+                desc: "支持歌单分享链接或直接输入数字ID",
+                placeholder: "在此输入网易云音乐歌单链接或ID",
+                showCharts: false,
+                showResults: true,
+                resultTitle: '听陈楚生热门精选',
+                tag: '歌单',
+                count: '共 40 首歌曲'
+            },
+            search: {
+                title: "输入搜索关键词",
+                desc: "支持搜索歌曲、歌手、专辑等",
+                placeholder: "陈楚生",
+                showCharts: false,
+                showResults: true,
+                resultTitle: '搜索结果: "陈楚生"',
+                tag: '搜索',
+                count: '共 100 首歌曲'
+            },
+            charts: {
+                title: "选择官方榜单",
+                desc: "获取网易云官方实时排行榜数据",
+                placeholder: "搜索榜单内的歌曲...",
+                showCharts: true,
+                showResults: true,
+                resultTitle: '飙升榜',
+                tag: '榜单',
+                count: '共 100 首歌曲'
+            }
+        };
+
+        function switchMode(modeKey) {
+            const config = modes[modeKey];
+            
+            // Update tabs UI
+            document.querySelectorAll('.mode-tab').forEach(tab => {
+                tab.classList.remove('tab-active', 'text-primary');
+                tab.classList.add('text-secondary');
+            });
+            const activeTab = document.querySelector(`.mode-tab[data-mode="${modeKey}"]`);
+            activeTab.classList.add('tab-active');
+            activeTab.classList.remove('text-secondary');
+
+            // Update Header & Inputs visibility
+            const inputHeader = document.getElementById('input-header');
+            const standardInputSection = document.getElementById('standard-input-section');
+            const chartsSel = document.getElementById('charts-select-container');
+            const qualitySel = document.getElementById('quality-selector');
+
+            if (modeKey === 'charts') {
+                // Charts specific layout
+                inputHeader.classList.add('hidden');
+                standardInputSection.classList.add('hidden');
+                chartsSel.classList.remove('hidden');
+                // Results area should be right below
+                document.getElementById('results-area').classList.remove('mt-8');
+                document.getElementById('results-area').classList.add('mt-4');
+            } else {
+                // Standard layout
+                inputHeader.classList.remove('hidden');
+                standardInputSection.classList.remove('hidden');
+                chartsSel.classList.add('hidden');
+                document.getElementById('results-area').classList.remove('mt-4');
+                document.getElementById('results-area').classList.add('mt-8');
+                
+                document.getElementById('input-title').innerText = config.title;
+                document.getElementById('input-desc').innerText = config.desc;
+                document.getElementById('main-input').placeholder = config.placeholder;
+            }
+
+            // Show/Hide Results Area
+            const resultsArea = document.getElementById('results-area');
+            if(config.showResults) {
+                resultsArea.classList.remove('hidden');
+                document.getElementById('result-header-title').innerText = config.resultTitle;
+                document.getElementById('result-tag').innerText = config.tag;
+                document.getElementById('result-count').innerText = config.count;
+            } else {
+                resultsArea.classList.add('hidden');
+            }
+        }
+
+        window.onload = function() {
+            const main = document.querySelector('main');
+            main.style.opacity = '1';
+        };
+    </script>
+</body></html>

@@ -1,4 +1,90 @@
-/* 全局主题变量与基础样式 - 完美复制 wyapi.toubiec.cn 设计（基于真实CSS） */
+/* 全局主题变量与基础样式 - 基于 wyapi.toubiec.cn 设计 */
+
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ========================
+   主题变量定义
+======================== */
+:root {
+  /* Primary Colors */
+  --color-primary: #0057c2;
+  --color-primary-hover: #004398;
+  --color-primary-light: #ebf5ff;
+  --color-primary-dim: #afc6ff;
+
+  /* Surface Colors */
+  --color-surface: #f9f9f9;
+  --color-surface-white: #ffffff;
+  --color-surface-variant: #e2e2e2;
+  --color-surface-container: #eeeeee;
+  --color-surface-container-low: #f3f3f3;
+  --color-surface-container-high: #e8e8e8;
+  --color-surface-dim: #dadada;
+
+  /* Text Colors */
+  --color-on-surface: #1b1b1b;
+  --color-on-surface-variant: #414755;
+  --color-secondary: #5d5f5f;
+  --color-text-muted: #595959;
+  --color-outline: #727786;
+
+  /* Border Colors */
+  --color-border-subtle: #e5e5e5;
+  --color-outline-variant: #c1c6d7;
+
+  /* Background Colors */
+  --color-background: #f5f5f5;
+  --color-notice-bg: #e7f3ff;
+  --color-notice-border: #d1e9ff;
+
+  /* Typography */
+  --font-family: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Font Sizes */
+  --font-size-headline-lg: 36px;
+  --font-size-headline-md: 24px;
+  --font-size-body-lg: 18px;
+  --font-size-body-md: 16px;
+  --font-size-body-sm: 14px;
+  --font-size-label: 12px;
+
+  /* Line Heights */
+  --line-height-headline-lg: 1.2;
+  --line-height-headline-md: 1.3;
+  --line-height-body-lg: 1.6;
+  --line-height-body-md: 1.5;
+
+  /* Spacing */
+  --spacing-unit: 4px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  --spacing-3xl: 48px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Layout */
+  --max-width: 1000px;
+  --padding-mobile: 16px;
+  --padding-desktop: 48px;
+
+  /* Element Plus 主题色配置 */
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: var(--color-primary-light);
+  --el-color-primary-light-5: var(--color-primary-dim);
+  --el-color-primary-light-7: var(--color-primary-light);
+  --el-color-primary-light-8: var(--color-primary-light);
+  --el-color-primary-light-9: var(--color-primary-light);
+  --el-color-primary-dark-2: var(--color-primary-hover);
+}
+
 
 /* CSS 基础设置 */
 * {
@@ -10,23 +96,18 @@ html, body, #app {
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  background-color: #f0f2f5;
+  background-color: var(--color-background);
 }
 
 :root {
-  /* 网易云主题色 */
-  --netease-red: #C20C0C;
-  --netease-red-light: #E53935;
-  --netease-red-dark: #A00A0A;
-
-  /* 应用主色调 */
-  --app-primary: var(--netease-red);
-  --app-primary-light: var(--netease-red-light);
-  --app-primary-dark: var(--netease-red-dark);
+  /* 应用主色调 - 蓝色主题 */
+  --app-primary: var(--color-primary);
+  --app-primary-light: var(--color-primary-light);
+  --app-primary-dark: var(--color-primary-hover);
 
   /* 应用布局 - 真实值 */
   --app-max-width: 1250px;
@@ -166,21 +247,7 @@ body {
   border-color: var(--app-primary-light) !important;
 }
 
-/* 导航按钮样式 */
-.nav-btn {
-  font-weight: 500;
-  padding: 8px 16px;
-  border-radius: 20px;
-  transition: all 0.3s ease;
-}
-.nav-btn:hover {
-  background-color: rgba(194, 12, 12, 0.1);
-  color: var(--app-primary);
-}
-.nav-btn.active {
-  background-color: var(--app-primary);
-  color: white;
-}
+/* 导航按钮样式 - 已移至 NavTabs 组件中统一管理 */
 
 /* 播放器底部固定 */
 .el-footer.app-footer {
@@ -237,7 +304,7 @@ body {
 }
 .example-tag:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(194, 12, 12, 0.2);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 /* 输入框样式 */
@@ -245,7 +312,7 @@ body {
   border-radius: var(--app-radius);
 }
 .el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px var(--app-primary) inset;
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 /* 加载动画 */
@@ -343,7 +410,7 @@ body {
 
 .theme-btn:hover,
 .settings-btn:hover {
-  background: rgba(194, 12, 12, 0.1);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 /* 主内容布局 */
