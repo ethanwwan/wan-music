@@ -1,11 +1,12 @@
 <template>
-  <el-dialog
-    v-model="dialogVisible"
+  <el-drawer
+    v-model="drawerVisible"
     title="设置"
-    width="450px"
+    :width="450"
+    direction="rtl"
     :close-on-click-modal="true"
     :show-close="true"
-    class="settings-dialog"
+    class="settings-drawer"
   >
     <div class="settings-content">
       <!-- 下载设置 -->
@@ -85,12 +86,10 @@
         </el-form>
       </div>
     </div>
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button type="primary" @click="handleClose">完成</el-button>
-      </div>
-    </template>
-  </el-dialog>
+    <div class="drawer-footer">
+      <el-button type="primary" @click="handleClose">完成</el-button>
+    </div>
+  </el-drawer>
 </template>
 
 <script setup>
@@ -108,7 +107,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const dialogVisible = computed({
+const drawerVisible = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
@@ -120,13 +119,15 @@ const handleSave = () => {
 
 const handleClose = () => {
   handleSave()
-  dialogVisible.value = false
+  drawerVisible.value = false
 }
 </script>
 
 <style scoped>
 .settings-content {
-  padding: 0;
+  padding: 20px 0;
+  height: calc(100% - 100px);
+  overflow-y: auto;
 }
 
 .setting-section {
@@ -173,5 +174,16 @@ const handleClose = () => {
 
 .form-item-hint {
   margin-top: 4px;
+}
+
+.drawer-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  border-top: 1px solid var(--color-border-subtle);
+  text-align: center;
+  background: var(--color-surface-white);
 }
 </style>
