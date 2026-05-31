@@ -86,9 +86,6 @@
         </el-form>
       </div>
     </div>
-    <div class="drawer-footer">
-      <el-button type="primary" @click="handleClose">完成</el-button>
-    </div>
   </el-drawer>
 </template>
 
@@ -126,7 +123,7 @@ const handleClose = () => {
 <style scoped>
 .settings-content {
   padding: 20px 0;
-  height: calc(100% - 100px);
+  height: 100%;
   overflow-y: auto;
 }
 
@@ -174,16 +171,5 @@ const handleClose = () => {
 
 .form-item-hint {
   margin-top: 4px;
-}
-
-.drawer-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 16px;
-  border-top: 1px solid var(--color-border-subtle);
-  text-align: center;
-  background: var(--color-surface-white);
 }
 </style>
