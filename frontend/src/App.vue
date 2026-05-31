@@ -67,6 +67,9 @@
         </div>
       </el-main>
 
+      <!-- 底部组件 -->
+      <Footer />
+
       <!-- 设置对话框 -->
       <el-dialog
         v-model="showSettingsDialog"
@@ -89,6 +92,7 @@ import HeroHeader from './components/HeroHeader.vue'
 import SystemNotice from './components/SystemNotice.vue'
 import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
+import Footer from './components/Footer.vue'
 
 // 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
@@ -197,6 +201,8 @@ onUnmounted(() => {
 .app-container {
   min-height: 100vh;
   background: var(--color-background);
+  display: flex;
+  flex-direction: column;
 }
 
 .app-main {
