@@ -2,7 +2,7 @@
   <el-drawer
     v-model="drawerVisible"
     title="设置"
-    :width="300"
+    width="300px"
     direction="rtl"
     :close-on-click-modal="true"
     :show-close="true"
@@ -121,6 +121,14 @@ const handleClose = () => {
 </script>
 
 <style scoped>
+.settings-drawer {
+  width: 300px !important;
+}
+
+.settings-drawer :deep(.el-drawer) {
+  width: 300px !important;
+}
+
 .settings-content {
   padding: 20px 0;
   height: 100%;
