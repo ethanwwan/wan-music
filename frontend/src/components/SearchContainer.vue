@@ -6,16 +6,6 @@
         <h2 class="input-title">{{ title }}</h2>
         <p class="input-desc">{{ description }}</p>
       </div>
-      <div class="quality-select">
-        <el-select v-model="selectedQuality" placeholder="选择音质" size="default">
-          <el-option
-            v-for="option in qualityOptions"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-      </div>
     </div>
 
     <!-- 榜单选择器 -->
@@ -92,9 +82,10 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, watch } from 'vue'
+import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
 import { Link } from '@element-plus/icons-vue'
 import { getMockHistoryRecords } from '../utils/exampleData.js'
+import { settings, saveSettings } from '../utils/settingsManager.js'
 
 const props = defineProps({
   currentMode: {
@@ -113,10 +104,6 @@ const props = defineProps({
     type: String,
     default: '在此输入网易云音乐单曲链接或ID'
   },
-  qualityOptions: {
-    type: Array,
-    default: () => []
-  },
   exampleLinks: {
     type: Array,
     default: () => []
@@ -133,16 +120,23 @@ const props = defineProps({
 
 const emit = defineEmits([
   'parse',
-  'quality-change',
   'example-click',
   'chart-change',
   'history-click'
 ])
 
 const inputValue = ref('')
-const selectedQuality = ref('lossless')
 const selectedChart = ref('19723756')
 const historyRecords = ref([])
+
+// 从设置中读取音质，如果没有则使用默认值 'lossless'
+const selectedQuality = computed({
+  get: () => settings.selectedQuality || 'lossless',
+  set: (value) => {
+    settings.selectedQuality = value
+    saveSettings()
+  }
+})
 
 const loadHistoryRecords = (mode) => {
   // 榜单模式不显示历史记录
@@ -417,10 +411,6 @@ defineExpose({
   .input-header {
     flex-direction: column;
     gap: var(--spacing-lg);
-  }
-  
-  .quality-select {
-    width: 100%;
   }
   
   .main-card {

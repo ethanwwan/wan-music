@@ -31,12 +31,10 @@
           :title="getCurrentMode().title"
           :description="getCurrentMode().desc"
           :placeholder="getCurrentMode().placeholder"
-          :quality-options="qualityOptions"
           :example-links="exampleLinks"
           :example-title="getCurrentExampleTitle()"
           :loading="loading"
           @parse="handleParse"
-          @quality-change="handleQualityChange"
           @example-click="handleExampleClick"
           @chart-change="handleChartChange"
         />
@@ -60,7 +58,6 @@
             v-if="musicInfo"
             :music-info="musicInfo"
             :music-url="musicInfo.url"
-            :selected-quality="selectedQuality"
             @track-parsed="handleTrackParsed"
           />
         </div>
@@ -73,7 +70,9 @@
             :current-page="currentPage"
             :page-size="20"
             :total-tracks="totalTracks"
-            :selected-quality="selectedQuality"
+            :settings="settings"
+            @track-selected="handleTrackSelected"
+            @track-parsed="handleTrackParsed"
             @page-change="handlePageChange"
           />
         </div>
@@ -131,7 +130,6 @@ import { getCurrentExampleLinks, getExampleTitle } from './utils/exampleData.js'
 const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
-const selectedQuality = ref('lossless')
 const searchContainerRef = ref(null)
 
 // 模式配置 - 按顺序：1 搜索，2 单曲，3 歌单，4 专辑，5 榜单
@@ -142,12 +140,6 @@ const modes = [
   { key: 'album', label: '专辑', title: '输入专辑 URL 或 ID', desc: '支持专辑分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐专辑链接或ID' },
   { key: 'rank', label: '榜单', title: '选择官方榜单', desc: '获取网易云官方实时排行榜数据', placeholder: '' }
 ]
-
-// 音质选项
-const qualityOptions = Object.entries(QUALITY_LEVELS).map(([value, label]) => ({
-  value,
-  label
-}))
 
 // 示例链接 - 使用计算属性，随视图切换自动更新
 const exampleLinks = computed(() => {
@@ -182,14 +174,11 @@ const handleViewChange = (view) => {
   }
 }
 
-const handleParse = async ({ url, quality }) => {
+const handleParse = async ({ url }) => {
   musicUrl.value = url
-  selectedQuality.value = quality
+  // 从设置中读取音质
+  const quality = settings.selectedQuality || 'lossless'
   await parseMusic(quality, currentView.value)
-}
-
-const handleQualityChange = (quality) => {
-  selectedQuality.value = quality
 }
 
 const handleExampleClick = (link) => {
@@ -208,7 +197,8 @@ const handlePageChange = (page) => {
 const handleParseSong = (song) => {
   currentView.value = 'music'
   musicUrl.value = `https://music.163.com/song?id=${song.id}`
-  parseMusic(selectedQuality.value, 'music')
+  const quality = settings.selectedQuality || 'lossless'
+  parseMusic(quality, 'music')
 }
 
 const handleParsePlaylist = (playlist) => {
@@ -228,6 +218,11 @@ const handleTrackParsed = async (data) => {
   if (searchContainerRef.value && data && data.name) {
     searchContainerRef.value.addHistoryRecord(data.name)
   }
+}
+
+const handleTrackSelected = (track) => {
+  console.log('Track selected:', track)
+  // 这里可以添加选择歌曲后的逻辑，比如自动播放等
 }
 
 // 生命周期

@@ -44,7 +44,29 @@
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ detailTracks.length }} 首歌曲</span>
             </div>
+            <!-- 下载进度条 -->
+            <div v-if="downloadProgress.isDownloading" class="download-progress-bar">
+              <el-progress 
+                :percentage="downloadProgress.percentage" 
+                :status="downloadProgress.status"
+                :stroke-width="6"
+              />
+              <div class="progress-info">
+                <span class="current-song">正在下载：{{ downloadProgress.currentSong || '准备中...' }}</span>
+                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }}</span>
+              </div>
+            </div>
           </div>
+        </div>
+        <div class="header-right">
+          <el-button 
+            type="primary" 
+            @click="handleBatchDownload" 
+            :disabled="downloadProgress.isDownloading"
+            :loading="downloadProgress.isDownloading"
+          >
+            {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
+          </el-button>
         </div>
       </div>
 
@@ -133,7 +155,7 @@
     </div>
 
     <!-- 歌单卡片展示 -->
-    <div v-if="playlists.length > 0 && !currentDetail" class="playlist-grid">
+    <div v-if="displayMode === 'playlist' && !currentDetail" class="playlist-grid">
       <div 
         v-for="playlist in currentPageData" 
         :key="playlist.id" 
@@ -164,7 +186,7 @@
     </div>
 
     <!-- 专辑卡片展示 -->
-    <div v-if="albums.length > 0 && !currentDetail" class="album-grid">
+    <div v-if="displayMode === 'album' && !currentDetail" class="album-grid">
       <div 
         v-for="album in currentPageData" 
         :key="album.id" 
@@ -196,7 +218,7 @@
 
     <!-- 分页组件（歌单和专辑搜索结果） -->
     <div 
-      v-if="((playlists.length > 0 || albums.length > 0) && !currentDetail && totalPages > 1)" 
+      v-if="(displayMode === 'playlist' || displayMode === 'album') && !currentDetail && totalPages > 1" 
       class="pagination-container"
     >
       <div class="pagination">
@@ -237,7 +259,7 @@
     </div>
 
     <!-- 歌曲列表展示 -->
-    <div v-if="songs.length > 0 && !currentDetail" class="song-list-container">
+    <div v-if="displayMode === 'search' && !currentDetail" class="song-list-container">
       <div class="song-table-wrapper">
         <table class="song-table">
           <thead>
@@ -281,8 +303,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { ElButton, ElMessage, ElNotification } from 'element-plus'
+import { ref, computed, watch } from 'vue'
+import { ElButton, ElMessage, ElNotification, ElProgress } from 'element-plus'
+import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
+import { settings } from '../utils/settingsManager.js'
 
 const props = defineProps({
   songs: {
@@ -313,6 +337,17 @@ const detailTracks = ref([])
 const currentDetailPage = ref(1)
 const detailPageSize = ref(10)
 
+// 下载进度状态
+const downloadProgress = ref({
+  isDownloading: false,
+  percentage: 0,
+  status: '',
+  currentSong: '',
+  total: 0,
+  completed: 0,
+  failed: 0
+})
+
 // 缓存存储（歌单和专辑）
 const cache = ref({
   playlist: {},
@@ -323,7 +358,24 @@ const cache = ref({
 const currentPage = ref(1)
 const pageSize = ref(12) // 4列 * 3行 = 12个卡片
 
+// 监听模式变化，切换时重置分页和详情状态
+watch(() => props.currentMode, () => {
+  // 重置分页
+  currentPage.value = 1
+  currentDetailPage.value = 1
+  
+  // 清除详情页状态
+  currentDetail.value = null
+  detailTracks.value = []
+})
+
 const displayMode = computed(() => {
+  // 根据 currentMode 优先显示对应类型的结果
+  if (props.currentMode === 'playlist' && props.playlists.length > 0) return 'playlist'
+  if (props.currentMode === 'album' && props.albums.length > 0) return 'album'
+  if (props.currentMode === 'search' && props.songs.length > 0) return 'search'
+  
+  // 如果没有匹配的模式，则根据数据存在情况显示
   if (props.playlists.length > 0) return 'playlist'
   if (props.albums.length > 0) return 'album'
   if (props.songs.length > 0) return 'search'
@@ -652,6 +704,90 @@ const handleParse = async (item, type) => {
 const goBack = () => {
   currentDetail.value = null
   detailTracks.value = []
+}
+
+// 批量下载
+const handleBatchDownload = async () => {
+  if (!detailTracks.value || detailTracks.value.length === 0) {
+    ElMessage.warning('没有可下载的歌曲')
+    return
+  }
+
+  try {
+    // 重置进度状态
+    downloadProgress.value = {
+      isDownloading: true,
+      percentage: 0,
+      status: '',
+      currentSong: '',
+      total: detailTracks.value.length,
+      completed: 0,
+      failed: 0
+    }
+
+    ElMessage.info(`开始批量下载 ${detailTracks.value.length} 首歌曲...`)
+
+    // 准备音乐列表，需要先解析每首歌的信息
+    const musicList = []
+    for (const track of detailTracks.value) {
+      try {
+        // 将歌曲ID转换为URL格式
+        const songUrl = `https://music.163.com/song?id=${track.id}`
+        
+        // 解析歌曲信息
+        const musicInfo = await parseMusicInfo(songUrl, 'lossless')
+        if (musicInfo && musicInfo.url) {
+          musicList.push({
+            id: track.id,
+            name: track.name,
+            artist: getArtist(track),
+            album: getAlbum(track),
+            url: musicInfo.url,
+            cover: getTrackCover(track),
+            lrc: musicInfo.lrc || '',
+            fileExtension: musicInfo.fileExtension || '.mp3'
+          })
+        }
+      } catch (err) {
+        console.error(`解析歌曲失败: ${track.name}`, err)
+      }
+    }
+
+    if (musicList.length === 0) {
+      throw new Error('没有成功解析的歌曲')
+    }
+
+    // 执行批量下载
+    const result = await batchDownloadMusic(
+      musicList,
+      currentDetail.value?.name || '', // 传递歌单/专辑名称作为 ZIP 文件名
+      {
+        filenameFormat: settings.filenameFormat || 'artist-song',
+        writeMetadata: settings.writeMetadata !== false // 默认开启，除非明确设置为 false
+      },
+      (progress) => {
+        downloadProgress.value.percentage = progress.percentage
+        downloadProgress.value.currentSong = progress.current
+        downloadProgress.value.completed = progress.completed
+        downloadProgress.value.failed = progress.failed
+      }
+    )
+
+    // 下载完成
+    downloadProgress.value.isDownloading = false
+    downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
+
+    if (result.failed === 0) {
+      ElMessage.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
+    } else {
+      ElMessage.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
+    }
+
+  } catch (error) {
+    downloadProgress.value.isDownloading = false
+    downloadProgress.value.status = 'exception'
+    ElMessage.error(`批量下载失败: ${error.message}`)
+  }
 }
 
 const getTrackCover = (track) => {
@@ -1124,6 +1260,40 @@ const getAlbum = (track) => {
 
 .meta-separator {
   color: var(--color-outline);
+}
+
+.header-right {
+  flex-shrink: 0;
+}
+
+/* 下载进度条 */
+.download-progress-bar {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 13px;
+}
+
+.current-song {
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-text {
+  color: var(--color-primary);
+  font-weight: 600;
+  margin-left: 1rem;
+  flex-shrink: 0;
 }
 
 /* 详情页面歌曲表格 */

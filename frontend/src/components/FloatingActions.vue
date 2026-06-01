@@ -1,7 +1,11 @@
 <template>
   <aside class="floating-actions">
     <!-- 切换主题 -->
-    <button class="action-btn" @click="handleToggleTheme" :title="isDark ? '切换亮色主题' : '切换深色主题'">
+    <button 
+      class="action-btn" 
+      @click="handleToggleTheme" 
+      :title="isDark ? '切换亮色主题' : '切换深色主题'"
+    >
       <component :is="isDark ? Sunny : Moon" class="action-icon" />
     </button>
     <!-- 回到顶部 -->
@@ -14,7 +18,11 @@
       <ArrowUp class="action-icon" />
     </button>
     <!-- 设置 -->
-    <button class="action-btn" @click="handleOpenSettings" title="设置">
+    <button 
+      class="action-btn" 
+      @click="handleOpenSettings" 
+      title="设置"
+    >
       <Setting class="action-icon" />
     </button>
   </aside>
@@ -72,8 +80,8 @@ onUnmounted(() => {
 .action-btn {
   width: 2.5rem;
   height: 2.5rem;
-  background: var(--color-surface-white);
-  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-white, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e5e5e5);
   border-radius: 0.25rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   display: flex;
@@ -81,10 +89,12 @@ onUnmounted(() => {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .action-btn:hover {
-  background: var(--color-surface-container);
+  background: var(--color-surface-container, #eeeeee);
+  border-color: var(--color-border-subtle, #e5e5e5);
 }
 
 .action-btn:active {
@@ -92,7 +102,9 @@ onUnmounted(() => {
 }
 
 .action-icon {
-  color: var(--color-on-surface-variant);
-  font-size: 1.5rem;
+  color: var(--color-on-surface-variant, #414755);
+  font-size: 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 </style>

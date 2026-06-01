@@ -33,6 +33,34 @@
         </div>
       </div>
 
+      <!-- 音质设置 -->
+      <div class="setting-section">
+        <div class="section-title">
+          <el-icon><Headset /></el-icon>
+          <span>音质设置</span>
+        </div>
+        <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
+          <el-form-item label="默认音质">
+            <el-select
+              v-model="settings.selectedQuality"
+              @change="handleSave"
+              style="width: 160px"
+            >
+              <el-option label="标准 (128kbps)" value="standard" />
+              <el-option label="极高 (320kbps)" value="exhigh" />
+              <el-option label="无损 (FLAC)" value="lossless" />
+              <el-option label="Hi-Res (FLAC 24bit)" value="hires" />
+              <el-option label="沉浸 (Dolby Atmos)" value="sky" />
+              <el-option label="环绕 (Sony 360RA)" value="jyeffect" />
+              <el-option label="母带 (FLAC 24bit/96kHz)" value="jymaster" />
+            </el-select>
+            <div class="form-item-hint">
+              <el-text type="info" size="small">解析和下载时使用的默认音质（默认：无损）</el-text>
+            </div>
+          </el-form-item>
+        </el-form>
+      </div>
+
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
@@ -63,29 +91,7 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">写入歌曲名、歌手、专辑、封面等信息</el-text>
-            </div>
-          </el-form-item>
-
-          <el-form-item label="启用ZIP打包">
-            <el-switch
-              v-model="settings.zipDownload"
-              @change="handleSave"
-            />
-            <div class="form-item-hint">
-              <el-text type="info" size="small">打包音频、歌词、封面等为一个压缩包</el-text>
-            </div>
-          </el-form-item>
-
-          <el-form-item label="歌词格式">
-            <el-switch
-              v-model="settings.srtLyricsDownload"
-              @change="handleSave"
-              active-text="SRT"
-              inactive-text="LRC"
-            />
-            <div class="form-item-hint">
-              <el-text type="info" size="small">开启为 SRT 字幕；关闭为 LRC 歌词</el-text>
+              <el-text type="info" size="small">写入歌曲名、歌手、专辑、封面等信息（默认开启）</el-text>
             </div>
           </el-form-item>
         </el-form>
@@ -98,13 +104,13 @@
           <span>解析配置</span>
         </div>
         <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
-          <el-form-item label="启用链接缓存">
+          <el-form-item label="启用缓存">
             <el-switch
-              v-model="settings.enableUrlCache"
+              v-model="settings.enableCache"
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">减少重复解析，提升相同歌曲再次播放速度</el-text>
+              <el-text type="info" size="small">减少重复搜索和解析，提升相同内容再次访问速度（默认开启）</el-text>
             </div>
           </el-form-item>
         </el-form>
@@ -116,7 +122,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Link, Brush } from '@element-plus/icons-vue'
+import { Download, Link, Brush, Headset } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme } from '../utils/themeManager.js'
 

@@ -3,13 +3,15 @@ import { reactive } from 'vue'
 // 默认设置
 export const defaultSettings = {
   filenameFormat: 'song-artist', // song-artist, artist-song, song
-  writeMetadata: false, // 是否写入元数据
-  zipDownload: false, // 是否压缩下载
-  srtLyricsDownload: false, // 是否下载SRT歌词（否则下载LRC）
+  writeMetadata: true, // 是否写入元数据（默认开启）
+  zipDownload: false, // 是否压缩下载（已移除，批量下载始终打包为ZIP）
+  srtLyricsDownload: false, // 歌词格式（已移除，统一使用LRC）
   layoutMode: 'single-column', // 布局模式: dual-column, single-column
   // 播放链接缓存设置
-  enableUrlCache: false, // 是否启用播放链接缓存
-  urlCacheTTLMinutes: 15, // 缓存时间（分钟） 
+  enableCache: true, // 是否启用缓存（默认开启）
+  cacheTTLMinutes: 15, // 缓存时间（分钟） 
+  // 音质设置
+  selectedQuality: 'lossless', // 默认音质：无损
   // 极验验证码设置已移除
 }
 
@@ -22,11 +24,53 @@ export const settings = reactive({ ...defaultSettings })
 export const loadSettings = () => {
   try {
     const savedSettings = localStorage.getItem('app-settings')
+    console.log('[Settings] 加载设置, localStorage:', savedSettings)
+    
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings)
+      console.log('[Settings] 解析后的设置:', parsed)
+      
+      // 合并默认值和保存的值
       Object.assign(settings, { ...defaultSettings, ...parsed })
+      console.log('[Settings] 合并后的设置:', settings)
+      
+      // 迁移逻辑：根据新的产品需求，强制某些设置为默认值
+      let hasChanges = false
+      
+      // writeMetadata 必须默认为 true（产品需求：自动写入元数据默认开启）
+      if (settings.writeMetadata !== defaultSettings.writeMetadata) {
+        console.log(`[Settings] 迁移: writeMetadata 从 ${settings.writeMetadata} 改为 ${defaultSettings.writeMetadata}`)
+        settings.writeMetadata = defaultSettings.writeMetadata
+        hasChanges = true
+      }
+      
+      // enableCache 必须默认为 true
+      if (settings.enableCache !== defaultSettings.enableCache) {
+        console.log(`[Settings] 迁移: enableCache 从 ${settings.enableCache} 改为 ${defaultSettings.enableCache}`)
+        settings.enableCache = defaultSettings.enableCache
+        hasChanges = true
+      }
+      
+      // selectedQuality 必须有值且有效
+      if (!settings.selectedQuality || settings.selectedQuality !== defaultSettings.selectedQuality) {
+        console.log(`[Settings] 迁移: selectedQuality 从 ${settings.selectedQuality} 改为 ${defaultSettings.selectedQuality}`)
+        settings.selectedQuality = defaultSettings.selectedQuality
+        hasChanges = true
+      }
+      
+      // 如果有变更，立即保存
+      if (hasChanges) {
+        saveSettings()
+        console.log('[Settings] 已保存迁移后的设置')
+      }
+    } else {
+      // 没有保存的设置，使用默认值
+      Object.assign(settings, defaultSettings)
+      saveSettings()
+      console.log('[Settings] 无保存的设置，使用默认值:', settings)
     }
-  } catch {
+  } catch (error) {
+    console.error('[Settings] 加载设置失败:', error)
     Object.assign(settings, defaultSettings)
   }
 }

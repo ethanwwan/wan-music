@@ -727,6 +727,241 @@ def api_info():
         return APIResponse.error(f"获取API信息失败: {str(e)}", 500)
 
 
+@app.route('/api/v3/song/detail', methods=['POST'])
+def proxy_song_detail():
+    """代理歌曲详情API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/api/v3/song/detail',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理歌曲详情失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/api/song/lyric', methods=['POST'])
+def proxy_lyric():
+    """代理歌词API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        cookies = api_service._get_cookies()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/api/song/lyric',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理歌词失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/eapi/song/enhance/player/url/v1', methods=['POST'])
+def proxy_song_url():
+    """代理歌曲URL API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        cookies = api_service._get_cookies()
+        
+        api_service.logger.info(f"代理EAPI请求 - 数据: {data}")
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/eapi/song/enhance/player/url/v1',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        api_service.logger.info(f"EAPI响应状态: {response.status_code}, 响应长度: {len(response.text)}")
+        
+        # 检查响应是否为空或无效
+        if not response.text or len(response.text.strip()) == 0:
+            api_service.logger.error("EAPI返回空响应")
+            return APIResponse.error("获取歌曲URL失败：服务器返回空响应", 500)
+        
+        # 尝试解析JSON以验证有效性
+        try:
+            response_json = response.json()
+            api_service.logger.info(f"EAPI响应成功解析为JSON")
+        except Exception as json_err:
+            api_service.logger.warning(f"EAPI响应不是有效JSON: {json_err}")
+            api_service.logger.warning(f"响应内容前100字符: {response.text[:100]}")
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理歌曲URL失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/api/v6/playlist/detail', methods=['POST'])
+def proxy_playlist_detail():
+    """代理歌单详情API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        cookies = api_service._get_cookies()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/api/v6/playlist/detail',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理歌单详情失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/api/v1/album/<album_id>', methods=['GET', 'POST'])
+def proxy_album_detail(album_id):
+    """代理专辑详情API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        cookies = api_service._get_cookies()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            f'https://interface3.music.163.com/api/v1/album/{album_id}',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理专辑详情失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/eapi/login/qrcode/unikey', methods=['POST'])
+def proxy_qr_unikey():
+    """代理二维码登录获取unikey API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/eapi/login/qrcode/unikey',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理二维码unikey失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
+@app.route('/eapi/login/qrcode/client/login', methods=['POST'])
+def proxy_qr_login():
+    """代理二维码登录状态检查 API"""
+    try:
+        import requests as req
+        data = api_service._safe_get_request_data()
+        
+        # 转发请求到网易云音乐
+        response = req.post(
+            'https://interface3.music.163.com/eapi/login/qrcode/client/login',
+            data=data,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout=10
+        )
+        
+        return app.response_class(
+            response=response.text,
+            status=response.status_code,
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        api_service.logger.error(f"代理二维码登录失败: {e}")
+        return APIResponse.error(f"代理失败: {str(e)}", 500)
+
+
 def start_api_server():
     """启动API服务器"""
     try:

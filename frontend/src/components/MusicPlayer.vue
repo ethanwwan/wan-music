@@ -104,6 +104,12 @@ const getFormattedFilename = (songName, artistName, extension) => {
 
 // 解析歌词时间戳和文本
 const lrctrim = (lyrics) => {
+  // 确保 lyrics 是字符串
+  if (!lyrics || typeof lyrics !== 'string') {
+    console.warn('lrctrim: lyrics is not a string', lyrics);
+    return [];
+  }
+  
   const lines = lyrics.split('\n');
   const data = [];
 
@@ -159,8 +165,15 @@ const lrctran = (lyric, tlyric) => {
 
 // 兼容旧函数名
 const mergeLyrics = (originalLrc, translationLrc) => {
-  if (!originalLrc) return '';
-  if (!translationLrc) return originalLrc;
+  // 确保参数是字符串
+  if (!originalLrc || typeof originalLrc !== 'string') {
+    console.warn('mergeLyrics: originalLrc is not a valid string', originalLrc);
+    return '';
+  }
+  if (!translationLrc || typeof translationLrc !== 'string') {
+    console.warn('mergeLyrics: translationLrc is not a valid string', translationLrc);
+    return originalLrc;
+  }
   return lrctran(originalLrc, translationLrc);
 };
 

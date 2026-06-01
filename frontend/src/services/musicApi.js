@@ -10,6 +10,54 @@ import { NeteaseAPI } from './neteaseApi.js'
 
 const neteaseApi = new NeteaseAPI()
 
+// 搜索缓存
+const searchCache = {
+  music: new Map(),
+  playlist: new Map(),
+  album: new Map()
+}
+
+// 检查缓存是否有效
+const isCacheValid = (cacheEntry, ttlMinutes) => {
+  if (!cacheEntry) return false
+  const now = Date.now()
+  const cacheTime = cacheEntry.timestamp
+  return (now - cacheTime) < (ttlMinutes * 60 * 1000)
+}
+
+// 获取缓存数据
+const getCachedSearchResult = (type, keyword) => {
+  if (!settings.enableCache) return null
+  
+  const cache = searchCache[type]
+  if (!cache) return null
+  
+  const cached = cache.get(keyword)
+  if (isCacheValid(cached, settings.cacheTTLMinutes || 15)) {
+    console.log(`使用缓存的${type}搜索结果: ${keyword}`)
+    return cached.data
+  }
+  
+  // 缓存过期，删除
+  if (cached) {
+    cache.delete(keyword)
+  }
+  return null
+}
+
+// 设置缓存数据
+const setCachedSearchResult = (type, keyword, data) => {
+  if (!settings.enableCache) return
+  
+  const cache = searchCache[type]
+  if (!cache) return
+  
+  cache.set(keyword, {
+    data,
+    timestamp: Date.now()
+  })
+}
+
 /**
  * @typedef {Object} MusicInfo
  * @property {string} id - 歌曲ID
@@ -217,13 +265,22 @@ export const getMusicUrl = async (musicId, quality = 'lossless', options = {}) =
   }
 
   try {
-    const result = await neteaseApi.getSongUrl(musicId, quality)
+    // 使用后端 /song 接口而不是直接调用 EAPI
+    const response = await fetch('/song', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `ids=${musicId}&level=${quality}&type=url`
+    })
     
-    if (result.code !== 200) {
+    const result = await response.json()
+    
+    if (!result.success) {
       throw new Error(result.message || '获取音乐链接失败')
     }
 
-    const urlData = result.data?.[0]
+    const urlData = result.data
     if (!urlData || !urlData.url) {
       throw new Error('该音质的音乐链接不可用')
     }
@@ -311,10 +368,24 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
     try {
       const lyricsResult = await neteaseApi.getLyric(musicId)
       if (lyricsResult.code === 200 && lyricsResult.lrc) {
-        musicInfo.lrc = lyricsResult.lrc
-        musicInfo.tlyric = lyricsResult.tlyric || ''
-        musicInfo.romalrc = lyricsResult.romalrc || ''
-        musicInfo.klyric = lyricsResult.klyric || ''
+        // 确保 lrc 是字符串格式
+        musicInfo.lrc = typeof lyricsResult.lrc === 'string' 
+          ? lyricsResult.lrc 
+          : (lyricsResult.lrc.lyric || '')
+        
+        // 确保 tlyric 是字符串格式
+        musicInfo.tlyric = typeof lyricsResult.tlyric === 'string'
+          ? lyricsResult.tlyric
+          : (lyricsResult.tlyric?.lyric || '')
+        
+        // 其他歌词类型也做同样处理
+        musicInfo.romalrc = typeof lyricsResult.romalrc === 'string'
+          ? lyricsResult.romalrc
+          : (lyricsResult.romalrc?.lyric || '')
+        
+        musicInfo.klyric = typeof lyricsResult.klyric === 'string'
+          ? lyricsResult.klyric
+          : (lyricsResult.klyric?.lyric || '')
       }
     } catch {
       // 歌词获取失败不影响主功能
@@ -484,6 +555,12 @@ export const getAlbumDetail = async (url) => {
 // 搜索音乐
 export const searchMusic = async (keyword) => {
   try {
+    // 检查缓存
+    const cached = getCachedSearchResult('music', keyword)
+    if (cached) {
+      return { success: true, data: cached }
+    }
+
     const response = await fetch('/search', {
       method: 'POST',
       headers: {
@@ -495,17 +572,22 @@ export const searchMusic = async (keyword) => {
     const result = await response.json()
     
     if (result.success && result.data) {
+      const searchData = {
+        songs: result.data.map(song => ({
+          id: song.id,
+          name: song.name,
+          artists: song.artists || [],
+          album: song.album || {},
+          duration: song.duration || 0
+        }))
+      }
+      
+      // 缓存结果
+      setCachedSearchResult('music', keyword, searchData)
+      
       return {
         success: true,
-        data: {
-          songs: result.data.map(song => ({
-            id: song.id,
-            name: song.name,
-            artists: song.artists || [],
-            album: song.album || {},
-            duration: song.duration || 0
-          }))
-        }
+        data: searchData
       }
     } else {
       return {
@@ -524,6 +606,12 @@ export const searchMusic = async (keyword) => {
 // 搜索歌单
 export const searchPlaylist = async (keyword) => {
   try {
+    // 检查缓存
+    const cached = getCachedSearchResult('playlist', keyword)
+    if (cached) {
+      return { success: true, data: cached }
+    }
+
     const response = await fetch('/search/playlist', {
       method: 'POST',
       headers: {
@@ -535,15 +623,20 @@ export const searchPlaylist = async (keyword) => {
     const result = await response.json()
     
     if (result.success && result.data) {
+      const searchData = result.data.map(playlist => ({
+        id: playlist.id,
+        name: playlist.name,
+        creator: playlist.creator || '',
+        coverImgUrl: playlist.coverImgUrl || '',
+        trackCount: playlist.trackCount || 0
+      }))
+      
+      // 缓存结果
+      setCachedSearchResult('playlist', keyword, searchData)
+      
       return {
         success: true,
-        data: result.data.map(playlist => ({
-          id: playlist.id,
-          name: playlist.name,
-          creator: playlist.creator || '',
-          coverImgUrl: playlist.coverImgUrl || '',
-          trackCount: playlist.trackCount || 0
-        }))
+        data: searchData
       }
     } else {
       return {
@@ -562,6 +655,12 @@ export const searchPlaylist = async (keyword) => {
 // 搜索专辑
 export const searchAlbum = async (keyword) => {
   try {
+    // 检查缓存
+    const cached = getCachedSearchResult('album', keyword)
+    if (cached) {
+      return { success: true, data: cached }
+    }
+
     const response = await fetch('/search/album', {
       method: 'POST',
       headers: {
@@ -573,15 +672,20 @@ export const searchAlbum = async (keyword) => {
     const result = await response.json()
     
     if (result.success && result.data) {
+      const searchData = result.data.map(album => ({
+        id: album.id,
+        name: album.name,
+        artist: album.artist || '',
+        coverImgUrl: album.coverImgUrl || '',
+        trackCount: album.trackCount || 0
+      }))
+      
+      // 缓存结果
+      setCachedSearchResult('album', keyword, searchData)
+      
       return {
         success: true,
-        data: result.data.map(album => ({
-          id: album.id,
-          name: album.name,
-          artist: album.artist || '',
-          coverImgUrl: album.coverImgUrl || '',
-          trackCount: album.trackCount || 0
-        }))
+        data: searchData
       }
     } else {
       return {
@@ -597,6 +701,152 @@ export const searchAlbum = async (keyword) => {
   }
 }
 
+// 批量下载音乐（打包为ZIP）
+export const batchDownloadMusic = async (musicList, playlistName = '', settings = {}, onProgress = null) => {
+  const results = []
+  const total = musicList.length
+  let completed = 0
+  let failed = 0
+
+  try {
+    // 导入 JSZip
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+
+    // 并发控制，最多同时下载3个
+    const concurrency = 3
+    
+    for (let i = 0; i < musicList.length; i += concurrency) {
+      const batch = musicList.slice(i, i + concurrency)
+      
+      const batchResults = await Promise.allSettled(
+        batch.map(async (musicInfo) => {
+          try {
+            // 下载音频文件
+            const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
+            if (!response.ok) {
+              throw new Error(`下载音频文件失败: ${response.statusText}`)
+            }
+            let audioBuffer = await response.arrayBuffer()
+
+            // 写入元数据（如果启用）
+            const extension = musicInfo.fileExtension || '.mp3'
+            if (settings.writeMetadata && (extension === '.mp3' || extension === '.flac')) {
+              try {
+                const metadata = {
+                  name: musicInfo.name,
+                  artist: musicInfo.artist,
+                  album: musicInfo.album,
+                  year: new Date().getFullYear().toString(),
+                  lyrics: musicInfo.lrc,
+                  cover: musicInfo.cover
+                }
+                const { embedMetadata } = await import('./metadataWriter.js')
+                audioBuffer = await embedMetadata(audioBuffer, metadata, extension)
+              } catch (metaError) {
+                console.warn(`元数据写入失败: ${musicInfo.name}`, metaError)
+              }
+            }
+
+            // 生成文件名
+            let filename
+            const sanitizedName = musicInfo.name.replace(/[<>:"/\\|?*]/g, '_')
+            const sanitizedArtist = musicInfo.artist.replace(/[<>:"/\\|?*]/g, '_')
+            if (settings.filenameFormat === 'artist-song') {
+              filename = `${sanitizedArtist} - ${sanitizedName}${extension}`
+            } else {
+              filename = `${sanitizedName} - ${sanitizedArtist}${extension}`
+            }
+
+            // 添加到 ZIP
+            zip.file(filename, audioBuffer)
+
+            // 如果有歌词，也添加到 ZIP
+            if (musicInfo.lrc) {
+              const lrcFilename = filename.replace(extension, '.lrc')
+              zip.file(lrcFilename, musicInfo.lrc)
+            }
+
+            completed++
+            if (onProgress) {
+              onProgress({
+                total,
+                completed,
+                failed,
+                current: musicInfo.name,
+                percentage: Math.round((completed + failed) / total * 100)
+              })
+            }
+            return {
+              success: true,
+              name: musicInfo.name,
+              id: musicInfo.id
+            }
+          } catch (error) {
+            failed++
+            if (onProgress) {
+              onProgress({
+                total,
+                completed,
+                failed,
+                current: musicInfo.name,
+                percentage: Math.round((completed + failed) / total * 100),
+                error: error.message
+              })
+            }
+            return {
+              success: false,
+              name: musicInfo.name,
+              id: musicInfo.id,
+              error: error.message
+            }
+          }
+        })
+      )
+      
+      // 收集结果
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          results.push(result.value)
+        } else {
+          results.push({
+            success: false,
+            name: batch[index]?.name || '未知歌曲',
+            error: result.reason?.message || '下载失败'
+          })
+        }
+      })
+    }
+
+    // 生成 ZIP 文件并下载
+    if (completed > 0) {
+      const content = await zip.generateAsync({ type: 'blob' })
+      const zipFilename = playlistName 
+        ? `${playlistName.replace(/[<>:"/\\|?*]/g, '_')}.zip`
+        : `music_${new Date().getTime()}.zip`
+      
+      // 触发下载
+      const url = URL.createObjectURL(content)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = zipFilename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+
+    return {
+      total,
+      completed,
+      failed,
+      results
+    }
+  } catch (error) {
+    throw new Error(`批量下载失败: ${error.message}`)
+  }
+}
+
 export default {
   validateUrl,
   validateMusicUrl,
@@ -609,6 +859,7 @@ export default {
   parseMusicInfo,
   getLyrics,
   downloadMusic,
+  batchDownloadMusic,
   getPlaylistDetail,
   getAlbumDetail,
   searchMusic,

@@ -18,6 +18,10 @@ export default defineConfig({
         target: 'http://localhost:5002',
         changeOrigin: true
       },
+      '/eapi': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
       '/weapi': {
         target: 'http://localhost:5002',
         changeOrigin: true

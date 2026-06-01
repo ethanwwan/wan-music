@@ -17,11 +17,28 @@
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
             </div>
+            <!-- 下载进度条 -->
+            <div v-if="downloadProgress.isDownloading" class="download-progress-bar">
+              <el-progress 
+                :percentage="downloadProgress.percentage" 
+                :status="downloadProgress.status"
+                :stroke-width="6"
+              />
+              <div class="progress-info">
+                <span class="current-song">正在下载：{{ downloadProgress.currentSong || '准备中...' }}</span>
+                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }}</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="header-right">
-          <el-button type="primary" @click="handleBatchDownload" :disabled="!settings?.enableBatchDownload">
-            批量打包下载
+          <el-button 
+            type="primary" 
+            @click="handleBatchDownload" 
+            :disabled="!settings?.enableBatchDownload || downloadProgress.isDownloading"
+            :loading="downloadProgress.isDownloading"
+          >
+            {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
           </el-button>
         </div>
       </div>
@@ -105,16 +122,17 @@
 
 <script>
 import { ref, computed } from 'vue'
-import { ElMessage, ElButton, ElIcon } from 'element-plus'
+import { ElMessage, ElButton, ElIcon, ElProgress } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
-
-// 移除批量下载相关依赖
+import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
+import { settings } from '../utils/settingsManager.js'
 
 export default {
   name: 'PlaylistDetail',
   components: {
     ElButton,
     ElIcon,
+    ElProgress,
     Loading
   },
   props: {
@@ -139,10 +157,6 @@ export default {
       type: Number,
       default: 0
     },
-    selectedQuality: {
-      type: String,
-      default: 'lossless'
-    },
     settings: {
       type: Object,
       default: () => ({})
@@ -156,7 +170,17 @@ export default {
     const error = ref('')
     const selectedTrack = ref(null)
     const parsingTrackId = ref(null)
-    // 移除批量下载相关状态与函数
+    
+    // 下载进度状态
+    const downloadProgress = ref({
+      isDownloading: false,
+      percentage: 0,
+      status: '',
+      currentSong: '',
+      total: 0,
+      completed: 0,
+      failed: 0
+    })
 
     // 获取封面地址（兼容多种字段）
     const getCover = (track) => {
@@ -202,9 +226,89 @@ export default {
       emit('track-selected', track)
     }
 
-    // 批量下载（占位函数）
-    const handleBatchDownload = () => {
-      ElMessage.info('批量下载功能开发中...')
+    // 批量下载
+    const handleBatchDownload = async () => {
+      if (!props.displayTracks || props.displayTracks.length === 0) {
+        ElMessage.warning('没有可下载的歌曲')
+        return
+      }
+
+      try {
+        // 重置进度状态
+        downloadProgress.value = {
+          isDownloading: true,
+          percentage: 0,
+          status: '',
+          currentSong: '',
+          total: props.displayTracks.length,
+          completed: 0,
+          failed: 0
+        }
+
+        ElMessage.info(`开始批量下载 ${props.displayTracks.length} 首歌曲...`)
+
+        // 准备音乐列表，需要先解析每首歌的信息
+        const musicList = []
+        for (const track of props.displayTracks) {
+          try {
+            // 将歌曲ID转换为URL格式
+            const songUrl = `https://music.163.com/song?id=${track.id}`
+            
+            // 解析歌曲信息
+            const quality = props.settings?.selectedQuality || 'lossless'
+            const musicInfo = await parseMusicInfo(songUrl, quality)
+            if (musicInfo && musicInfo.url) {
+              musicList.push({
+                id: track.id,
+                name: track.name,
+                artist: getArtist(track),
+                album: getAlbum(track),
+                url: musicInfo.url,
+                cover: getCover(track),
+                lrc: musicInfo.lrc || '',
+                fileExtension: musicInfo.fileExtension || '.mp3'
+              })
+            }
+          } catch (err) {
+            console.error(`解析歌曲失败: ${track.name}`, err)
+          }
+        }
+
+        if (musicList.length === 0) {
+          throw new Error('没有成功解析的歌曲')
+        }
+
+        // 执行批量下载
+        const result = await batchDownloadMusic(
+          musicList,
+          playlistData.value?.name || '', // 传递歌单/专辑名称作为 ZIP 文件名
+          {
+            filenameFormat: settings.filenameFormat || 'artist-song',
+            writeMetadata: settings.writeMetadata !== false // 默认开启，除非明确设置为 false
+          },
+          (progress) => {
+            downloadProgress.value.percentage = progress.percentage
+            downloadProgress.value.currentSong = progress.current
+            downloadProgress.value.completed = progress.completed
+            downloadProgress.value.failed = progress.failed
+          }
+        )
+
+        // 下载完成
+        downloadProgress.value.isDownloading = false
+        downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
+
+        if (result.failed === 0) {
+          ElMessage.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
+        } else {
+          ElMessage.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
+        }
+
+      } catch (error) {
+        downloadProgress.value.isDownloading = false
+        downloadProgress.value.status = 'exception'
+        ElMessage.error(`批量下载失败: ${error.message}`)
+      }
     }
 
     // 解析歌曲
@@ -213,7 +317,7 @@ export default {
       
       try {
         // 确保传递正确的音质参数，避免事件对象污染
-        const qualityValue = typeof props.selectedQuality === 'string' ? props.selectedQuality : 'lossless'
+        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
         
         // 这里调用现有的解析逻辑，传递音质参数
         emit('track-parsed', { track, quality: qualityValue })
@@ -269,6 +373,7 @@ export default {
       error,
       selectedTrack,
       parsingTrackId,
+      downloadProgress,
       selectTrack,
       parseTrack,
       handleBatchDownload,
@@ -419,6 +524,36 @@ export default {
 }
 
 .header-right {
+  flex-shrink: 0;
+}
+
+/* 下载进度条 */
+.download-progress-bar {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 13px;
+}
+
+.current-song {
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-text {
+  color: var(--color-primary);
+  font-weight: 600;
+  margin-left: 1rem;
   flex-shrink: 0;
 }
 
