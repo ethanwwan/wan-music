@@ -22,7 +22,7 @@ from flask import Flask, request, send_file, render_template, Response
 try:
     from api.music_api import (
         NeteaseAPI, APIException, QualityLevel,
-        url_v1, name_v1, lyric_v1, search_music, 
+        url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album,
         playlist_detail, album_detail
     )
     from api.cookie_manager import CookieManager, CookieException
@@ -415,12 +415,14 @@ def get_song_info():
 
 @app.route('/search', methods=['GET', 'POST'])
 @app.route('/Search', methods=['GET', 'POST'])  # 向后兼容
+@app.route('/api/cloudsearch/pc', methods=['POST'])  # 兼容前端调用
+@app.route('/api/search/music', methods=['GET', 'POST'])  # 新增歌曲搜索接口
 def search_music_api():
     """搜索音乐API"""
     try:
         # 获取请求参数
         data = api_service._safe_get_request_data()
-        keyword = data.get('keyword') or data.get('keywords') or data.get('q')
+        keyword = data.get('keyword') or data.get('keywords') or data.get('q') or data.get('s')
         limit = int(data.get('limit', 30))
         offset = int(data.get('offset', 0))
         search_type = data.get('type', '1')  # 1-歌曲, 10-专辑, 100-歌手, 1000-歌单
@@ -453,8 +455,63 @@ def search_music_api():
         return APIResponse.error(f"搜索失败: {str(e)}", 500)
 
 
+@app.route('/search/playlist', methods=['GET', 'POST'])
+@app.route('/api/search/playlist', methods=['GET', 'POST'])  # 新增歌单搜索接口
+def search_playlist_api():
+    """搜索歌单API"""
+    try:
+        data = api_service._safe_get_request_data()
+        keyword = data.get('keyword') or data.get('keywords') or data.get('q') or data.get('s')
+        
+        if not keyword:
+            return APIResponse.error("请提供搜索关键词")
+        
+        limit = int(data.get('limit', 20))
+        if limit > 100:
+            limit = 100
+        
+        cookies = api_service._get_cookies()
+        result = search_playlist(keyword, cookies, limit)
+        
+        return APIResponse.success(result, "搜索完成")
+        
+    except ValueError as e:
+        return APIResponse.error(f"参数格式错误: {str(e)}")
+    except Exception as e:
+        api_service.logger.error(f"搜索歌单异常: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"搜索失败: {str(e)}", 500)
+
+
+@app.route('/search/album', methods=['GET', 'POST'])
+@app.route('/api/search/album', methods=['GET', 'POST'])  # 新增专辑搜索接口
+def search_album_api():
+    """搜索专辑API"""
+    try:
+        data = api_service._safe_get_request_data()
+        keyword = data.get('keyword') or data.get('keywords') or data.get('q') or data.get('s')
+        
+        if not keyword:
+            return APIResponse.error("请提供搜索关键词")
+        
+        limit = int(data.get('limit', 20))
+        if limit > 100:
+            limit = 100
+        
+        cookies = api_service._get_cookies()
+        result = search_album(keyword, cookies, limit)
+        
+        return APIResponse.success(result, "搜索完成")
+        
+    except ValueError as e:
+        return APIResponse.error(f"参数格式错误: {str(e)}")
+    except Exception as e:
+        api_service.logger.error(f"搜索专辑异常: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"搜索失败: {str(e)}", 500)
+
+
 @app.route('/playlist', methods=['GET', 'POST'])
 @app.route('/Playlist', methods=['GET', 'POST'])  # 向后兼容
+@app.route('/api/v6/playlist/detail', methods=['POST'])  # 兼容前端调用
 def get_playlist():
     """获取歌单详情API"""
     try:

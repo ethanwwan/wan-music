@@ -18,10 +18,6 @@ export default defineConfig({
         target: 'http://localhost:5002',
         changeOrigin: true
       },
-      '/eapi': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
       '/weapi': {
         target: 'http://localhost:5002',
         changeOrigin: true
@@ -39,6 +35,10 @@ export default defineConfig({
         changeOrigin: true
       },
       '/search': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/cloudsearch': {
         target: 'http://localhost:5002',
         changeOrigin: true
       },

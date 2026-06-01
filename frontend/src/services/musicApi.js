@@ -415,12 +415,20 @@ export const getPlaylistDetail = async (url) => {
       throw new Error('无法从链接中提取歌单ID')
     }
 
-    const result = await neteaseApi.getPlaylistDetail(playlistId)
+    const response = await fetch('/playlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `id=${playlistId}`
+    })
+
+    const result = await response.json()
     
-    if (result.code === 200) {
+    if (result.success) {
       return {
         success: true,
-        data: result.playlist
+        data: result.data.playlist
       }
     } else {
       return {
@@ -443,13 +451,21 @@ export const getAlbumDetail = async (url) => {
     if (!albumId) {
       throw new Error('无法从链接中提取专辑ID')
     }
+
+    const response = await fetch('/album', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `id=${albumId}`
+    })
+
+    const result = await response.json()
     
-    const result = await neteaseApi.getAlbumDetail(albumId)
-    
-    if (result.code === 200) {
+    if (result.success) {
       return {
         success: true,
-        data: result
+        data: result.data.album
       }
     } else {
       return {
@@ -468,13 +484,21 @@ export const getAlbumDetail = async (url) => {
 // 搜索音乐
 export const searchMusic = async (keyword) => {
   try {
-    const songs = await neteaseApi.searchMusic(keyword)
+    const response = await fetch('/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ keyword })
+    })
     
-    if (songs && songs.length > 0) {
+    const result = await response.json()
+    
+    if (result.success && result.data) {
       return {
         success: true,
         data: {
-          songs: songs.map(song => ({
+          songs: result.data.map(song => ({
             id: song.id,
             name: song.name,
             artists: song.artists || [],
@@ -486,7 +510,83 @@ export const searchMusic = async (keyword) => {
     } else {
       return {
         success: false,
-        error: '搜索结果为空'
+        error: result.message || '搜索失败'
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || '搜索失败'
+    }
+  }
+}
+
+// 搜索歌单
+export const searchPlaylist = async (keyword) => {
+  try {
+    const response = await fetch('/search/playlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ keyword })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: result.data.map(playlist => ({
+          id: playlist.id,
+          name: playlist.name,
+          creator: playlist.creator || '',
+          coverImgUrl: playlist.coverImgUrl || '',
+          trackCount: playlist.trackCount || 0
+        }))
+      }
+    } else {
+      return {
+        success: false,
+        error: result.message || '搜索失败'
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || '搜索失败'
+    }
+  }
+}
+
+// 搜索专辑
+export const searchAlbum = async (keyword) => {
+  try {
+    const response = await fetch('/search/album', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ keyword })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: result.data.map(album => ({
+          id: album.id,
+          name: album.name,
+          artist: album.artist || '',
+          coverImgUrl: album.coverImgUrl || '',
+          trackCount: album.trackCount || 0
+        }))
+      }
+    } else {
+      return {
+        success: false,
+        error: result.message || '搜索失败'
       }
     }
   } catch (error) {
@@ -511,5 +611,7 @@ export default {
   downloadMusic,
   getPlaylistDetail,
   getAlbumDetail,
-  searchMusic
+  searchMusic,
+  searchPlaylist,
+  searchAlbum
 }

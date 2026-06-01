@@ -59,12 +59,16 @@ const progressStatus = computed(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(var(--color-surface-white-rgb, 255, 255, 255), 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
   backdrop-filter: blur(4px);
+}
+
+.dark .loading-overlay {
+  background: rgba(var(--color-surface-dark-rgb, 30, 30, 30), 0.9);
 }
 
 .loading-overlay.fullscreen {

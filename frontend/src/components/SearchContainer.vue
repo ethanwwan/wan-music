@@ -53,9 +53,9 @@
         </el-button>
       </div>
 
-      <!-- 示例歌曲 -->
+      <!-- 示例数据 -->
       <div class="example-section">
-        <span class="example-label">示例歌曲</span>
+        <span class="example-label">{{ exampleTitle }}</span>
         <div class="example-tags">
           <el-tag
             v-for="link in exampleLinks"
@@ -71,7 +71,10 @@
 
       <!-- 历史解析 -->
       <div v-if="historyRecords.length > 0" class="history-section">
-        <span class="history-label">历史解析</span>
+        <div class="history-header">
+          <span class="history-label">历史解析</span>
+          <span class="history-clear" @click="handleClearHistory">清除历史</span>
+        </div>
         <div class="history-tags">
           <el-tag
             v-for="record in historyRecords"
@@ -89,8 +92,9 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue'
+import { ref, defineProps, defineEmits, onMounted, watch } from 'vue'
 import { Link } from '@element-plus/icons-vue'
+import { getMockHistoryRecords } from '../utils/exampleData.js'
 
 const props = defineProps({
   currentMode: {
@@ -117,6 +121,10 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  exampleTitle: {
+    type: String,
+    default: '示例歌曲'
+  },
   loading: {
     type: Boolean,
     default: false
@@ -136,12 +144,23 @@ const selectedQuality = ref('lossless')
 const selectedChart = ref('19723756')
 const historyRecords = ref([])
 
+const loadHistoryRecords = (mode) => {
+  // 榜单模式不显示历史记录
+  if (mode === 'rank') {
+    historyRecords.value = []
+    return
+  }
+  // 根据当前模式加载对应类型的历史记录
+  historyRecords.value = getMockHistoryRecords(mode)
+}
+
 const addHistoryRecord = (songName) => {
   const exists = historyRecords.value.some(item => item.name === songName)
   if (!exists) {
     historyRecords.value.unshift({
       name: songName,
-      url: songName
+      url: songName,
+      type: props.currentMode
     })
     if (historyRecords.value.length > 10) {
       historyRecords.value.pop()
@@ -150,7 +169,7 @@ const addHistoryRecord = (songName) => {
 }
 
 const handleHistoryClick = (record) => {
-  inputValue.value = record.url
+  inputValue.value = record.name
   emit('history-click', record)
 }
 
@@ -164,13 +183,27 @@ const handleParse = () => {
 }
 
 const handleExampleClick = (link) => {
-  inputValue.value = link.url
+  inputValue.value = link.name
   emit('example-click', link)
 }
 
 const handleChartChange = () => {
   emit('chart-change', selectedChart.value)
 }
+
+const handleClearHistory = () => {
+  historyRecords.value = []
+}
+
+onMounted(() => {
+  // 初始化时加载历史记录假数据
+  loadHistoryRecords(props.currentMode)
+})
+
+// 监听模式变化，切换历史记录
+watch(() => props.currentMode, (newMode) => {
+  loadHistoryRecords(newMode)
+})
 
 defineExpose({
   addHistoryRecord
@@ -226,7 +259,65 @@ defineExpose({
 
 .input-row {
   display: flex;
-  gap: var(--spacing-lg);
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .input-row {
+    flex-direction: row;
+  }
+}
+
+.input-row :deep(.el-input) {
+  flex-grow: 1;
+  height: 48px;
+}
+
+.input-row :deep(.el-input__wrapper) {
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-subtle);
+  padding: 0 1.5rem;
+}
+
+.input-row :deep(.el-input__wrapper:hover) {
+  border-color: var(--color-border-subtle);
+}
+
+.input-row :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px rgba(0, 87, 194, 0.2);
+  border-color: var(--color-primary);
+}
+
+.input-row :deep(.el-input__placeholder) {
+  color: #8C8C8C;
+}
+
+.input-row :deep(.el-button--primary) {
+  height: 48px;
+  padding: 0 2rem;
+  background: var(--color-primary);
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: none;
+  transition: all 0.2s;
+}
+
+.input-row :deep(.el-button--primary:hover) {
+  background: var(--color-primary);
+  opacity: 0.9;
+}
+
+.input-row :deep(.el-button--primary:active) {
+  transform: scale(0.95);
+}
+
+.input-row :deep(.el-button--primary:disabled) {
+  opacity: 0.5;
+  transform: none;
 }
 
 .example-section {
@@ -271,9 +362,26 @@ defineExpose({
   gap: var(--spacing-sm);
 }
 
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .history-label {
   color: var(--color-text-muted);
   font-size: var(--font-size-body-sm);
+}
+
+.history-clear {
+  cursor: pointer;
+  transition: color 0.2s;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.history-clear:hover {
+  color: var(--color-error);
 }
 
 .history-tags {

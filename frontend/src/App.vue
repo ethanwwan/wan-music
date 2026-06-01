@@ -33,11 +33,23 @@
           :placeholder="getCurrentMode().placeholder"
           :quality-options="qualityOptions"
           :example-links="exampleLinks"
+          :example-title="getCurrentExampleTitle()"
           :loading="loading"
           @parse="handleParse"
           @quality-change="handleQualityChange"
           @example-click="handleExampleClick"
           @chart-change="handleChartChange"
+        />
+
+        <!-- 搜索结果面板组件 -->
+        <SearchResultPanel 
+          :songs="searchResults"
+          :playlists="playlistSearchResults"
+          :albums="albumSearchResults"
+          :current-mode="currentView"
+          @parse-song="handleParseSong"
+          @parse-playlist="handleParsePlaylist"
+          @parse-album="handleParseAlbum"
         />
 
         <!-- 原有的其他内容保持不变 -->
@@ -54,10 +66,15 @@
         </div>
 
         <!-- 歌单解析视图 -->
-        <div class="view-container" v-show="currentView === 'playlist'">
+        <div class="view-container" v-show="currentView === 'playlist' && playlistInfo && displayTracks.length > 0">
           <PlaylistDetail
-            v-if="playlistInfo"
             :playlist-info="playlistInfo"
+            :display-tracks="displayTracks"
+            :current-page="currentPage"
+            :page-size="20"
+            :total-tracks="totalTracks"
+            :selected-quality="selectedQuality"
+            @page-change="handlePageChange"
           />
         </div>
 
@@ -89,6 +106,7 @@ import HeroHeader from './components/HeroHeader.vue'
 import SystemNotice from './components/SystemNotice.vue'
 import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
+import SearchResultPanel from './components/SearchResultPanel.vue'
 import Footer from './components/Footer.vue'
 import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -102,25 +120,26 @@ import musicApi, { QUALITY_LEVELS } from './services/musicApi.js'
 import { isDark, toggleTheme, initThemeFromLocalStorage } from './utils/themeManager.js'
 import { settings, loadSettings, saveSettings } from './utils/settingsManager.js'
 import {
-  musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer,
-  currentParsingTrack, parsingProgress
-} from './utils/parseManager.js'
+    musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults,
+    currentParsingTrack, parsingProgress
+  } from './utils/parseManager.js'
+import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { isMobile, initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
-import { getCurrentExampleLinks } from './utils/exampleData.js'
+import { getCurrentExampleLinks, getExampleTitle } from './utils/exampleData.js'
 
 // 响应式数据
-const currentView = ref('music')
+const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
 const selectedQuality = ref('lossless')
 const searchContainerRef = ref(null)
 
-// 模式配置
+// 模式配置 - 按顺序：1 搜索，2 单曲，3 歌单，4 专辑，5 榜单
 const modes = [
-  { key: 'music', label: '单曲', title: '输入歌曲 URL 或 ID', desc: '支持单曲分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐单曲链接或ID' },
-  { key: 'album', label: '专辑', title: '输入专辑 URL 或 ID', desc: '支持专辑分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐专辑链接或ID' },
-  { key: 'playlist', label: '歌单', title: '输入歌单 URL 或 ID', desc: '支持歌单分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐歌单链接或ID' },
   { key: 'search', label: '搜索', title: '输入搜索关键词', desc: '支持搜索歌曲、歌手、专辑等', placeholder: '请输入搜索关键词' },
+  { key: 'music', label: '单曲', title: '输入歌曲 URL 或 ID', desc: '支持单曲分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐单曲链接或ID' },
+  { key: 'playlist', label: '歌单', title: '输入歌单 URL 或 ID', desc: '支持歌单分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐歌单链接或ID' },
+  { key: 'album', label: '专辑', title: '输入专辑 URL 或 ID', desc: '支持专辑分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐专辑链接或ID' },
   { key: 'rank', label: '榜单', title: '选择官方榜单', desc: '获取网易云官方实时排行榜数据', placeholder: '' }
 ]
 
@@ -130,12 +149,18 @@ const qualityOptions = Object.entries(QUALITY_LEVELS).map(([value, label]) => ({
   label
 }))
 
-// 示例链接
-const exampleLinks = getCurrentExampleLinks(currentView.value)
+// 示例链接 - 使用计算属性，随视图切换自动更新
+const exampleLinks = computed(() => {
+  return getCurrentExampleLinks(currentView.value)
+})
 
 // 方法
 const getCurrentMode = () => {
   return modes.find(m => m.key === currentView.value) || modes[0]
+}
+
+const getCurrentExampleTitle = () => {
+  return getExampleTitle(currentView.value)
 }
 
 const handleNoticeClose = () => {
@@ -160,7 +185,7 @@ const handleViewChange = (view) => {
 const handleParse = async ({ url, quality }) => {
   musicUrl.value = url
   selectedQuality.value = quality
-  await parseMusic(quality)
+  await parseMusic(quality, currentView.value)
 }
 
 const handleQualityChange = (quality) => {
@@ -169,11 +194,33 @@ const handleQualityChange = (quality) => {
 
 const handleExampleClick = (link) => {
   setExampleUrl(link.url, currentView.value)
-  ElMessage.success(`已选择示例: ${link.name}`)
 }
 
 const handleChartChange = (chartId) => {
   console.log('Chart changed:', chartId)
+}
+
+const handlePageChange = (page) => {
+  currentPage.value = page
+  updateDisplayTracks()
+}
+
+const handleParseSong = (song) => {
+  currentView.value = 'music'
+  musicUrl.value = `https://music.163.com/song?id=${song.id}`
+  parseMusic(selectedQuality.value, 'music')
+}
+
+const handleParsePlaylist = (playlist) => {
+  currentView.value = 'playlist'
+  playlistUrl.value = `https://music.163.com/playlist?id=${playlist.id}`
+  parsePlaylist()
+}
+
+const handleParseAlbum = (album) => {
+  currentView.value = 'album'
+  albumUrl.value = `https://music.163.com/album?id=${album.id}`
+  parseAlbum()
 }
 
 const handleTrackParsed = async (data) => {

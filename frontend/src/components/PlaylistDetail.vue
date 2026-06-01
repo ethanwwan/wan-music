@@ -4,67 +4,85 @@
 
     <!-- 歌曲列表 -->
     <div v-if="playlistData && totalTracks > 0" class="tracks-section">
-      <div class="section-header">
+      <!-- 歌单标题区域 -->
+      <div class="playlist-header">
         <div class="header-left">
-          <h2>歌曲列表</h2>
-          <span class="track-total">共 {{ totalTracks }} 首 (第 {{ currentPage }} 页，每页 {{ pageSize }} 首)</span>
-        </div>
-        <div class="header-right">
-          
-        </div>
-      </div>
-      
-
-
-      <!-- 歌单信息 -->
-      <div class="playlist-info-bar">
-        <span class="info-item">{{ creatorLabel }}：{{ playlistData.creator }}</span>
-        <span class="info-separator">•</span>
-        <span class="info-item">歌曲数：{{ totalTracks }}</span>
-      </div>
-      
-      <div class="tracks-list">
-        <div 
-          v-for="track in displayTracks" 
-          :key="track.id"
-          class="track-item"
-          @click="selectTrack(track)"
-          :class="{ 'selected': selectedTrack && selectedTrack.id === track.id }"
-        >
-          <img
-            class="track-cover"
-            :src="getCover(track)"
-            alt="cover"
-            loading="lazy"
-            @error="onCoverError"
-          />
-          <div class="track-info">
-            <div class="track-title-line">
-              <span class="track-name">{{ track.name }}</span>
-              <span class="track-artist" v-if="getArtist(track)">{{ getArtist(track) }}</span>
+          <div v-if="playlistData.coverImgUrl" class="playlist-cover-wrapper">
+            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" class="playlist-cover" />
+          </div>
+          <div class="playlist-info">
+            <h1 class="playlist-name">{{ playlistData.name }}</h1>
+            <div class="playlist-meta">
+              <span class="meta-item">{{ creatorLabel }}：{{ playlistData.creator }}</span>
+              <span class="meta-separator">•</span>
+              <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
             </div>
           </div>
-          <div class="track-actions">
-            <el-button 
-              type="primary" 
-              size="small" 
-              @click.stop="parseTrack(track)"
-              :loading="parsingTrackId === track.id"
-            >
-              {{ parsingTrackId === track.id ? '解析中...' : '解析' }}
-            </el-button>
-          </div>
+        </div>
+        <div class="header-right">
+          <el-button type="primary" @click="handleBatchDownload" :disabled="!settings?.enableBatchDownload">
+            批量打包下载
+          </el-button>
         </div>
       </div>
-      
-      
+
+      <!-- 表格形式的歌曲列表 -->
+      <div class="tracks-table-wrapper">
+        <table class="tracks-table">
+          <thead>
+            <tr>
+              <th class="col-index">序号</th>
+              <th class="col-cover"></th>
+              <th class="col-name">歌名</th>
+              <th class="col-artist">歌手</th>
+              <th class="col-album">专辑</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr 
+              v-for="(track, index) in displayTracks" 
+              :key="track.id"
+              class="track-row"
+              :class="{ 'selected': selectedTrack && selectedTrack.id === track.id }"
+              @click="selectTrack(track)"
+            >
+              <td class="col-index">{{ (currentPage - 1) * pageSize + index + 1 }}</td>
+              <td class="col-cover">
+                <img
+                  :src="getCover(track)"
+                  :alt="track.name"
+                  class="track-cover"
+                  loading="lazy"
+                  @error="onCoverError"
+                />
+              </td>
+              <td class="col-name">
+                <span class="track-name">{{ track.name }}</span>
+              </td>
+              <td class="col-artist">{{ getArtist(track) }}</td>
+              <td class="col-album">{{ getAlbum(track) }}</td>
+              <td class="col-action">
+                <el-button 
+                  type="primary" 
+                  size="small" 
+                  @click.stop="parseTrack(track)"
+                  :loading="parsingTrackId === track.id"
+                >
+                  {{ parsingTrackId === track.id ? '解析中...' : '解析单曲' }}
+                </el-button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       
       <!-- 分页：上一页 / 下一页 按钮 -->
-       <div class="pagination-section">
-         <el-button size="small" @click="goPrevPage" :disabled="currentPage <= 1">上一页</el-button>
-         <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
-         <el-button size="small" type="primary" @click="goNextPage" :disabled="currentPage >= totalPages">下一页</el-button>
-       </div>
+      <div class="pagination-section">
+        <el-button size="small" @click="goPrevPage" :disabled="currentPage <= 1">上一页</el-button>
+        <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+        <el-button size="small" type="primary" @click="goNextPage" :disabled="currentPage >= totalPages">下一页</el-button>
+      </div>
     </div>
 
     <!-- 加载状态 -->
@@ -102,7 +120,8 @@ export default {
   props: {
     playlistInfo: {
       type: Object,
-      required: true
+      required: false,
+      default: null
     },
     displayTracks: {
       type: Array,
@@ -168,10 +187,24 @@ export default {
       )
     }
 
+    // 获取专辑名称（兼容多种字段结构）
+    const getAlbum = (track) => {
+      return (
+        track?.album ||
+        track?.al?.name ||
+        ''
+      )
+    }
+
     // 选择歌曲
     const selectTrack = (track) => {
       selectedTrack.value = track
       emit('track-selected', track)
+    }
+
+    // 批量下载（占位函数）
+    const handleBatchDownload = () => {
+      ElMessage.info('批量下载功能开发中...')
     }
 
     // 解析歌曲
@@ -238,11 +271,13 @@ export default {
       parsingTrackId,
       selectTrack,
       parseTrack,
+      handleBatchDownload,
       handlePageChange,
       formatPlayCount,
       getCover,
       onCoverError,
       getArtist,
+      getAlbum,
       totalPages,
       goPrevPage,
       goNextPage,
@@ -254,62 +289,60 @@ export default {
 <style>
 /* 全局深色模式样式 - 不使用scoped以确保样式能够应用 */
 .dark .tracks-section {
-  background: #1a1a1a !important;
-  color: #e5eaf3 !important;
+  background: var(--color-surface-white) !important;
+  color: var(--color-on-surface) !important;
 }
 
 .dark .section-header h2 {
-  color: #e5eaf3 !important;
+  color: var(--color-on-surface) !important;
 }
 
 .dark .page-info {
-  color: #cfd3dc !important;
+  color: var(--color-text-muted) !important;
 }
 
-
-
 .dark .track-total {
-  color: #cfd3dc !important;
+  color: var(--color-text-muted) !important;
 }
 
 .dark .track-item {
-  background: #1d1e1f !important;
-  color: #e5eaf3 !important;
-  border-color: #4c4d4f !important;
+  background: var(--color-surface-container-low) !important;
+  color: var(--color-on-surface) !important;
+  border-color: var(--color-border-subtle) !important;
 }
 
 .dark .track-item:hover {
-  background: #262727 !important;
+  background: var(--color-primary-light) !important;
 }
 
 .dark .track-item.selected {
-  background: #1a1a2e !important;
-  border-color: #409eff !important;
+  background: var(--color-primary-light) !important;
+  border-color: var(--color-primary) !important;
 }
 
 .dark .playlist-info-bar {
-  background-color: #1d1e1f !important;
-  color: #e5eaf3 !important;
+  background-color: var(--color-surface-container) !important;
+  color: var(--color-on-surface) !important;
 }
 
 .dark .info-item {
-  color: #e5eaf3 !important;
+  color: var(--color-secondary) !important;
 }
 
 .dark .info-separator {
-  color: #909399 !important;
+  color: var(--color-outline) !important;
 }
 
 .dark .pagination-section {
-  border-top-color: #4c4d4f !important;
+  border-top-color: var(--color-border-subtle) !important;
 }
 
 .dark .section-header {
-  border-bottom-color: #4c4d4f !important;
+  border-bottom-color: var(--color-border-subtle) !important;
 }
 
 .dark .section-header h2 {
-  color: #e5eaf3 !important;
+  color: var(--color-on-surface) !important;
 }
 </style>
 
@@ -318,14 +351,149 @@ export default {
   width: 100%;
 }
 
-
 .tracks-section {
-  background: #fff;
-  border-radius: 8px;
-  padding: var(--space-4);
+  background: var(--color-surface-white);
+  border-radius: var(--radius-md);
+  padding: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  /* 防止超长文本造成横向溢出影响布局 */
-  overflow-x: hidden;
+  overflow: hidden;
+}
+
+/* 歌单头部 */
+.playlist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-white) 100%);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.playlist-cover-wrapper {
+  flex-shrink: 0;
+}
+
+.playlist-cover {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.playlist-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin: 0 0 0.5rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.meta-item {
+  white-space: nowrap;
+}
+
+.meta-separator {
+  color: var(--color-outline);
+}
+
+.header-right {
+  flex-shrink: 0;
+}
+
+/* 表格容器 */
+.tracks-table-wrapper {
+  overflow-x: auto;
+}
+
+.tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tracks-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-container-low);
+  white-space: nowrap;
+}
+
+.tracks-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  vertical-align: middle;
+}
+
+.col-index {
+  width: 60px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.col-cover {
+  width: 50px;
+  padding: 8px 16px;
+}
+
+.track-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.col-name {
+  min-width: 200px;
+}
+
+.track-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.col-artist,
+.col-album {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  min-width: 150px;
+}
+
+.col-action {
+  width: 100px;
+}
+
+.track-row:hover {
+  background: var(--color-surface-container-low);
+}
+
+.track-row.selected {
+  background: var(--color-primary-light);
 }
 
 .section-header {
@@ -334,7 +502,7 @@ export default {
   align-items: center;
   margin-bottom: var(--space-4);
   padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .header-left {
@@ -346,11 +514,11 @@ export default {
 .section-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #303133;
+  color: var(--color-on-surface);
 }
 
 .track-total {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -363,8 +531,8 @@ export default {
   display: flex;
   align-items: center;
   padding: var(--space-3) var(--space-2);
-  background: #fafafa;
-  border-radius: 8px;
+  background: var(--color-surface-container-low);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.3s ease;
   margin-bottom: var(--space-2);
@@ -373,15 +541,14 @@ export default {
 }
 
 .track-item:hover {
-  background: #f0f9ff;
+  background: var(--color-primary-light);
   transform: translateY(-1px);
 }
 
 .track-item.selected {
-  background: #e1f3ff;
-  border: 1px solid #409eff;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
 }
-
 
 
 .track-info {
@@ -392,10 +559,10 @@ export default {
 .track-cover {
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
   margin-right: var(--space-2);
-  background-color: #eee;
+  background-color: var(--color-surface-variant);
 }
 
 .track-title-line {
@@ -418,7 +585,7 @@ export default {
 }
 
 .track-artist {
-  color: #606266;
+  color: var(--color-secondary);
   /* 限制歌手区域占比，避免撑开主列导致侧栏移位 */
   flex: 0 0 auto;
   max-width: 45%;
@@ -426,10 +593,10 @@ export default {
 }
 
 .playlist-info-bar {
-  background-color: #f8f9fa;
+  background-color: var(--color-surface-container);
   padding: var(--space-2) var(--space-3);
   margin-bottom: var(--space-3);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -438,12 +605,12 @@ export default {
 }
 
 .info-item {
-  color: #606266;
+  color: var(--color-secondary);
   white-space: nowrap;
 }
 
 .info-separator {
-  color: #909399;
+  color: var(--color-outline);
   font-weight: bold;
 }
 
@@ -472,7 +639,7 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: #606266;
+  color: var(--color-text-muted);
 }
 
 .loading-container .el-icon {
@@ -487,7 +654,7 @@ export default {
 .pagination-section {
   margin-top: var(--space-4);
   padding: var(--space-3) 0;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-subtle);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -495,17 +662,17 @@ export default {
 }
 
 .page-info {
-  color: #606266;
+  color: var(--color-text-muted);
 }
 
 /* 循环解析模式样式 */
 
 .dark .track-cover {
-  background-color: #2a2a2a;
+  background-color: var(--color-surface-variant);
 }
 
 .dark .track-artist {
-  color: #cfd3dc;
+  color: var(--color-secondary);
 }
 
 /* 响应式设计 */

@@ -313,6 +313,98 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
+    def search_playlist(self, keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+        """搜索歌单
+        
+        Args:
+            keywords: 搜索关键词
+            cookies: 用户cookies
+            limit: 返回数量限制
+            
+        Returns:
+            歌单信息列表
+            
+        Raises:
+            APIException: API调用失败时抛出
+        """
+        try:
+            data = {'s': keywords, 'type': 1000, 'limit': limit}
+            headers = {
+                'User-Agent': APIConstants.USER_AGENT,
+                'Referer': APIConstants.REFERER
+            }
+            
+            response = requests.post(APIConstants.SEARCH_API, data=data, 
+                                   headers=headers, cookies=cookies, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get('code') != 200:
+                raise APIException(f"搜索失败: {result.get('message', '未知错误')}")
+            
+            playlists = []
+            for item in result.get('result', {}).get('playlists', []):
+                playlist_info = {
+                    'id': item['id'],
+                    'name': item['name'],
+                    'creator': item['creator']['nickname'] if item.get('creator') else '',
+                    'coverImgUrl': item['coverImgUrl'],
+                    'trackCount': item['trackCount']
+                }
+                playlists.append(playlist_info)
+            
+            return playlists
+        except requests.RequestException as e:
+            raise APIException(f"搜索请求失败: {e}")
+        except (json.JSONDecodeError, KeyError) as e:
+            raise APIException(f"解析搜索响应失败: {e}")
+    
+    def search_album(self, keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+        """搜索专辑
+        
+        Args:
+            keywords: 搜索关键词
+            cookies: 用户cookies
+            limit: 返回数量限制
+            
+        Returns:
+            专辑信息列表
+            
+        Raises:
+            APIException: API调用失败时抛出
+        """
+        try:
+            data = {'s': keywords, 'type': 10, 'limit': limit}
+            headers = {
+                'User-Agent': APIConstants.USER_AGENT,
+                'Referer': APIConstants.REFERER
+            }
+            
+            response = requests.post(APIConstants.SEARCH_API, data=data, 
+                                   headers=headers, cookies=cookies, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get('code') != 200:
+                raise APIException(f"搜索失败: {result.get('message', '未知错误')}")
+            
+            albums = []
+            for item in result.get('result', {}).get('albums', []):
+                album_info = {
+                    'id': item['id'],
+                    'name': item['name'],
+                    'artist': '/'.join(artist['name'] for artist in item.get('artists', [])),
+                    'coverImgUrl': item['picUrl'],
+                    'trackCount': item['size']
+                }
+                albums.append(album_info)
+            
+            return albums
+        except requests.RequestException as e:
+            raise APIException(f"搜索请求失败: {e}")
+        except (json.JSONDecodeError, KeyError) as e:
+            raise APIException(f"解析搜索响应失败: {e}")
+    
     def get_playlist_detail(self, playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌单详情
         
@@ -341,12 +433,18 @@ class NeteaseAPI:
             if result.get('code') != 200:
                 raise APIException(f"获取歌单详情失败: {result.get('message', '未知错误')}")
             
-            playlist = result.get('playlist', {})
+            playlist = result.get('playlist')
+            if not playlist:
+                # 打印调试信息
+                import logging
+                logger = logging.getLogger('music_api')
+                logger.info(f"网易云API响应: {json.dumps(result)[:500]}")
+                raise APIException("获取歌单详情失败: 歌单不存在或已被删除")
             info = {
                 'id': playlist.get('id'),
                 'name': playlist.get('name'),
                 'coverImgUrl': playlist.get('coverImgUrl'),
-                'creator': playlist.get('creator', {}).get('nickname', ''),
+                'creator': playlist.get('creator', {}).get('nickname', '') if playlist.get('creator') else '',
                 'trackCount': playlist.get('trackCount'),
                 'description': playlist.get('description', ''),
                 'tracks': []
@@ -635,6 +733,18 @@ def search_music(keywords: str, cookies: Dict[str, str], limit: int = 10) -> Lis
     """搜索音乐（向后兼容）"""
     api = NeteaseAPI()
     return api.search_music(keywords, cookies, limit)
+
+
+def search_playlist(keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+    """搜索歌单（向后兼容）"""
+    api = NeteaseAPI()
+    return api.search_playlist(keywords, cookies, limit)
+
+
+def search_album(keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+    """搜索专辑（向后兼容）"""
+    api = NeteaseAPI()
+    return api.search_album(keywords, cookies, limit)
 
 
 def playlist_detail(playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:

@@ -1,7 +1,7 @@
 <template>
   <div v-if="visible" class="notice-bar">
     <div class="notice-content">
-      <el-icon :size="24" :color="primaryColor">
+      <el-icon :size="24" class="notice-icon">
         <InfoFilled />
       </el-icon>
       <div class="notice-text">
@@ -61,6 +61,10 @@ const handleClose = () => {
   display: flex;
   gap: var(--spacing-md);
   align-items: flex-start;
+}
+
+.notice-icon {
+  color: var(--color-primary);
 }
 
 .notice-text {

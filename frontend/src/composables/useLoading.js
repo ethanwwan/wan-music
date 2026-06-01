@@ -4,6 +4,7 @@
  */
 
 import { ElLoading } from 'element-plus'
+import { isDark } from '../utils/themeManager'
 
 export function useLoading() {
   let loadingInstance = null
@@ -16,7 +17,7 @@ export function useLoading() {
     const defaultOptions = {
       lock: true,
       text: '加载中...',
-      background: 'rgba(0, 0, 0, 0.7)'
+      background: isDark.value ? 'rgba(18, 18, 18, 0.9)' : 'rgba(255, 255, 255, 0.9)'
     }
 
     loadingInstance = ElLoading.service({

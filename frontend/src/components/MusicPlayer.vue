@@ -501,10 +501,16 @@ watch(() => props.musicInfo, (newMusicInfo) => {
     }
     nextTick(() => {
       if (typeof window !== 'undefined' && typeof window.APlayer !== 'undefined') {
+        // 获取CSS变量中的主题色
+        const getComputedColor = () => {
+          const style = getComputedStyle(document.documentElement);
+          return style.getPropertyValue('--color-primary') || '#0057c2';
+        };
+        
         ap.value = new window.APlayer({
           container: document.getElementById('aplayer-container'),
-          // 进度条主题色，随深色模式调整
-          theme: isDark.value ? '#90caf9' : '#409EFF',
+          // 进度条主题色，使用CSS变量中的主题色
+          theme: getComputedColor().trim(),
           audio: [{
             name: newMusicInfo.name,
             artist: newMusicInfo.artist,
@@ -678,31 +684,31 @@ watch(() => props.musicInfo, (newMusicInfo) => {
 <style>
 /* 容器与文字颜色 */
 .dark .aplayer {
-  background-color: #1e1f22 !important;
-  color: #e5eaf3 !important;
-  border-color: var(--el-border-color) !important;
+  background-color: var(--color-surface-white) !important;
+  color: var(--color-on-surface) !important;
+  border-color: var(--color-border-subtle) !important;
 }
-.dark .aplayer .aplayer-title { color: #e5eaf3 !important; }
-.dark .aplayer .aplayer-author { color: #cfd3dc !important; }
+.dark .aplayer .aplayer-title { color: var(--color-on-surface) !important; }
+.dark .aplayer .aplayer-author { color: var(--color-secondary) !important; }
 
 .aplayer .aplayer-lrc p {
   word-break: break-all;
 }
 
 /* 歌词颜色 */
-.dark .aplayer .aplayer-lrc { color: #cfd3dc !important; }
-.dark .aplayer .aplayer-lrc p.aplayer-lrc-current { color: var(--el-text-color-primary) !important; }
+.dark .aplayer .aplayer-lrc { color: var(--color-secondary) !important; }
+.dark .aplayer .aplayer-lrc p.aplayer-lrc-current { color: var(--color-primary) !important; }
 
 /* 进度条与音量条背景 */
-.dark .aplayer .aplayer-bar-wrap .aplayer-bar { background-color: #3a3a3a !important; }
-.dark .aplayer .aplayer-played { background-color: var(--el-color-primary) !important; }
-.dark .aplayer .aplayer-loading { background-color: var(--el-color-primary-light-5) !important; }
-.dark .aplayer .aplayer-volume .aplayer-volume-bar { background-color: #3a3a3a !important; }
+.dark .aplayer .aplayer-bar-wrap .aplayer-bar { background-color: var(--color-surface-variant) !important; }
+.dark .aplayer .aplayer-played { background-color: var(--color-primary) !important; }
+.dark .aplayer .aplayer-loading { background-color: var(--color-primary-light) !important; }
+.dark .aplayer .aplayer-volume .aplayer-volume-bar { background-color: var(--color-surface-variant) !important; }
 
 /* 播放列表样式 */
-.dark .aplayer .aplayer-list { background-color: #1e1f22 !important; border-color: #2a2b2e !important; }
-.dark .aplayer .aplayer-list li:hover { background-color: #262727 !important; }
-.dark .aplayer .aplayer-list li .aplayer-list-author { color: #909399 !important; }
+.dark .aplayer .aplayer-list { background-color: var(--color-surface-white) !important; border-color: var(--color-border-subtle) !important; }
+.dark .aplayer .aplayer-list li:hover { background-color: var(--color-surface-container) !important; }
+.dark .aplayer .aplayer-list li .aplayer-list-author { color: var(--color-text-muted) !important; }
 
 /* 深色模式下移除 APlayer 组件内的伪元素 */
 .dark .aplayer *::before,

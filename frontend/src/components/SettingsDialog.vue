@@ -12,7 +12,7 @@
       <!-- 主题设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <el-icon><Palette /></el-icon>
+          <el-icon><Brush /></el-icon>
           <span>主题设置</span>
         </div>
         <div class="theme-options">
@@ -116,7 +116,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Link, Palette } from '@element-plus/icons-vue'
+import { Download, Link, Brush } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme } from '../utils/themeManager.js'
 

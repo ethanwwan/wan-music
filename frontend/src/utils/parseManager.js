@@ -18,6 +18,9 @@ export const playlistInfo = ref(null)
 export const albumUrl = ref('')
 export const albumLoading = ref(false)
 export const albumInfo = ref(null)
+export const searchResults = ref([])
+export const playlistSearchResults = ref([])
+export const albumSearchResults = ref([])
 
 // 移除循环解析模式相关状态
 
@@ -58,10 +61,113 @@ export const cleanupTimer = () => {
 /**
  * 解析音乐信息
  * @param {string} selectedQuality 选择的音质
+ * @param {string} mode 当前模式 ('search', 'music', 'playlist', 'album', 'rank')
  */
-export const parseMusic = async (selectedQuality) => {
+export const parseMusic = async (selectedQuality, mode = 'music') => {
   if (!musicUrl.value.trim()) {
-    ElMessage.warning('请输入音乐链接')
+    ElMessage.warning('请输入内容')
+    return
+  }
+
+  // 搜索模式不需要验证URL格式，直接搜索
+  if (mode === 'search') {
+    loading.value = true
+    try {
+      const result = await musicApi.searchMusic(musicUrl.value)
+      musicInfo.value = { ...result, name: musicUrl.value }
+      if (result.success) {
+        searchResults.value = result.data.songs || []
+        ElNotification({
+          title: '搜索成功',
+          message: `找到 ${searchResults.value.length || 0} 首相关歌曲`,
+          type: 'success'
+        })
+      } else {
+        searchResults.value = []
+        ElMessage.warning(result.error || '搜索结果为空')
+      }
+    } catch (error) {
+      searchResults.value = []
+      ElMessage.error('搜索失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
+  // 歌单模式 - 支持URL解析和名称搜索
+  if (mode === 'playlist') {
+    // 如果是有效的歌单URL，直接解析歌单详情
+    if (musicApi.validatePlaylistUrl(musicUrl.value)) {
+      playlistUrl.value = musicUrl.value
+      loading.value = true
+      try {
+        await parsePlaylist()
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+    // 如果不是URL，尝试搜索歌单
+    loading.value = true
+    try {
+      const result = await musicApi.searchPlaylist(musicUrl.value)
+      playlistInfo.value = result
+      if (result.success && result.data) {
+        playlistSearchResults.value = result.data
+        ElNotification({
+          title: '搜索成功',
+          message: `找到 ${result.data.length || 0} 个歌单`,
+          type: 'success'
+        })
+      } else {
+        playlistSearchResults.value = []
+        ElMessage.warning(result.error || '搜索结果为空')
+      }
+    } catch (error) {
+      playlistSearchResults.value = []
+      ElMessage.error('搜索失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
+  // 专辑模式 - 支持URL解析和名称搜索
+  if (mode === 'album') {
+    // 如果是有效的专辑URL，直接解析专辑详情
+    if (musicApi.validateAlbumUrl(musicUrl.value)) {
+      albumUrl.value = musicUrl.value
+      loading.value = true
+      try {
+        await parseAlbum()
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+    // 如果不是URL，尝试搜索专辑
+    loading.value = true
+    try {
+      const result = await musicApi.searchAlbum(musicUrl.value)
+      albumInfo.value = result
+      if (result.success && result.data) {
+        albumSearchResults.value = result.data
+        ElNotification({
+          title: '搜索成功',
+          message: `找到 ${result.data.length || 0} 张专辑`,
+          type: 'success'
+        })
+      } else {
+        albumSearchResults.value = []
+        ElMessage.warning(result.error || '搜索结果为空')
+      }
+    } catch (error) {
+      albumSearchResults.value = []
+      ElMessage.error('搜索失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
     return
   }
 
