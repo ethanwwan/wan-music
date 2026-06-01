@@ -78,14 +78,41 @@ const setCustomThemeColor = (color) => {
 // 导出主题状态
 export { isDark }
 
-// 初始化主题（基于本地存储，不跟随系统）
+// 初始化主题（基于本地存储，支持跟随系统）
 export const initThemeFromLocalStorage = () => {
+  const savedThemeMode = typeof window !== 'undefined' ? localStorage.getItem('themeMode') : null
   const savedTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
   const savedThemeColor = typeof window !== 'undefined' ? localStorage.getItem('themeColor') : null
   
-  const dark = savedTheme === 'dark'
-  isDark.value = dark
-  applyTheme(dark)
+  // 如果有主题模式设置
+  if (savedThemeMode) {
+    if (savedThemeMode === 'auto') {
+      // 跟随系统
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      isDark.value = prefersDark
+      applyTheme(prefersDark)
+      
+      // 监听系统主题变化
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (localStorage.getItem('themeMode') === 'auto') {
+          isDark.value = e.matches
+          applyTheme(e.matches)
+        }
+      })
+    } else {
+      // 手动设置的主题
+      isDark.value = savedThemeMode === 'dark'
+      applyTheme(isDark.value)
+    }
+  } else if (savedTheme) {
+    // 兼容旧版本
+    isDark.value = savedTheme === 'dark'
+    applyTheme(isDark.value)
+  } else {
+    // 默认亮色
+    isDark.value = false
+    applyTheme(false)
+  }
   
   // 恢复自定义主题色
   if (savedThemeColor) {

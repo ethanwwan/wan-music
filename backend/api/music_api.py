@@ -12,6 +12,7 @@
 import json
 import urllib.parse
 import time
+import logging
 from random import randrange
 from typing import Dict, List, Optional, Tuple, Any
 from hashlib import md5
@@ -20,6 +21,9 @@ from enum import Enum
 import requests
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class QualityLevel(Enum):
@@ -496,12 +500,17 @@ class NeteaseAPI:
                 'Referer': APIConstants.REFERER
             }
             
+            logger.info(f"请求专辑详情: album_id={album_id}, url={url}")
             response = requests.get(url, headers=headers, cookies=cookies, timeout=30)
             response.raise_for_status()
             
             result = response.json()
+            logger.info(f"专辑API响应: code={result.get('code')}")
+            
             if result.get('code') != 200:
-                raise APIException(f"获取专辑详情失败: {result.get('message', '未知错误')}")
+                error_msg = result.get('message', '未知错误')
+                logger.error(f"专辑API返回错误: {error_msg}")
+                raise APIException(f"获取专辑详情失败: {error_msg}")
             
             album = result.get('album', {})
             info = {

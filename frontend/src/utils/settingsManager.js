@@ -58,6 +58,16 @@ export const loadSettings = () => {
         hasChanges = true
       }
       
+      // 清理已移除的旧字段
+      const deprecatedKeys = ['enableUrlCache', 'urlCacheTTLMinutes']
+      deprecatedKeys.forEach(key => {
+        if (parsed[key] !== undefined) {
+          delete settings[key]
+          hasChanges = true
+          console.log(`[Settings] 清理: 移除已废弃的设置项 ${key}`)
+        }
+      })
+      
       // 如果有变更，立即保存
       if (hasChanges) {
         saveSettings()

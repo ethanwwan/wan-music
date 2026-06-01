@@ -549,6 +549,8 @@ def get_album():
         data = api_service._safe_get_request_data()
         album_id = data.get('id')
         
+        api_service.logger.info(f"收到专辑请求: album_id={album_id}")
+        
         # 参数验证
         validation_error = api_service._validate_request_params({'album_id': album_id})
         if validation_error:

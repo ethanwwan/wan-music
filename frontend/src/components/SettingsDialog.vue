@@ -1,13 +1,19 @@
 <template>
   <el-drawer
     v-model="drawerVisible"
-    title="设置"
     width="450px"
     direction="rtl"
     :close-on-click-modal="true"
     :show-close="true"
+    :with-header="false"
     class="settings-drawer"
   >
+    <!-- 自定义头部 -->
+    <div class="custom-header">
+      <span class="header-title">设置</span>
+      <el-icon class="close-icon" @click="drawerVisible = false"><Close /></el-icon>
+    </div>
+    
     <div class="settings-content">
       <!-- 主题设置 -->
       <div class="setting-section">
@@ -15,20 +21,53 @@
           <el-icon><Brush /></el-icon>
           <span>主题设置</span>
         </div>
-        <div class="theme-options">
-          <div 
-            v-for="theme in themes" 
-            :key="theme.id"
-            class="theme-option"
-            :class="{ active: currentTheme === theme.id }"
-            @click="handleThemeChange(theme.id)"
-          >
-            <div class="theme-preview">
-              <div class="preview-primary" :style="{ background: theme.primary }"></div>
-              <div class="preview-secondary" :style="{ background: theme.secondary }"></div>
-              <div class="preview-accent" :style="{ background: theme.accent }"></div>
+        
+        <!-- 主题模式 -->
+        <div class="theme-mode-section">
+          <div class="subsection-title">主题模式</div>
+          <div class="theme-mode-options">
+            <div 
+              class="theme-mode-option"
+              :class="{ active: themeMode === 'light' }"
+              @click="handleThemeModeChange('light')"
+            >
+              <el-icon class="mode-icon"><Sunny /></el-icon>
+              <span class="mode-name">亮色</span>
             </div>
-            <span class="theme-name">{{ theme.name }}</span>
+            <div 
+              class="theme-mode-option"
+              :class="{ active: themeMode === 'dark' }"
+              @click="handleThemeModeChange('dark')"
+            >
+              <el-icon class="mode-icon"><Moon /></el-icon>
+              <span class="mode-name">深色</span>
+            </div>
+            <div 
+              class="theme-mode-option"
+              :class="{ active: themeMode === 'auto' }"
+              @click="handleThemeModeChange('auto')"
+            >
+              <el-icon class="mode-icon"><Monitor /></el-icon>
+              <span class="mode-name">跟随系统</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 主题色 -->
+        <div class="theme-color-section">
+          <div class="subsection-title">主题色</div>
+          <div class="theme-color-options">
+            <div 
+              v-for="color in themeColors" 
+              :key="color.value"
+              class="theme-color-option"
+              :class="{ active: selectedThemeColor === color.value }"
+              @click="handleThemeColorChange(color.value)"
+              :style="{ '--theme-color': color.hex }"
+            >
+              <div class="color-preview" :style="{ background: color.hex }"></div>
+              <span class="color-name">{{ color.name }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -122,9 +161,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Link, Brush, Headset } from '@element-plus/icons-vue'
+import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
-import { isDark, toggleTheme, setTheme } from '../utils/themeManager.js'
+import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
 
 const props = defineProps({
   modelValue: {
@@ -140,58 +179,79 @@ const drawerVisible = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
-const themes = [
-  {
-    id: 'light',
-    name: '简约白',
-    primary: '#0057c2',
-    secondary: '#f5f5f5',
-    accent: '#ffffff'
-  },
-  {
-    id: 'dark',
-    name: '深邃黑',
-    primary: '#1a1a1a',
-    secondary: '#2d2d2d',
-    accent: '#3d3d3d'
-  },
-  {
-    id: 'blue',
-    name: '海洋蓝',
-    primary: '#1e88e5',
-    secondary: '#e3f2fd',
-    accent: '#90caf9'
-  },
-  {
-    id: 'purple',
-    name: '优雅紫',
-    primary: '#7c4dff',
-    secondary: '#f3e5f5',
-    accent: '#ce93d8'
-  },
-  {
-    id: 'green',
-    name: '清新绿',
-    primary: '#43a047',
-    secondary: '#e8f5e9',
-    accent: '#81c784'
-  }
+// 主题模式：light, dark, auto
+const themeMode = ref('light')
+// 选中的主题色
+const selectedThemeColor = ref('#0057c2')
+
+// 主题色选项（6种经典色）
+const themeColors = [
+  { name: '默认蓝', value: 'blue', hex: '#0057c2' },
+  { name: '活力红', value: 'red', hex: '#e53935' },
+  { name: '优雅紫', value: 'purple', hex: '#8e24aa' },
+  { name: '清新绿', value: 'green', hex: '#43a047' },
+  { name: '温暖橙', value: 'orange', hex: '#fb8c00' },
+  { name: '深邃青', value: 'cyan', hex: '#00acc1' }
 ]
 
-const currentTheme = computed(() => {
-  return isDark.value ? 'dark' : 'light'
-})
+// 初始化时从 localStorage 读取主题设置
+const initThemeSettings = () => {
+  const savedThemeMode = localStorage.getItem('themeMode')
+  const savedThemeColor = localStorage.getItem('themeColor')
+  
+  if (savedThemeMode) {
+    themeMode.value = savedThemeMode
+  }
+  
+  if (savedThemeColor) {
+    const color = themeColors.find(c => c.value === savedThemeColor)
+    if (color) {
+      selectedThemeColor.value = color.hex
+    }
+  }
+}
 
-const handleThemeChange = (themeId) => {
-  if (themeId === 'dark') {
+// 组件挂载时初始化
+initThemeSettings()
+
+// 处理主题模式切换
+const handleThemeModeChange = (mode) => {
+  themeMode.value = mode
+  localStorage.setItem('themeMode', mode)
+  
+  if (mode === 'auto') {
+    // 跟随系统
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    setTheme(prefersDark ? 'dark' : 'light')
+    ElMessage.success('已设置为跟随系统')
+  } else if (mode === 'dark') {
     setTheme('dark')
-  } else if (themeId === 'light') {
-    setTheme('light')
+    ElMessage.success('已切换到深色主题')
   } else {
     setTheme('light')
-    document.documentElement.style.setProperty('--color-primary', themes.find(t => t.id === themeId)?.primary || '#0057c2')
+    ElMessage.success('已切换到亮色主题')
   }
-  ElMessage.success('主题已切换')
+}
+
+// 处理主题色切换
+const handleThemeColorChange = (colorValue) => {
+  const color = themeColors.find(c => c.value === colorValue)
+  if (!color) return
+  
+  selectedThemeColor.value = color.hex
+  localStorage.setItem('themeColor', colorValue)
+  
+  // 应用主题色
+  document.documentElement.style.setProperty('--color-primary', color.hex)
+  
+  // 如果是深色模式，确保保持深色
+  if (themeMode.value === 'dark') {
+    setTheme('dark')
+  } else {
+    setTheme('light')
+  }
+  
+  ElMessage.success(`已切换到${color.name}`)
 }
 
 const handleSave = () => {
@@ -206,18 +266,45 @@ const handleClose = () => {
 </script>
 
 <style scoped>
-.settings-drawer {
-  width: 450px !important;
+/* 自定义头部样式 */
+.custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
 }
 
-.settings-drawer :deep(.el-drawer) {
-  width: 450px !important;
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.close-icon {
+  font-size: 20px;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close-icon:hover {
+  color: var(--color-on-surface);
 }
 
 .settings-content {
-  padding: 20px 0;
-  height: 100%;
+  padding: 16px 0;
+  height: calc(100% - 57px); /* 减去头部高度 */
   overflow-y: auto;
+}
+
+/* 隐藏滚动条 */
+.settings-content::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-content {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
 
 .setting-section {
@@ -266,19 +353,89 @@ const handleClose = () => {
   margin-top: 4px;
 }
 
-/* 主题选项样式 */
-.theme-options {
+/* 子标题样式 */
+.subsection-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-surface-variant);
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+
+/* 主题模式选项 */
+.theme-mode-section {
+  margin-bottom: 20px;
+}
+
+.theme-mode-options {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   padding: 0 8px;
 }
 
-.theme-option {
+.theme-mode-option {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 8px;
+  gap: 8px;
+  padding: 16px 12px;
+  border-radius: 8px;
+  border: 2px solid var(--color-border-subtle);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--color-surface-white);
+}
+
+.theme-mode-option:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.theme-mode-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light, rgba(0, 87, 194, 0.08));
+}
+
+.mode-icon {
+  font-size: 24px;
+  color: var(--color-on-surface-variant);
+}
+
+.theme-mode-option.active .mode-icon {
+  color: var(--color-primary);
+}
+
+.mode-name {
+  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  font-weight: 500;
+}
+
+.theme-mode-option.active .mode-name {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* 主题色选项 */
+.theme-color-section {
+  margin-top: 20px;
+}
+
+.theme-color-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.theme-color-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
   border-radius: 8px;
   border: 2px solid transparent;
   cursor: pointer;
@@ -286,50 +443,33 @@ const handleClose = () => {
   background: var(--color-surface-container-low);
 }
 
-.theme-option:hover {
-  border-color: var(--color-primary);
+.theme-color-option:hover {
+  border-color: var(--theme-color);
   transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.theme-option.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
+.theme-color-option.active {
+  border-color: var(--theme-color);
+  background: var(--color-surface-white);
 }
 
-.theme-preview {
-  display: flex;
-  gap: 3px;
-  margin-bottom: 8px;
-}
-
-.preview-primary {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-}
-
-.preview-secondary {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  margin-top: 8px;
-}
-
-.preview-accent {
-  width: 12px;
-  height: 12px;
+.color-preview {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  margin-top: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.theme-name {
+.color-name {
   font-size: 12px;
   color: var(--color-on-surface-variant);
   text-align: center;
+  font-weight: 500;
 }
 
-.theme-option.active .theme-name {
-  color: var(--color-primary);
+.theme-color-option.active .color-name {
+  color: var(--theme-color);
   font-weight: 600;
 }
 </style>
