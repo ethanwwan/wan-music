@@ -40,7 +40,7 @@
         />
 
         <!-- 搜索结果面板组件 -->
-        <SearchResultPanel 
+        <SearchResult 
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :albums="albumSearchResults"
@@ -64,7 +64,7 @@
 
         <!-- 歌单解析视图 -->
         <div class="view-container" v-show="currentView === 'playlist' && playlistInfo && displayTracks.length > 0">
-          <PlaylistDetail
+          <SearchResultList
             :playlist-info="playlistInfo"
             :display-tracks="displayTracks"
             :current-page="currentPage"
@@ -73,6 +73,7 @@
             :settings="settings"
             @track-selected="handleTrackSelected"
             @track-parsed="handleTrackParsed"
+            @track-play="handlePlaySong"
             @page-change="handlePageChange"
           />
         </div>
@@ -91,6 +92,9 @@
 
       <!-- 设置对话框 -->
       <SettingsDialog v-model="showSettingsDialog" />
+
+      <!-- 底部播放器 -->
+      <BottomPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" />
     </el-container>
   </el-config-provider>
 </template>
@@ -105,14 +109,15 @@ import HeroHeader from './components/HeroHeader.vue'
 import SystemNotice from './components/SystemNotice.vue'
 import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
-import SearchResultPanel from './components/SearchResultPanel.vue'
+import SearchResult from './components/SearchResult.vue'
 import Footer from './components/Footer.vue'
 import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 
 // 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
-import PlaylistDetail from './components/PlaylistDetail.vue'
+import SearchResultList from './components/SearchResultList.vue'
+import BottomPlayer from './components/BottomPlayer.vue'
 
 // 导入工具函数
 import musicApi, { QUALITY_LEVELS } from './services/musicApi.js'
@@ -131,6 +136,9 @@ const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
 const searchContainerRef = ref(null)
+
+// 播放列表
+const playerPlaylist = ref([])
 
 // 模式配置 - 按顺序：1 搜索，2 单曲，3 歌单，4 专辑，5 榜单
 const modes = [
@@ -161,7 +169,8 @@ const handleNoticeClose = () => {
 
 const handleViewChange = (view) => {
   currentView.value = view
-  // 清空结果
+  // 切换模式时不清空搜索结果，保持每个模式的独立状态
+  // 只清空其他模式的解析详情结果
   if (view === 'music') {
     clearPlaylistResult()
     clearAlbumResult()
@@ -199,6 +208,44 @@ const handleParseSong = (song) => {
   musicUrl.value = `https://music.163.com/song?id=${song.id}`
   const quality = settings.selectedQuality || 'lossless'
   parseMusic(quality, 'music')
+}
+
+// 当前播放索引
+const currentPlayIndex = ref(0)
+
+// 处理歌曲播放
+const handlePlaySong = async (track) => {
+  // 将当前列表添加到播放列表
+  const tracks = displayTracks.value.length > 0 
+    ? displayTracks.value 
+    : playlistInfo.value?.tracks || []
+  
+  // 转换为播放器所需格式
+  const newPlaylist = tracks.map(t => ({
+    id: t.id,
+    name: t.name,
+    artist: t.artist || t.ar?.[0]?.name || '未知艺术家',
+    album: t.album || t.al?.name || '未知专辑',
+    cover: getCoverUrl(t),
+    lrc: t.lrc || ''
+  }))
+  
+  // 找到当前歌曲索引
+  const index = newPlaylist.findIndex(p => p.id === track.id)
+  if (index >= 0) {
+    currentPlayIndex.value = index
+  }
+  
+  // 更新播放列表（触发播放器监听）
+  playerPlaylist.value = [...newPlaylist]
+}
+
+// 获取封面URL
+const getCoverUrl = (track) => {
+  if (track.cover) return track.cover
+  if (track.al?.picUrl) return track.al.picUrl
+  if (track.album?.coverImgUrl) return track.album.coverImgUrl
+  return ''
 }
 
 const handleParsePlaylist = (playlist) => {

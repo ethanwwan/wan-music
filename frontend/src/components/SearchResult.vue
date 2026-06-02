@@ -29,130 +29,18 @@
       </div>
     </div>
 
-    <!-- 歌单详情页面（二级页面） -->
-    <div v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0" class="detail-view">
-      <!-- 歌单/专辑信息头部 -->
-      <div class="detail-header">
-        <div class="header-left">
-          <div v-if="currentDetail.coverImgUrl" class="detail-cover-wrapper">
-            <img :src="currentDetail.coverImgUrl" :alt="currentDetail.name" class="detail-cover" />
-          </div>
-          <div class="detail-info">
-            <h1 class="detail-name">{{ currentDetail.name }}</h1>
-            <div class="detail-meta">
-              <span class="meta-item">{{ currentDetail.creator || currentDetail.artist }}</span>
-              <span class="meta-separator">•</span>
-              <span class="meta-item">共 {{ detailTracks.length }} 首歌曲</span>
-            </div>
-            <!-- 下载进度条 -->
-            <div v-if="downloadProgress.isDownloading" class="download-progress-bar">
-              <el-progress 
-                :percentage="downloadProgress.percentage" 
-                :status="downloadProgress.status"
-                :stroke-width="6"
-              />
-              <div class="progress-info">
-                <span class="current-song">正在下载：{{ downloadProgress.currentSong || '准备中...' }}</span>
-                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="header-right">
-          <el-button 
-            type="primary" 
-            @click="handleBatchDownload" 
-            :disabled="downloadProgress.isDownloading"
-            :loading="downloadProgress.isDownloading"
-          >
-            {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 歌曲列表表格 -->
-      <div class="tracks-table-wrapper">
-        <table class="tracks-table">
-          <thead>
-            <tr>
-              <th class="col-index">序号</th>
-              <th class="col-cover"></th>
-              <th class="col-name">歌名</th>
-              <th class="col-artist">歌手</th>
-              <th class="col-album">专辑</th>
-              <th class="col-action">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr 
-              v-for="(track, index) in currentDetailPageData" 
-              :key="track.id"
-              class="track-row"
-            >
-              <td class="col-index">{{ (currentDetailPage - 1) * detailPageSize + index + 1 }}</td>
-              <td class="col-cover">
-                <img
-                  :src="getTrackCover(track)"
-                  :alt="track.name"
-                  class="track-cover"
-                  loading="lazy"
-                />
-              </td>
-              <td class="col-name">
-                <span class="track-name">{{ track.name }}</span>
-              </td>
-              <td class="col-artist">{{ getArtist(track) }}</td>
-              <td class="col-album">{{ getAlbum(track) }}</td>
-              <td class="col-action">
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click="handleParse(track, 'song')"
-                >
-                  解析单曲
-                </el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 详情页分页组件 -->
-      <div v-if="detailTotalPages > 1" class="detail-pagination-container">
-        <div class="pagination">
-          <button 
-            class="pagination-btn" 
-            :disabled="currentDetailPage === 1"
-            @click="prevDetailPage"
-          >
-            ←
-          </button>
-          
-          <template v-for="page in detailVisiblePages" :key="page">
-            <span v-if="page === '...'" class="pagination-ellipsis">...</span>
-            <button 
-              v-else
-              class="pagination-btn"
-              :class="{ active: currentDetailPage === page }"
-              @click="goToDetailPage(page)"
-            >
-              {{ page }}
-            </button>
-          </template>
-          
-          <button 
-            class="pagination-btn" 
-            :disabled="currentDetailPage === detailTotalPages"
-            @click="nextDetailPage"
-          >
-            →
-          </button>
-        </div>
-        <div class="pagination-info">
-          共 {{ detailTracks.length }} 首，第 {{ currentDetailPage }}/{{ detailTotalPages }} 页
-        </div>
-      </div>
-    </div>
+    <!-- 歌单详情页面（二级页面）- 使用 SearchResultList 组件 -->
+    <SearchResultList 
+      v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
+      :playlist-info="currentDetail"
+      :display-tracks="currentDetailPageData"
+      :current-page="currentDetailPage"
+      :page-size="detailPageSize"
+      :total-tracks="detailTracks.length"
+      :settings="settings"
+      :is-detail-page="true"
+      @track-parsed="handleParse"
+    />
 
     <!-- 歌单卡片展示 -->
     <div v-if="displayMode === 'playlist' && !currentDetail" class="playlist-grid">
@@ -217,46 +105,12 @@
     </div>
 
     <!-- 分页组件（歌单和专辑搜索结果） -->
-    <div 
-      v-if="(displayMode === 'playlist' || displayMode === 'album') && !currentDetail && totalPages > 1" 
-      class="pagination-container"
-    >
-      <div class="pagination">
-        <button 
-          class="pagination-btn" 
-          :disabled="currentPage === 1"
-          @click="prevPage"
-        >
-          ←
-        </button>
-        
-        <template v-for="page in visiblePages" :key="page">
-          <span 
-            v-if="page === '...'" 
-            class="pagination-ellipsis"
-          >...</span>
-          <button 
-            v-else
-            class="pagination-btn"
-            :class="{ active: currentPage === page }"
-            @click="goToPage(page)"
-          >
-            {{ page }}
-          </button>
-        </template>
-        
-        <button 
-          class="pagination-btn" 
-          :disabled="currentPage === totalPages"
-          @click="nextPage"
-        >
-          →
-        </button>
-      </div>
-      <div class="pagination-info">
-        共 {{ totalCount }} 条，第 {{ currentPage }}/{{ totalPages }} 页
-      </div>
-    </div>
+    <Pagination 
+      v-if="(displayMode === 'playlist' || displayMode === 'album') && !currentDetail && totalCount > 0"
+      :total-count="totalCount"
+      :page-size="pageSize"
+      v-model="currentPage"
+    />
 
     <!-- 歌曲列表展示 -->
     <div v-if="displayMode === 'search' && !currentDetail" class="song-list-container">
@@ -307,6 +161,8 @@ import { ref, computed, watch } from 'vue'
 import { ElButton, ElMessage, ElNotification, ElProgress } from 'element-plus'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
+import SearchResultList from './SearchResultList.vue'
+import Pagination from './Pagination.vue'
 
 const props = defineProps({
   songs: {
@@ -348,11 +204,23 @@ const downloadProgress = ref({
   failed: 0
 })
 
-// 缓存存储（歌单和专辑）
-const cache = ref({
-  playlist: {},
-  album: {}
-})
+// 从 localStorage 加载缓存
+const loadDetailCache = () => {
+  const storedPlaylist = localStorage.getItem('wan-music-playlist-cache')
+  const storedAlbum = localStorage.getItem('wan-music-album-cache')
+  return {
+    playlist: storedPlaylist ? JSON.parse(storedPlaylist) : {},
+    album: storedAlbum ? JSON.parse(storedAlbum) : {}
+  }
+}
+
+// 保存缓存到 localStorage
+const saveDetailCache = (type, data) => {
+  localStorage.setItem(`wan-music-${type}-cache`, JSON.stringify(data))
+}
+
+// 缓存存储（歌单和专辑，从 localStorage 加载）
+const cache = ref(loadDetailCache())
 
 // 分页配置
 const currentPage = ref(1)
@@ -370,15 +238,11 @@ watch(() => props.currentMode, () => {
 })
 
 const displayMode = computed(() => {
-  // 根据 currentMode 优先显示对应类型的结果
-  if (props.currentMode === 'playlist' && props.playlists.length > 0) return 'playlist'
-  if (props.currentMode === 'album' && props.albums.length > 0) return 'album'
-  if (props.currentMode === 'search' && props.songs.length > 0) return 'search'
-  
-  // 如果没有匹配的模式，则根据数据存在情况显示
-  if (props.playlists.length > 0) return 'playlist'
-  if (props.albums.length > 0) return 'album'
-  if (props.songs.length > 0) return 'search'
+  // 严格根据当前模式显示对应类型的结果
+  // 每个模式只显示自己的数据，不回退到其他模式
+  if (props.currentMode === 'playlist') return 'playlist'
+  if (props.currentMode === 'album') return 'album'
+  if (props.currentMode === 'search' || props.currentMode === 'music' || props.currentMode === 'rank') return 'search'
   return null
 })
 
@@ -392,9 +256,10 @@ const title = computed(() => {
 })
 
 const totalCount = computed(() => {
-  if (props.playlists.length > 0) return props.playlists.length
-  if (props.albums.length > 0) return props.albums.length
-  if (props.songs.length > 0) return props.songs.length
+  // 只计算当前模式对应的数据数量
+  if (props.currentMode === 'playlist') return props.playlists.length
+  if (props.currentMode === 'album') return props.albums.length
+  if (props.currentMode === 'search' || props.currentMode === 'music') return props.songs.length
   return 0
 })
 
@@ -408,10 +273,11 @@ const currentPageData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   
-  if (props.playlists.length > 0) {
+  // 只返回当前模式对应的数据
+  if (props.currentMode === 'playlist') {
     return props.playlists.slice(start, end)
   }
-  if (props.albums.length > 0) {
+  if (props.currentMode === 'album') {
     return props.albums.slice(start, end)
   }
   return []
@@ -529,6 +395,7 @@ const hasResults = computed(() => {
   
   switch (props.currentMode) {
     case 'search':
+    case 'music':
       return props.songs.length > 0
     case 'playlist':
       return props.playlists.length > 0
@@ -606,6 +473,8 @@ const handleParse = async (item, type) => {
           trackCount: playlist.trackCount,
           tracks: detailTracks.value
         }
+        // 持久化到 localStorage
+        saveDetailCache('playlist', cache.value.playlist)
         
         if (detailTracks.value.length > 0) {
           ElNotification({
@@ -682,6 +551,8 @@ const handleParse = async (item, type) => {
           trackCount: detailTracks.value.length,
           tracks: detailTracks.value
         }
+        // 持久化到 localStorage
+        saveDetailCache('album', cache.value.album)
         
         if (detailTracks.value.length > 0) {
           ElNotification({
@@ -1383,76 +1254,4 @@ const getAlbum = (track) => {
   }
 }
 
-/* 分页组件样式 */
-.pagination-container {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-container-low);
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.pagination-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-}
-
-.pagination-btn.active {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-.pagination-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.pagination-ellipsis {
-  padding: 0 8px;
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.pagination-info {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-@media (max-width: 768px) {
-  .pagination-container {
-    justify-content: center;
-    padding: 1rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-  
-  .pagination-info {
-    order: -1;
-    width: 100%;
-    text-align: center;
-  }
-}
 </style>

@@ -171,79 +171,126 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     return
   }
 
-  // 验证链接格式
-  if (!musicApi.validateMusicUrl(musicUrl.value)) {
-    ElMessage.error('请输入有效的网易云音乐链接')
+  // 榜单模式 - 获取榜单歌曲列表
+  if (mode === 'rank') {
+    loading.value = true
+    try {
+      // 使用输入的内容作为榜单ID，或者使用默认榜单
+      const rankId = musicUrl.value.trim() || '19723756' // 默认飙升榜
+      const result = await musicApi.getPlaylistDetail(`https://music.163.com/discover/toplist?id=${rankId}`)
+      
+      if (result.success && result.data) {
+        // 将榜单歌曲作为搜索结果展示
+        searchResults.value = result.data.tracks || []
+        playlistInfo.value = result.data
+        ElNotification({
+          title: '榜单获取成功',
+          message: `成功获取榜单：${result.data.name || '未知榜单'}，共 ${searchResults.value.length} 首歌曲`,
+          type: 'success'
+        })
+      } else {
+        searchResults.value = []
+        ElMessage.warning(result.error || '获取榜单失败')
+      }
+    } catch (error) {
+      searchResults.value = []
+      ElMessage.error('获取榜单失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
     return
   }
 
-  loading.value = true
+  // 单曲模式 - 支持URL解析和名称搜索
+  // 如果是有效的单曲URL，直接解析
+  if (musicApi.validateMusicUrl(musicUrl.value)) {
+    loading.value = true
+    try {
+      const result = await musicApi.parseMusicInfo(musicUrl.value, selectedQuality)
+      musicInfo.value = result
 
-  try {
-    const result = await musicApi.parseMusicInfo(musicUrl.value, selectedQuality)
-    musicInfo.value = result
-
-    const getApiVersionLabel = () => {
-      const v = settings?.apiVersion
-      switch (v) {
-        case 'API_V2':
-          return '接口2'
-        case 'API_V1':
-        default:
-          return '接口1'
+      const getApiVersionLabel = () => {
+        const v = settings?.apiVersion
+        switch (v) {
+          case 'API_V2':
+            return '接口2'
+          case 'API_V1':
+          default:
+            return '接口1'
+        }
       }
-    }
 
-    ElNotification({
-      title: '解析成功',
-      message: `成功解析歌曲：${result.name} (${result.qualityName}) ${getApiVersionLabel()}`,
-      type: 'success'
-    })
-  } catch (error) {
-    // 根据错误类型显示不同的提示信息
-    let errorMessage = '解析失败，请检查链接是否正确'
-    
-    if (error.message && error.message.includes('API服务器暂时不可用')) {
-      errorMessage = 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'
-      ElMessage({
-        message: errorMessage,
-        type: 'warning',
-        duration: 8000,
-        showClose: true
+      ElNotification({
+        title: '解析成功',
+        message: `成功解析歌曲：${result.name} (${result.qualityName}) ${getApiVersionLabel()}`,
+        type: 'success'
       })
-    } else if (error.message && (error.message.includes('付费') || error.message.includes('版权限制'))) {
-      // detail 返回 free=4 且无法获取 url 的情况
-      errorMessage = '该歌曲为付费或受版权限制，暂无法获取播放链接'
-      ElMessage({
-        message: errorMessage,
-        type: 'error',
-        duration: 6000,
-        showClose: true
-      })
-    } else if (error.message && (error.message.includes('下架') || error.message.includes('无法获取'))) {
-      // detail 成功但 url 未返回的统一提示
-      errorMessage = '该歌曲已下架或者无法获取'
-      ElMessage({
-        message: errorMessage,
-        type: 'error',
-        duration: 6000,
-        showClose: true
-      })
-    } else if (error.message && error.message.includes('网络连接失败')) {
-      errorMessage = error.message
-      ElMessage({
-        message: errorMessage,
-        type: 'error',
-        duration: 6000,
-        showClose: true
-      })
-  } else {
-    ElMessage.error(error.message || errorMessage)
+    } catch (error) {
+      // 根据错误类型显示不同的提示信息
+      let errorMessage = '解析失败，请检查链接是否正确'
+      
+      if (error.message && error.message.includes('API服务器暂时不可用')) {
+        errorMessage = 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'
+        ElMessage({
+          message: errorMessage,
+          type: 'warning',
+          duration: 8000,
+          showClose: true
+        })
+      } else if (error.message && (error.message.includes('付费') || error.message.includes('版权限制'))) {
+        errorMessage = '该歌曲为付费或受版权限制，暂无法获取播放链接'
+        ElMessage({
+          message: errorMessage,
+          type: 'error',
+          duration: 6000,
+          showClose: true
+        })
+      } else if (error.message && (error.message.includes('下架') || error.message.includes('无法获取'))) {
+        errorMessage = '该歌曲已下架或者无法获取'
+        ElMessage({
+          message: errorMessage,
+          type: 'error',
+          duration: 6000,
+          showClose: true
+        })
+      } else if (error.message && error.message.includes('网络连接失败')) {
+        errorMessage = error.message
+        ElMessage({
+          message: errorMessage,
+          type: 'error',
+          duration: 6000,
+          showClose: true
+        })
+      } else {
+        ElMessage.error(error.message || errorMessage)
+      }
+    } finally {
+      loading.value = false
+    }
+    return
   }
-  
-} finally {
-  loading.value = false
-}
+
+  // 如果不是URL，尝试搜索歌曲
+  loading.value = true
+  try {
+    const result = await musicApi.searchMusic(musicUrl.value)
+    if (result.success && result.data.songs && result.data.songs.length > 0) {
+      searchResults.value = result.data.songs
+      ElNotification({
+        title: '搜索成功',
+        message: `找到 ${result.data.songs.length} 首相关歌曲`,
+        type: 'success'
+      })
+    } else {
+      searchResults.value = []
+      ElMessage.warning(result.error || '搜索结果为空')
+    }
+  } catch (error) {
+    searchResults.value = []
+    ElMessage.error('搜索失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 当前解析状态

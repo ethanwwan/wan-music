@@ -314,6 +314,15 @@ defineExpose({
   transform: none;
 }
 
+.input-row :deep(.el-button--primary.is-loading) {
+  background: var(--color-primary);
+  opacity: 0.8;
+}
+
+.input-row :deep(.el-button--primary.is-loading .el-loading-spinner) {
+  color: white;
+}
+
 .example-section {
   display: flex;
   flex-direction: column;

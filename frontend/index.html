@@ -20,7 +20,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: #F5F7FA;
+        background: var(--color-background, #F5F7FA);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -31,16 +31,22 @@
           <div style="
             width: 40px;
             height: 40px;
-            border: 3px solid #e4e7ed;
-            border-top: 3px solid #C20C0C;
+            border: 3px solid var(--color-border, #e4e7ed);
+            border-top: 3px solid var(--color-primary, #4F46E5);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 16px;
           "></div>
-          <p style="color: #666666; margin: 0;">正在加载网易云音乐解析器...</p>
+          <p style="color: var(--color-text-muted, #666666); margin: 0;">正在加载网易云音乐解析器...</p>
         </div>
       </div>
       <style>
+        :root {
+          --color-primary: #4F46E5;
+          --color-background: #F5F7FA;
+          --color-border: #e4e7ed;
+          --color-text-muted: #666666;
+        }
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }

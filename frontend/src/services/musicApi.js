@@ -10,19 +10,35 @@ import { NeteaseAPI } from './neteaseApi.js'
 
 const neteaseApi = new NeteaseAPI()
 
-// 搜索缓存
-const searchCache = {
-  music: new Map(),
-  playlist: new Map(),
-  album: new Map()
+// 从 localStorage 加载缓存
+const loadCacheFromStorage = (type) => {
+  const stored = localStorage.getItem(`wan-music-search-${type}`)
+  if (stored) {
+    try {
+      return new Map(JSON.parse(stored))
+    } catch {
+      return new Map()
+    }
+  }
+  return new Map()
 }
 
-// 检查缓存是否有效
-const isCacheValid = (cacheEntry, ttlMinutes) => {
+// 保存缓存到 localStorage
+const saveCacheToStorage = (type, cache) => {
+  localStorage.setItem(`wan-music-search-${type}`, JSON.stringify(Array.from(cache.entries())))
+}
+
+// 搜索缓存（从 localStorage 加载，持久化存储）
+const searchCache = {
+  music: loadCacheFromStorage('music'),
+  playlist: loadCacheFromStorage('playlist'),
+  album: loadCacheFromStorage('album')
+}
+
+// 检查缓存是否有效（长期有效，不过期）
+const isCacheValid = (cacheEntry) => {
   if (!cacheEntry) return false
-  const now = Date.now()
-  const cacheTime = cacheEntry.timestamp
-  return (now - cacheTime) < (ttlMinutes * 60 * 1000)
+  return true
 }
 
 // 获取缓存数据
@@ -33,14 +49,14 @@ const getCachedSearchResult = (type, keyword) => {
   if (!cache) return null
   
   const cached = cache.get(keyword)
-  if (isCacheValid(cached, settings.cacheTTLMinutes || 15)) {
+  if (isCacheValid(cached)) {
     console.log(`使用缓存的${type}搜索结果: ${keyword}`)
     return cached.data
   }
   
-  // 缓存过期，删除
   if (cached) {
     cache.delete(keyword)
+    saveCacheToStorage(type, cache)
   }
   return null
 }
@@ -56,6 +72,7 @@ const setCachedSearchResult = (type, keyword, data) => {
     data,
     timestamp: Date.now()
   })
+  saveCacheToStorage(type, cache)
 }
 
 /**
@@ -430,8 +447,47 @@ export const getLyrics = async (musicId) => {
   }
 }
 
+// 流式下载文件并返回Blob
+const streamDownload = async (url, onProgress = null) => {
+  const response = await fetch(url, { cache: 'no-store', mode: 'cors' })
+  if (!response.ok) {
+    throw new Error(`下载失败: ${response.statusText}`)
+  }
+
+  const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10)
+  const reader = response.body.getReader()
+  const chunks = []
+  let downloadedBytes = 0
+  const startTime = Date.now()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    chunks.push(value)
+    downloadedBytes += value.length
+
+    if (onProgress && contentLength > 0) {
+      const elapsed = (Date.now() - startTime) / 1000
+      const speed = elapsed > 0 ? downloadedBytes / elapsed / 1024 : 0 // KB/s
+      const remainingBytes = contentLength - downloadedBytes
+      const eta = speed > 0 ? Math.ceil(remainingBytes / speed / 1024) : 0 // 秒
+
+      onProgress({
+        downloadedBytes,
+        totalBytes: contentLength,
+        percentage: Math.round((downloadedBytes / contentLength) * 100),
+        speed: speed.toFixed(1),
+        eta
+      })
+    }
+  }
+
+  return new Blob(chunks, { type: response.headers.get('Content-Type') })
+}
+
 // 下载音乐
-export const downloadMusic = async (musicInfo, settings = {}) => {
+export const downloadMusic = async (musicInfo, settings = {}, onProgress = null) => {
   const {
     filenameFormat = 'song-artist',
     writeMetadata = false
@@ -446,11 +502,9 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
   }
 
   try {
-    const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
-    if (!response.ok) {
-      throw new Error(`下载音频文件失败: ${response.statusText}`)
-    }
-    let audioBuffer = await response.arrayBuffer()
+    // 流式下载
+    const audioBlob = await streamDownload(musicInfo.url, onProgress)
+    let audioBuffer = await audioBlob.arrayBuffer()
 
     if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
       try {
@@ -468,7 +522,7 @@ export const downloadMusic = async (musicInfo, settings = {}) => {
       }
     }
 
-    const mime = response.headers.get('Content-Type') || getMimeByExtension(extension)
+    const mime = audioBlob.type || getMimeByExtension(extension)
     const typedBlob = ensureBlobType(new Blob([audioBuffer], { type: mime }), mime)
     saveBlob(typedBlob, sanitizeFilename(filename))
 
@@ -707,119 +761,226 @@ export const batchDownloadMusic = async (musicList, playlistName = '', settings 
   const total = musicList.length
   let completed = 0
   let failed = 0
+  let totalBytes = 0
+  let downloadedBytes = 0
+  const startTime = Date.now()
+  const activeDownloads = new Map() // trackId -> { name, downloaded, total }
 
   try {
     // 导入 JSZip
     const JSZip = (await import('jszip')).default
     const zip = new JSZip()
 
-    // 并发控制，最多同时下载3个
-    const concurrency = 3
-    
-    for (let i = 0; i < musicList.length; i += concurrency) {
-      const batch = musicList.slice(i, i + concurrency)
+    // 动态并发控制：根据文件大小和网络状况调整
+    const maxConcurrency = 12 // 最多12个并发下载
+    const getDynamicConcurrency = () => {
+      const activeCount = activeDownloads.size
+      // 如果网络不好或文件太大，减少并发
+      if (activeCount >= maxConcurrency) return 0
+      if (activeCount >= maxConcurrency - 3) return 1
+      return Math.min(3, maxConcurrency - activeCount)
+    }
+
+    const sendProgress = () => {
+      if (!onProgress) return
       
-      const batchResults = await Promise.allSettled(
-        batch.map(async (musicInfo) => {
-          try {
-            // 下载音频文件
-            const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
-            if (!response.ok) {
-              throw new Error(`下载音频文件失败: ${response.statusText}`)
-            }
-            let audioBuffer = await response.arrayBuffer()
+      const elapsed = (Date.now() - startTime) / 1000
+      const speed = elapsed > 0 ? downloadedBytes / elapsed / 1024 : 0 // KB/s
+      const remainingBytes = totalBytes - downloadedBytes
+      const eta = speed > 0 ? Math.ceil(remainingBytes / speed / 1024) : 0 // 秒
+      const overallPercentage = totalBytes > 0 
+        ? Math.round((downloadedBytes / totalBytes) * 100) 
+        : Math.round(((completed + failed) / total) * 100)
 
-            // 写入元数据（如果启用）
-            const extension = musicInfo.fileExtension || '.mp3'
-            if (settings.writeMetadata && (extension === '.mp3' || extension === '.flac')) {
-              try {
-                const metadata = {
-                  name: musicInfo.name,
-                  artist: musicInfo.artist,
-                  album: musicInfo.album,
-                  year: new Date().getFullYear().toString(),
-                  lyrics: musicInfo.lrc,
-                  cover: musicInfo.cover
-                }
-                const { embedMetadata } = await import('./metadataWriter.js')
-                audioBuffer = await embedMetadata(audioBuffer, metadata, extension)
-              } catch (metaError) {
-                console.warn(`元数据写入失败: ${musicInfo.name}`, metaError)
-              }
-            }
-
-            // 生成文件名
-            let filename
-            const sanitizedName = musicInfo.name.replace(/[<>:"/\\|?*]/g, '_')
-            const sanitizedArtist = musicInfo.artist.replace(/[<>:"/\\|?*]/g, '_')
-            if (settings.filenameFormat === 'artist-song') {
-              filename = `${sanitizedArtist} - ${sanitizedName}${extension}`
-            } else {
-              filename = `${sanitizedName} - ${sanitizedArtist}${extension}`
-            }
-
-            // 添加到 ZIP
-            zip.file(filename, audioBuffer)
-
-            // 如果有歌词，也添加到 ZIP
-            if (musicInfo.lrc) {
-              const lrcFilename = filename.replace(extension, '.lrc')
-              zip.file(lrcFilename, musicInfo.lrc)
-            }
-
-            completed++
-            if (onProgress) {
-              onProgress({
-                total,
-                completed,
-                failed,
-                current: musicInfo.name,
-                percentage: Math.round((completed + failed) / total * 100)
-              })
-            }
-            return {
-              success: true,
-              name: musicInfo.name,
-              id: musicInfo.id
-            }
-          } catch (error) {
-            failed++
-            if (onProgress) {
-              onProgress({
-                total,
-                completed,
-                failed,
-                current: musicInfo.name,
-                percentage: Math.round((completed + failed) / total * 100),
-                error: error.message
-              })
-            }
-            return {
-              success: false,
-              name: musicInfo.name,
-              id: musicInfo.id,
-              error: error.message
-            }
-          }
-        })
-      )
-      
-      // 收集结果
-      batchResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          results.push(result.value)
-        } else {
-          results.push({
-            success: false,
-            name: batch[index]?.name || '未知歌曲',
-            error: result.reason?.message || '下载失败'
-          })
-        }
+      onProgress({
+        total,
+        completed,
+        failed,
+        totalBytes,
+        downloadedBytes,
+        percentage: overallPercentage,
+        speed: speed.toFixed(1),
+        eta,
+        activeDownloads: Array.from(activeDownloads.values())
       })
     }
 
+    // 预获取文件大小
+    const fetchSizes = async () => {
+      const sizePromises = musicList.map(async (info) => {
+        try {
+          const headResponse = await fetch(info.url, { method: 'HEAD' })
+          return parseInt(headResponse.headers.get('Content-Length') || '0', 10)
+        } catch {
+          return 0
+        }
+      })
+      const sizes = await Promise.all(sizePromises)
+      totalBytes = sizes.reduce((sum, s) => sum + s, 0)
+    }
+
+    await fetchSizes()
+    sendProgress()
+
+    // 并发下载队列
+    const downloadQueue = []
+    let queueIndex = 0
+
+    const runDownload = async (musicInfo) => {
+      const trackId = musicInfo.id
+      activeDownloads.set(trackId, { 
+        name: musicInfo.name, 
+        downloaded: 0, 
+        total: 0,
+        status: 'downloading'
+      })
+
+      try {
+        const extension = musicInfo.fileExtension || '.mp3'
+        const sanitizedName = musicInfo.name.replace(/[<>:"/\\|?*]/g, '_')
+        const sanitizedArtist = musicInfo.artist.replace(/[<>:"/\\|?*]/g, '_')
+        
+        let filename
+        if (settings.filenameFormat === 'artist-song') {
+          filename = `${sanitizedArtist} - ${sanitizedName}${extension}`
+        } else {
+          filename = `${sanitizedName} - ${sanitizedArtist}${extension}`
+        }
+
+        // 流式下载
+        const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
+        if (!response.ok) {
+          throw new Error(`下载失败: ${response.statusText}`)
+        }
+
+        const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10)
+        const reader = response.body.getReader()
+        const chunks = []
+        let localDownloaded = 0
+
+        activeDownloads.set(trackId, { 
+          name: musicInfo.name, 
+          downloaded: 0, 
+          total: contentLength,
+          status: 'downloading'
+        })
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          chunks.push(value)
+          localDownloaded += value.length
+          downloadedBytes += value.length
+
+          activeDownloads.set(trackId, { 
+            name: musicInfo.name, 
+            downloaded: localDownloaded, 
+            total: contentLength,
+            status: 'downloading'
+          })
+          sendProgress()
+        }
+
+        const audioBlob = new Blob(chunks)
+        let audioBuffer = await audioBlob.arrayBuffer()
+
+        // 写入元数据（如果启用）
+        if (settings.writeMetadata && (extension === '.mp3' || extension === '.flac')) {
+          try {
+            const metadata = {
+              name: musicInfo.name,
+              artist: musicInfo.artist,
+              album: musicInfo.album,
+              year: new Date().getFullYear().toString(),
+              lyrics: musicInfo.lrc,
+              cover: musicInfo.cover
+            }
+            const { embedMetadata } = await import('./metadataWriter.js')
+            audioBuffer = await embedMetadata(audioBuffer, metadata, extension)
+          } catch (metaError) {
+            console.warn(`元数据写入失败: ${musicInfo.name}`, metaError)
+          }
+        }
+
+        // 添加到 ZIP
+        zip.file(filename, audioBuffer)
+
+        // 如果启用了独立LRC文件下载且有歌词，添加到 ZIP
+        if (settings.downloadLrcFile !== false && musicInfo.lrc) {
+          const lrcFilename = filename.replace(extension, '.lrc')
+          zip.file(lrcFilename, musicInfo.lrc)
+        }
+
+        activeDownloads.set(trackId, { 
+          name: musicInfo.name, 
+          downloaded: contentLength, 
+          total: contentLength,
+          status: 'completed'
+        })
+        completed++
+        sendProgress()
+
+        return {
+          success: true,
+          name: musicInfo.name,
+          id: musicInfo.id
+        }
+      } catch (error) {
+        activeDownloads.set(trackId, { 
+          name: musicInfo.name, 
+          downloaded: 0, 
+          total: 0,
+          status: 'failed',
+          error: error.message
+        })
+        failed++
+        sendProgress()
+
+        return {
+          success: false,
+          name: musicInfo.name,
+          id: musicInfo.id,
+          error: error.message
+        }
+      } finally {
+        activeDownloads.delete(trackId)
+      }
+    }
+
+    // 启动并发下载
+    const processQueue = async () => {
+      while (queueIndex < musicList.length) {
+        // 控制并发数
+        while (activeDownloads.size >= maxConcurrency && queueIndex < musicList.length) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+
+        if (queueIndex >= musicList.length) break
+
+        const batchSize = getDynamicConcurrency()
+        const batch = musicList.slice(queueIndex, queueIndex + batchSize)
+        queueIndex += batchSize
+
+        const batchPromises = batch.map(musicInfo => runDownload(musicInfo))
+        const batchResults = await Promise.all(batchPromises)
+        results.push(...batchResults)
+      }
+    }
+
+    await processQueue()
+
     // 生成 ZIP 文件并下载
     if (completed > 0) {
+      // 更新进度为打包中
+      if (onProgress) {
+        onProgress({
+          ...(onProgress instanceof Function ? {} : onProgress),
+          status: 'packing',
+          message: '正在打包 ZIP 文件...'
+        })
+      }
+
       const content = await zip.generateAsync({ type: 'blob' })
       const zipFilename = playlistName 
         ? `${playlistName.replace(/[<>:"/\\|?*]/g, '_')}.zip`

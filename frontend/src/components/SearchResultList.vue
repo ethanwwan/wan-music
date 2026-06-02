@@ -1,18 +1,16 @@
 <template>
-  <div class="playlist-detail">
-
-
+  <div :class="isDetailPage ? 'detail-view' : 'search-result-panel'">
     <!-- 歌曲列表 -->
-    <div v-if="playlistData && totalTracks > 0" class="tracks-section">
+    <div v-if="playlistData && totalTracks > 0" :class="isDetailPage ? '' : 'tracks-section'">
       <!-- 歌单标题区域 -->
-      <div class="playlist-header">
+      <div :class="isDetailPage ? 'detail-header' : 'playlist-header'">
         <div class="header-left">
-          <div v-if="playlistData.coverImgUrl" class="playlist-cover-wrapper">
-            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" class="playlist-cover" />
+          <div v-if="playlistData.coverImgUrl" :class="isDetailPage ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
+            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" :class="isDetailPage ? 'detail-cover' : 'playlist-cover'" />
           </div>
-          <div class="playlist-info">
-            <h1 class="playlist-name">{{ playlistData.name }}</h1>
-            <div class="playlist-meta">
+          <div :class="isDetailPage ? 'detail-info' : 'playlist-info'">
+            <h1 :class="isDetailPage ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
+            <div :class="isDetailPage ? 'detail-meta' : 'playlist-meta'">
               <span class="meta-item">{{ creatorLabel }}：{{ playlistData.creator }}</span>
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
@@ -23,10 +21,11 @@
                 :percentage="downloadProgress.percentage" 
                 :status="downloadProgress.status"
                 :stroke-width="6"
+                :show-text="false"
               />
               <div class="progress-info">
                 <span class="current-song">正在下载：{{ downloadProgress.currentSong || '准备中...' }}</span>
-                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }}</span>
+                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }} ({{ downloadProgress.percentage }}%)</span>
               </div>
             </div>
           </div>
@@ -35,7 +34,7 @@
           <el-button 
             type="primary" 
             @click="handleBatchDownload" 
-            :disabled="!settings?.enableBatchDownload || downloadProgress.isDownloading"
+            :disabled="downloadProgress.isDownloading"
             :loading="downloadProgress.isDownloading"
           >
             {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
@@ -52,7 +51,6 @@
               <th class="col-cover"></th>
               <th class="col-name">歌名</th>
               <th class="col-artist">歌手</th>
-              <th class="col-album">专辑</th>
               <th class="col-action">操作</th>
             </tr>
           </thead>
@@ -78,28 +76,37 @@
                 <span class="track-name">{{ track.name }}</span>
               </td>
               <td class="col-artist">{{ getArtist(track) }}</td>
-              <td class="col-album">{{ getAlbum(track) }}</td>
               <td class="col-action">
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click.stop="parseTrack(track)"
-                  :loading="parsingTrackId === track.id"
+                <button 
+                  @click.stop="playTrack(track)"
+                  :disabled="parsingTrackId === track.id && parsingType === 'play'"
+                  class="action-btn play-btn"
+                  title="播放"
                 >
-                  {{ parsingTrackId === track.id ? '解析中...' : '解析单曲' }}
-                </el-button>
+                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-icon">◌</span>
+                  <span v-else class="btn-icon">▶</span>
+                </button>
+                <button 
+                  @click.stop="downloadSingle(track)"
+                  :disabled="parsingTrackId === track.id && parsingType === 'download'"
+                  class="action-btn download-btn"
+                  title="下载"
+                >
+                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-icon">◌</span>
+                  <span v-else class="btn-icon">⬇</span>
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
       
-      <!-- 分页：上一页 / 下一页 按钮 -->
-      <div class="pagination-section">
-        <el-button size="small" @click="goPrevPage" :disabled="currentPage <= 1">上一页</el-button>
-        <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
-        <el-button size="small" type="primary" @click="goNextPage" :disabled="currentPage >= totalPages">下一页</el-button>
-      </div>
+      <Pagination 
+        :total-count="totalTracks"
+        :page-size="pageSize"
+        :model-value="currentPage"
+        @update:model-value="handlePageChange"
+      />
     </div>
 
     <!-- 加载状态 -->
@@ -126,14 +133,18 @@ import { ElMessage, ElButton, ElIcon, ElProgress } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
+import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
+import { embedMetadata } from '../services/metadataWriter.js'
+import Pagination from './Pagination.vue'
 
 export default {
-  name: 'PlaylistDetail',
+  name: 'SearchResultList',
   components: {
     ElButton,
     ElIcon,
     ElProgress,
-    Loading
+    Loading,
+    Pagination
   },
   props: {
     playlistInfo: {
@@ -160,6 +171,10 @@ export default {
     settings: {
       type: Object,
       default: () => ({})
+    },
+    isDetailPage: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['track-selected', 'track-parsed', 'page-change'],
@@ -170,6 +185,7 @@ export default {
     const error = ref('')
     const selectedTrack = ref(null)
     const parsingTrackId = ref(null)
+    const parsingType = ref(null) // 'play' | 'download'
     
     // 下载进度状态
     const downloadProgress = ref({
@@ -224,6 +240,86 @@ export default {
     const selectTrack = (track) => {
       selectedTrack.value = track
       emit('track-selected', track)
+    }
+
+    // 播放歌曲（先解析再播放）
+    const playTrack = async (track) => {
+      parsingTrackId.value = track.id
+      parsingType.value = 'play'
+      
+      try {
+        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+        
+        // 调用解析逻辑
+        emit('track-parsed', { track, quality: qualityValue })
+        
+        // 解析成功后触发播放
+        emit('track-play', track)
+        ElMessage.success(`开始播放：${track.name}`)
+      } catch (error) {
+        ElMessage.error(`播放失败：${error.message}`)
+      } finally {
+        parsingTrackId.value = null
+        parsingType.value = null
+      }
+    }
+
+    // 下载单曲
+    const downloadSingle = async (track) => {
+      parsingTrackId.value = track.id
+      parsingType.value = 'download'
+      
+      try {
+        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+        const songUrl = `https://music.163.com/song?id=${track.id}`
+        
+        // 解析歌曲信息
+        const musicInfo = await parseMusicInfo(songUrl, qualityValue)
+        
+        if (!musicInfo?.url) {
+          throw new Error('获取下载链接失败')
+        }
+        
+        // 下载并保存
+        const response = await fetch(musicInfo.url)
+        if (!response.ok) {
+          throw new Error('下载失败')
+        }
+        
+        const audioBuffer = await response.arrayBuffer()
+        const contentType = response.headers.get('Content-Type') || ''
+        
+        let extension = '.mp3'
+        if (contentType.includes('flac')) extension = '.flac'
+        else if (contentType.includes('mp4')) extension = '.m4a'
+        
+        let finalBuffer = audioBuffer
+        if (props.settings?.writeMetadata !== false && (extension === '.mp3' || extension === '.flac')) {
+          const metadata = {
+            name: track.name,
+            artist: getArtist(track),
+            album: getAlbum(track),
+            lyrics: musicInfo.lrc || '',
+            cover: getCover(track)
+          }
+          try {
+            finalBuffer = await embedMetadata(audioBuffer, metadata, extension)
+          } catch {
+            // 元数据写入失败，继续下载
+          }
+        }
+        
+        const filename = sanitizeFilename(`${track.name} - ${getArtist(track)}${extension}`)
+        const blob = new Blob([finalBuffer], { type: contentType })
+        saveBlob(blob, filename)
+        
+        ElMessage.success(`已下载：${track.name}`)
+      } catch (error) {
+        ElMessage.error(`下载失败：${error.message}`)
+      } finally {
+        parsingTrackId.value = null
+        parsingType.value = null
+      }
     }
 
     // 批量下载
@@ -283,20 +379,24 @@ export default {
           musicList,
           playlistData.value?.name || '', // 传递歌单/专辑名称作为 ZIP 文件名
           {
-            filenameFormat: settings.filenameFormat || 'artist-song',
-            writeMetadata: settings.writeMetadata !== false // 默认开启，除非明确设置为 false
+            filenameFormat: props.settings?.filenameFormat || 'artist-song',
+            writeMetadata: props.settings?.writeMetadata !== false,
+            downloadLrcFile: props.settings?.downloadLrcFile !== false,
+            selectedQuality: props.settings?.selectedQuality || 'lossless'
           },
           (progress) => {
             downloadProgress.value.percentage = progress.percentage
             downloadProgress.value.currentSong = progress.current
             downloadProgress.value.completed = progress.completed
             downloadProgress.value.failed = progress.failed
+            downloadProgress.value.total = progress.total
           }
         )
 
         // 下载完成
         downloadProgress.value.isDownloading = false
         downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
+        downloadProgress.value.percentage = 100
 
         if (result.failed === 0) {
           ElMessage.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
@@ -345,24 +445,7 @@ export default {
       return count.toString()
     }
 
-    // 计算总页数
-    const totalPages = computed(() => {
-      const size = Number(props.pageSize) || 1
-      const total = Number(props.totalTracks) || 0
-      return Math.max(1, Math.ceil(total / size))
-    })
-
-    // 上一页 / 下一页
-    const goPrevPage = () => {
-      if (props.currentPage > 1) {
-        handlePageChange(props.currentPage - 1)
-      }
-    }
-    const goNextPage = () => {
-      if (props.currentPage < totalPages.value) {
-        handlePageChange(props.currentPage + 1)
-      }
-    }
+    
 
 
 
@@ -373,9 +456,11 @@ export default {
       error,
       selectedTrack,
       parsingTrackId,
+      parsingType,
       downloadProgress,
       selectTrack,
-      parseTrack,
+      playTrack,
+      downloadSingle,
       handleBatchDownload,
       handlePageChange,
       formatPlayCount,
@@ -383,15 +468,67 @@ export default {
       onCoverError,
       getArtist,
       getAlbum,
-      totalPages,
-      goPrevPage,
-      goNextPage,
     }
   }
 }
 </script>
 
 <style>
+/* 操作按钮样式 */
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: #f3f4f6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #6366f1;
+  transform: translateY(-1px);
+}
+
+.action-btn:active {
+  transform: translateY(0);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.play-btn,
+.download-btn {
+  color: #6b7280;
+}
+
+.action-btn:hover .btn-icon {
+  color: white;
+}
+
+.btn-icon {
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.loading-icon {
+  font-size: 14px;
+  animation: spin 1s linear infinite;
+  color: #6366f1;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* 全局深色模式样式 - 不使用scoped以确保样式能够应用 */
 .dark .tracks-section {
   background: var(--color-surface-white) !important;
@@ -400,10 +537,6 @@ export default {
 
 .dark .section-header h2 {
   color: var(--color-on-surface) !important;
-}
-
-.dark .page-info {
-  color: var(--color-text-muted) !important;
 }
 
 .dark .track-total {
@@ -438,10 +571,6 @@ export default {
   color: var(--color-outline) !important;
 }
 
-.dark .pagination-section {
-  border-top-color: var(--color-border-subtle) !important;
-}
-
 .dark .section-header {
   border-bottom-color: var(--color-border-subtle) !important;
 }
@@ -452,7 +581,8 @@ export default {
 </style>
 
 <style scoped>
-.playlist-detail {
+/* 单独展示模式 - 带圆角和阴影 */
+.search-result-panel {
   width: 100%;
 }
 
@@ -464,7 +594,6 @@ export default {
   overflow: hidden;
 }
 
-/* 歌单头部 */
 .playlist-header {
   display: flex;
   justify-content: space-between;
@@ -472,12 +601,6 @@ export default {
   padding: 1.5rem;
   border-bottom: 1px solid var(--color-border-subtle);
   background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-white) 100%);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
 }
 
 .playlist-cover-wrapper {
@@ -515,6 +638,56 @@ export default {
   color: var(--color-text-muted);
 }
 
+/* 二级页面模式 - 使用详情页样式 */
+.detail-view {
+  padding: 0;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-white) 100%);
+}
+
+.detail-cover-wrapper {
+  flex-shrink: 0;
+}
+
+.detail-cover {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.detail-info {
+  flex: 1;
+  min-width: 0;
+  padding-left: 1rem;
+}
+
+.detail-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin: 0 0 0.5rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
 .meta-item {
   white-space: nowrap;
 }
@@ -537,8 +710,9 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
   font-size: 13px;
+  width: 100%;
 }
 
 .current-song {
@@ -548,13 +722,14 @@ export default {
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+  margin-right: 1rem;
 }
 
 .progress-text {
   color: var(--color-primary);
   font-weight: 600;
-  margin-left: 1rem;
   flex-shrink: 0;
+  text-align: right;
 }
 
 /* 表格容器 */
@@ -620,7 +795,11 @@ export default {
 }
 
 .col-action {
-  width: 100px;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .track-row:hover {
@@ -640,7 +819,7 @@ export default {
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
-.header-left {
+.section-header .header-left {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -786,20 +965,6 @@ export default {
   padding: 20px;
 }
 
-.pagination-section {
-  margin-top: var(--space-4);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--color-border-subtle);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.page-info {
-  color: var(--color-text-muted);
-}
-
 /* 循环解析模式样式 */
 
 .dark .track-cover {
@@ -850,15 +1015,6 @@ export default {
   
   .track-name {
     font-size: 14px;
-  }
-  
-  .pagination-section {
-    margin-top: var(--space-3);
-    padding: var(--space-2) 0;
-  }
-  
-  .pagination-section .el-pagination {
-    font-size: 12px;
   }
 }
 

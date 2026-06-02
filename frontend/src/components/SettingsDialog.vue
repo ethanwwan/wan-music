@@ -130,7 +130,17 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">写入歌曲名、歌手、专辑、封面等信息（默认开启）</el-text>
+              <el-text type="info" size="small">写入歌曲名、歌手、专辑、封面、歌词等信息（默认开启）</el-text>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="下载LRC歌词文件">
+            <el-switch
+              v-model="settings.downloadLrcFile"
+              @change="handleSave"
+            />
+            <div class="form-item-hint">
+              <el-text type="info" size="small">批量下载时同时生成独立的LRC歌词文件（默认开启）</el-text>
             </div>
           </el-form-item>
         </el-form>
