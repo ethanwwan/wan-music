@@ -722,6 +722,11 @@ const getAlbum = (track) => {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  transform: none !important;
+}
+
+.loading-spinner .loading-text {
+  transform: none !important;
 }
 
 .spinner {
