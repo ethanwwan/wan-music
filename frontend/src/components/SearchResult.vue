@@ -158,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, forceUpdate } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElButton, ElMessage, ElNotification, ElProgress } from 'element-plus'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
@@ -238,11 +238,8 @@ watch(() => props.currentMode, () => {
   detailTracks.value = []
 })
 
-// 监听分页变化，强制触发更新
-watch(currentPage, () => {
-  // 强制触发重新渲染
-  forceUpdate()
-})
+// currentPageData 是 computed，会自动响应 currentPage 的变化
+// 不需要强制更新
 
 const displayMode = computed(() => {
   // 严格根据当前模式显示对应类型的结果

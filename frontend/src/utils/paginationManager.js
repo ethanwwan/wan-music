@@ -11,9 +11,18 @@ export const displayTracks = ref([]) // 当前页显示的歌曲
  * 更新当前页显示的歌曲
  */
 export const updateDisplayTracks = () => {
+  console.log('paginationManager: updateDisplayTracks called')
+  console.log('  currentPage:', currentPage.value)
+  console.log('  pageSize:', pageSize.value)
+  console.log('  allTracks.length:', allTracks.value.length)
+  
   const startIndex = (currentPage.value - 1) * pageSize.value
   const endIndex = startIndex + pageSize.value
   displayTracks.value = allTracks.value.slice(startIndex, endIndex)
+  
+  console.log('  startIndex:', startIndex, 'endIndex:', endIndex)
+  console.log('  displayTracks.length:', displayTracks.value.length)
+  console.log('  displayTracks:', displayTracks.value.slice(0, 3))
 }
 
 /**

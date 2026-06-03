@@ -96,18 +96,22 @@ const visiblePages = computed(() => {
 })
 
 const goToPage = (page) => {
+  console.log('Pagination: goToPage called with page:', page)
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
+    console.log('Pagination: currentPage updated to', currentPage.value)
   }
 }
 
 const prevPage = () => {
+  console.log('Pagination: prevPage called')
   if (currentPage.value > 1) {
     currentPage.value--
   }
 }
 
 const nextPage = () => {
+  console.log('Pagination: nextPage called')
   if (currentPage.value < totalPages.value) {
     currentPage.value++
   }

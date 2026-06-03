@@ -735,6 +735,7 @@ def proxy_song_detail():
     try:
         import requests as req
         data = api_service._safe_get_request_data()
+        cookies = api_service._get_cookies()
         
         # 转发请求到网易云音乐
         response = req.post(
@@ -745,6 +746,7 @@ def proxy_song_detail():
                 'Referer': 'https://music.163.com/',
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
+            cookies=cookies,
             timeout=10
         )
         

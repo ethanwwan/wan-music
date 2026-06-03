@@ -205,8 +205,12 @@ const handleChartChange = (chartId) => {
 }
 
 const handlePageChange = (page) => {
+  console.log('App.vue handlePageChange called with page:', page)
+  console.log('Before: currentPage =', currentPage.value, ', displayTracks.length =', displayTracks.value.length)
   currentPage.value = page
   updateDisplayTracks()
+  console.log('After: currentPage =', currentPage.value, ', displayTracks.length =', displayTracks.value.length)
+  console.log('Display tracks updated:', displayTracks.value.slice(0, 3))
 }
 
 const handleParseSong = (song) => {
@@ -221,16 +225,19 @@ const currentPlayIndex = ref(0)
 
 // 处理歌曲播放
 const handlePlaySong = async (track) => {
+  // 调试：打印原始 track 数据
+  console.log('Original track data:', track)
+  
   // 将当前列表添加到播放列表
   let tracks = []
   
-  // 优先使用当前显示的列表
-  if (displayTracks.value.length > 0) {
-    tracks = displayTracks.value
-  } 
-  // 其次使用歌单信息
-  else if (playlistInfo.value?.tracks?.length > 0) {
+  // 优先使用歌单的所有歌曲（不仅仅是当前页）
+  if (playlistInfo.value?.tracks?.length > 0) {
     tracks = playlistInfo.value.tracks
+  }
+  // 其次使用当前显示的列表
+  else if (displayTracks.value.length > 0) {
+    tracks = displayTracks.value
   }
   // 如果都没有，就只播放当前这一首歌
   else {
@@ -247,6 +254,9 @@ const handlePlaySong = async (track) => {
     lrc: t.lrc || '',
     url: t.url || '' // 添加url字段
   }))
+  
+  // 调试：打印转换后的播放列表
+  console.log('Converted playlist (first 3):', newPlaylist.slice(0, 3))
   
   // 找到当前歌曲索引
   const index = newPlaylist.findIndex(p => p.id === track.id)
@@ -279,10 +289,14 @@ const handlePlaySong = async (track) => {
 
 // 获取封面URL
 const getCoverUrl = (track) => {
-  if (track.cover) return track.cover
-  if (track.al?.picUrl) return track.al.picUrl
-  if (track.album?.coverImgUrl) return track.album.coverImgUrl
-  return ''
+  return (
+    track.cover || 
+    track.picUrl ||
+    track.al?.picUrl || 
+    track.album?.coverImgUrl ||
+    track.album?.picUrl ||
+    ''
+  )
 }
 
 const handleParsePlaylist = (playlist) => {

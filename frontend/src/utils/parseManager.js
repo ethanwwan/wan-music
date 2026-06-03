@@ -1,7 +1,7 @@
 import { ref} from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import musicApi from '../services/musicApi.js'
-import { allTracks, totalTracks, currentPage, displayTracks } from './paginationManager.js'
+import { allTracks, totalTracks, currentPage, displayTracks, updateDisplayTracks } from './paginationManager.js'
 import { settings } from './settingsManager.js'
 
 const getApiVersionLabel = () => {
@@ -303,10 +303,9 @@ export const parsingProgress = ref({
 
 /**
  * 解析歌单
- * @param {Function} updateDisplayTracks 更新显示歌曲的回调函数
  */
-export const parsePlaylist = async (updateDisplayTracks) => {
-  // 直接使用导入的ref对象，避免参数传递问题
+export const parsePlaylist = async () => {
+  // 直接使用导入的ref对象
   
   if (!playlistUrl.value.trim()) {
     ElMessage.warning('请输入歌单链接')
@@ -345,12 +344,10 @@ export const parsePlaylist = async (updateDisplayTracks) => {
       // 重置分页并显示第一页
       currentPage.value = 1
       
-      if (updateDisplayTracks) {
-        updateDisplayTracks()
-      }
+      // 立即更新显示第一页
+      updateDisplayTracks()
       
       const totalTime = Math.floor((Date.now() - parseStartTime.value) / 1000)
-      // 获取歌单信息时，成功解析数量应为 0（实际歌曲解析后才会统计）
       
       ElNotification({
         title: '歌单解析完成！',
@@ -381,23 +378,22 @@ export const parsePlaylist = async (updateDisplayTracks) => {
         duration: 6000,
         showClose: true
       })
-  } else {
-    ElMessage.error(error.message || errorMessage)
+    } else {
+      ElMessage.error(error.message || errorMessage)
+    }
+    
+  } finally {
+    // 停止计时器
+    stopTimer()
+    playlistLoading.value = false
+    currentParsingTrack.value = null
   }
-  
-} finally {
-  // 停止计时器
-  stopTimer()
-  playlistLoading.value = false
-  currentParsingTrack.value = null
-}
 }
 
 /**
  * 解析专辑
- * @param {Function} updateDisplayTracks 更新显示歌曲的回调函数
  */
-export const parseAlbum = async (updateDisplayTracks) => {
+export const parseAlbum = async () => {
   if (!albumUrl.value.trim()) {
     ElMessage.warning('请输入专辑链接')
     return
@@ -420,9 +416,7 @@ export const parseAlbum = async (updateDisplayTracks) => {
       currentPage.value = 1
 
       // 解析成功后立即更新显示
-      if (updateDisplayTracks) {
-        updateDisplayTracks()
-      }
+      updateDisplayTracks()
       
       ElNotification({
         title: '专辑解析成功！',

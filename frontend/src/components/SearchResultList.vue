@@ -113,8 +113,10 @@
 
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
-      <el-icon class="is-loading"><Loading /></el-icon>
-      <span>正在加载歌单信息...</span>
+      <div class="loading-content">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <div class="loading-text">正在加载歌单信息...</div>
+      </div>
     </div>
 
     <!-- 错误状态 -->
@@ -458,6 +460,7 @@ export default {
 
     // 处理分页变化
     const handlePageChange = (page) => {
+      console.log('SearchResultList: handlePageChange called with page:', page)
       emit('page-change', page)
     }
 
@@ -1036,11 +1039,35 @@ export default {
   justify-content: center;
   padding: 60px 20px;
   color: var(--color-text-muted);
+  min-height: 200px;
+  width: 100%;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: auto;
+  max-width: 100%;
 }
 
 .loading-container .el-icon {
-  font-size: 32px;
-  margin-bottom: 15px;
+  font-size: 40px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.loading-text {
+  font-size: 16px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+  width: auto;
+  min-width: fit-content;
+  flex-shrink: 0;
 }
 
 .error-container {
@@ -1097,6 +1124,36 @@ export default {
   
   .track-name {
     font-size: 14px;
+  }
+  
+  /* Loading 响应式 */
+  .loading-container {
+    padding: 40px 16px;
+    min-height: 150px;
+  }
+  
+  .loading-container .el-icon {
+    font-size: 32px;
+  }
+  
+  .loading-text {
+    font-size: 14px;
+  }
+}
+
+/* 小屏幕设备优化 */
+@media (max-width: 480px) {
+  .loading-container {
+    padding: 30px 12px;
+    min-height: 120px;
+  }
+  
+  .loading-container .el-icon {
+    font-size: 28px;
+  }
+  
+  .loading-text {
+    font-size: 13px;
   }
 }
 

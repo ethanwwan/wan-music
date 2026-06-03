@@ -264,6 +264,10 @@ const playTrack = async (index) => {
   currentIndex.value = index
   const track = props.playlist[index]
   
+  // 显示播放器
+  isVisible.value = true
+  
+  // 获取播放URL（如果没有的话）
   if (!track?.url) {
     try {
       const result = await getMusicUrl(track.id, settings.selectedQuality || 'lossless')
@@ -281,12 +285,40 @@ const playTrack = async (index) => {
     try {
       const lyricsResult = await getLyrics(track.id)
       if (lyricsResult?.lrc) {
-        track.lrc = lyricsResult.lrc
+        // 确保lrc是字符串格式
+        track.lrc = typeof lyricsResult.lrc === 'string' 
+          ? lyricsResult.lrc 
+          : (lyricsResult.lrc?.lyric || '')
+        track.tlyric = typeof lyricsResult.tlyric === 'string'
+          ? lyricsResult.tlyric
+          : (lyricsResult.tlyric?.lyric || '')
       }
     } catch {
       // 歌词获取失败，继续播放
     }
   }
+  
+  // 获取封面（如果没有的话）- 尝试多种字段名
+  if (!track?.cover) {
+    track.cover = (
+      track?.cover || 
+      track?.picUrl || 
+      track?.al?.picUrl || 
+      track?.album?.coverImgUrl ||
+      track?.album?.picUrl ||
+      ''
+    )
+  }
+  
+  // 调试：打印封面信息
+  console.log('Track cover info:', {
+    id: track.id,
+    name: track.name,
+    cover: track.cover,
+    picUrl: track.picUrl,
+    al: track.al,
+    album: track.album
+  })
   
   if (!audio.value) {
     initAudio()
@@ -295,7 +327,6 @@ const playTrack = async (index) => {
   audio.value.src = getProxyUrl(track.url)
   audio.value.play().then(() => {
     isPlaying.value = true
-    isVisible.value = true
   }).catch((err) => {
     ElMessage.error(`播放失败: ${err.message}`)
   })
@@ -331,10 +362,31 @@ const playNext = () => {
 }
 
 const seekTo = (e) => {
-  if (!audio.value || !progressTrack.value) return
+  if (!audio.value) {
+    console.warn('Audio not initialized')
+    return
+  }
+  if (!progressTrack.value) {
+    console.warn('Progress track not found')
+    return
+  }
+  
   const rect = progressTrack.value.getBoundingClientRect()
-  const percent = (e.clientX - rect.left) / rect.width
-  audio.value.currentTime = (percent * duration.value) / 1000
+  const clickX = e.clientX - rect.left
+  const percent = Math.max(0, Math.min(1, clickX / rect.width))
+  
+  // 设置当前播放时间
+  const newTime = percent * (duration.value / 1000)
+  audio.value.currentTime = newTime
+  
+  // 立即更新 currentTime 显示
+  currentTime.value = newTime * 1000
+  
+  console.log('Seek to:', {
+    percent: (percent * 100).toFixed(2) + '%',
+    newTime: newTime.toFixed(2) + 's',
+    duration: (duration.value / 1000).toFixed(2) + 's'
+  })
 }
 
 const toggleLyrics = () => {
@@ -725,11 +777,14 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.6);
   width: 48px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .progress-bar {
   flex: 1;
   cursor: pointer;
+  padding: 8px 0; /* 增加垂直点击区域 */
+  margin: -8px 0; /* 抵消padding，保持布局不变 */
 }
 
 .progress-track {
@@ -738,6 +793,11 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 3px;
   overflow: visible;
+  transition: height 0.2s ease;
+}
+
+.progress-bar:hover .progress-track {
+  height: 8px; /* 悬停时变高 */
 }
 
 .progress-played {
@@ -756,12 +816,14 @@ onUnmounted(() => {
   border: 3px solid #667eea;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  transition: left 0.1s linear;
+  transition: left 0.1s linear, opacity 0.2s ease, transform 0.2s ease;
   opacity: 0;
+  pointer-events: none;
 }
 
 .progress-bar:hover .progress-dot {
   opacity: 1;
+  transform: translate(-50%, -50%) scale(1.2);
 }
 
 .player-right {
