@@ -189,6 +189,11 @@ const handleParse = async ({ url }) => {
   // 从设置中读取音质
   const quality = settings.selectedQuality || 'lossless'
   await parseMusic(quality, currentView.value)
+  
+  // 解析成功后添加到历史记录
+  if (searchContainerRef.value && url.trim()) {
+    searchContainerRef.value.addHistoryRecord(url.trim())
+  }
 }
 
 const handleExampleClick = (link) => {
@@ -294,8 +299,12 @@ const handleParseAlbum = (album) => {
 
 const handleTrackParsed = async (data) => {
   console.log('Track parsed:', data)
-  if (searchContainerRef.value && data && data.name) {
-    searchContainerRef.value.addHistoryRecord(data.name)
+  if (searchContainerRef.value && data) {
+    // data可能是 { name } 或 { track, quality }
+    const name = data.name || data.track?.name
+    if (name) {
+      searchContainerRef.value.addHistoryRecord(name)
+    }
   }
 }
 

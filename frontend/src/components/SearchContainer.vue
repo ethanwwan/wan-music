@@ -84,8 +84,30 @@
 <script setup>
 import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
 import { Link } from '@element-plus/icons-vue'
-import { getMockHistoryRecords } from '../utils/exampleData.js'
 import { settings, saveSettings } from '../utils/settingsManager.js'
+
+// 历史记录存储的localStorage key
+const HISTORY_STORAGE_KEY = 'wan-music-history-records'
+
+// 从localStorage加载历史记录
+const loadHistoryFromStorage = () => {
+  try {
+    const stored = localStorage.getItem(HISTORY_STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch (e) {
+    console.error('Failed to load history from storage:', e)
+    return []
+  }
+}
+
+// 保存历史记录到localStorage
+const saveHistoryToStorage = (records) => {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(records))
+  } catch (e) {
+    console.error('Failed to save history to storage:', e)
+  }
+}
 
 const props = defineProps({
   currentMode: {
@@ -144,21 +166,31 @@ const loadHistoryRecords = (mode) => {
     historyRecords.value = []
     return
   }
-  // 根据当前模式加载对应类型的历史记录
-  historyRecords.value = getMockHistoryRecords(mode)
+  // 从localStorage加载历史记录，并过滤当前模式
+  const allHistory = loadHistoryFromStorage()
+  historyRecords.value = allHistory.filter(record => record.type === mode)
 }
 
 const addHistoryRecord = (songName) => {
+  // 检查是否已存在
   const exists = historyRecords.value.some(item => item.name === songName)
   if (!exists) {
+    // 添加到历史记录开头
     historyRecords.value.unshift({
       name: songName,
       url: songName,
       type: props.currentMode
     })
+    // 限制最多10条记录
     if (historyRecords.value.length > 10) {
       historyRecords.value.pop()
     }
+    // 保存到localStorage（包含所有模式的历史）
+    const allHistory = loadHistoryFromStorage()
+    // 移除同一模式的相同记录
+    const otherHistory = allHistory.filter(h => h.type !== props.currentMode || h.name !== songName)
+    const newHistory = [historyRecords.value[0], ...otherHistory].slice(0, 50) // 总共最多50条
+    saveHistoryToStorage(newHistory)
   }
 }
 
@@ -187,10 +219,12 @@ const handleChartChange = () => {
 
 const handleClearHistory = () => {
   historyRecords.value = []
+  // 清除localStorage中的历史记录
+  saveHistoryToStorage([])
 }
 
 onMounted(() => {
-  // 初始化时加载历史记录假数据
+  // 初始化时从localStorage加载历史记录
   loadHistoryRecords(props.currentMode)
 })
 
