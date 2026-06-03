@@ -158,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, forceUpdate } from 'vue'
 import { ElButton, ElMessage, ElNotification, ElProgress } from 'element-plus'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
@@ -236,6 +236,12 @@ watch(() => props.currentMode, () => {
   // 清除详情页状态
   currentDetail.value = null
   detailTracks.value = []
+})
+
+// 监听分页变化，强制触发更新
+watch(currentPage, () => {
+  // 强制触发重新渲染
+  forceUpdate()
 })
 
 const displayMode = computed(() => {
