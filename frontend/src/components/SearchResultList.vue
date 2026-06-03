@@ -81,18 +81,20 @@
                   @click.stop="playTrack(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'play'"
                   class="action-btn play-btn"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play' }"
                   title="播放"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-icon">◌</span>
+                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">▶</span>
                 </button>
                 <button 
                   @click.stop="downloadSingle(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'download'"
                   class="action-btn download-btn"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download' }"
                   title="下载"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-icon">◌</span>
+                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">⬇</span>
                 </button>
               </td>
@@ -249,12 +251,18 @@ export default {
       
       try {
         const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+        const songUrl = `https://music.163.com/song?id=${track.id}`
         
-        // 调用解析逻辑
+        // 解析歌曲信息，获取播放链接
+        const musicInfo = await parseMusicInfo(songUrl, qualityValue)
+        
+        if (!musicInfo?.url) {
+          throw new Error('获取播放链接失败')
+        }
+        
+        // 解析成功后触发播放，带上播放URL
         emit('track-parsed', { track, quality: qualityValue })
-        
-        // 解析成功后触发播放
-        emit('track-play', track)
+        emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc })
         ElMessage.success(`开始播放：${track.name}`)
       } catch (error) {
         ElMessage.error(`播放失败：${error.message}`)
@@ -271,6 +279,8 @@ export default {
       
       try {
         const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+        const writeMetadata = props.settings?.writeMetadata !== false
+        const filenameFormat = props.settings?.filenameFormat || 'song-artist'
         const songUrl = `https://music.163.com/song?id=${track.id}`
         
         // 解析歌曲信息
@@ -280,6 +290,9 @@ export default {
           throw new Error('获取下载链接失败')
         }
         
+        // 直接使用 musicInfo 中返回的文件扩展名（根据音质自动设置）
+        const extension = musicInfo.fileExtension || '.mp3'
+        
         // 下载并保存
         const response = await fetch(musicInfo.url)
         if (!response.ok) {
@@ -287,14 +300,9 @@ export default {
         }
         
         const audioBuffer = await response.arrayBuffer()
-        const contentType = response.headers.get('Content-Type') || ''
-        
-        let extension = '.mp3'
-        if (contentType.includes('flac')) extension = '.flac'
-        else if (contentType.includes('mp4')) extension = '.m4a'
         
         let finalBuffer = audioBuffer
-        if (props.settings?.writeMetadata !== false && (extension === '.mp3' || extension === '.flac')) {
+        if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
           const metadata = {
             name: track.name,
             artist: getArtist(track),
@@ -309,8 +317,27 @@ export default {
           }
         }
         
-        const filename = sanitizeFilename(`${track.name} - ${getArtist(track)}${extension}`)
-        const blob = new Blob([finalBuffer], { type: contentType })
+        // 根据设置生成文件名
+        const artist = getArtist(track)
+        const trackName = track.name
+        let filename
+        if (filenameFormat === 'artist-song') {
+          filename = sanitizeFilename(`${artist} - ${trackName}${extension}`)
+        } else if (filenameFormat === 'song') {
+          filename = sanitizeFilename(`${trackName}${extension}`)
+        } else {
+          filename = sanitizeFilename(`${trackName} - ${artist}${extension}`)
+        }
+        
+        // 根据扩展名获取 MIME 类型
+        const mimeTypes = {
+          '.mp3': 'audio/mpeg',
+          '.flac': 'audio/flac',
+          '.m4a': 'audio/mp4'
+        }
+        const mimeType = mimeTypes[extension] || 'audio/mpeg'
+        
+        const blob = new Blob([finalBuffer], { type: mimeType })
         saveBlob(blob, filename)
         
         ElMessage.success(`已下载：${track.name}`)
@@ -476,36 +503,69 @@ export default {
 <style>
 /* 操作按钮样式 */
 .action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   border: none;
-  background: #f3f4f6;
+  outline: none;
+  outline-offset: 0;
+  background: var(--color-surface-container-low);
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .action-btn:hover {
-  background: #6366f1;
-  transform: translateY(-1px);
+  background: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  outline: none;
+  border: none;
 }
 
 .action-btn:active {
-  transform: translateY(0);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+  outline: none;
+  border: none;
+}
+
+.action-btn:focus {
+  outline: none;
+  border: none;
+}
+
+.action-btn:focus-visible {
+  outline: none;
+  border: none;
 }
 
 .action-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.7;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+  outline: none;
+  border: none;
+}
+
+.action-btn:disabled .btn-icon {
+  color: var(--color-text-muted);
+}
+
+.action-btn.is-loading:disabled {
+  opacity: 1;
+  cursor: wait;
 }
 
 .play-btn,
 .download-btn {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .action-btn:hover .btn-icon {
@@ -513,15 +573,26 @@ export default {
 }
 
 .btn-icon {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
-  transition: color 0.2s ease;
+  transition: color 0.25s ease;
+  font-weight: 600;
 }
 
-.loading-icon {
-  font-size: 14px;
-  animation: spin 1s linear infinite;
-  color: #6366f1;
+/* Loading 旋转动画 */
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes spin {
@@ -759,15 +830,15 @@ export default {
 }
 
 .col-index {
-  width: 60px;
+  width: 40px;
   text-align: center;
   color: var(--color-text-muted);
   font-size: 14px;
 }
 
 .col-cover {
-  width: 50px;
-  padding: 8px 16px;
+  width: 32px;
+  padding: 8px 8px;
 }
 
 .track-cover {
@@ -794,12 +865,23 @@ export default {
   min-width: 150px;
 }
 
-.col-action {
-  width: 80px;
-  display: flex;
+.tracks-table td.col-action {
+  min-width: 88px;
+  text-align: center;
+  padding: 6px 8px;
+  margin: 0;
+  border-bottom: none !important;
+  box-sizing: border-box;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tracks-table td.col-action .action-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: center;
+  margin: 0 6px;
+  vertical-align: middle;
 }
 
 .track-row:hover {

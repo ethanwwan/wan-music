@@ -57,6 +57,10 @@ export default defineConfig({
       '/download': {
         target: 'http://localhost:5002',
         changeOrigin: true
+      },
+      '/stream': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
       }
     }
   }

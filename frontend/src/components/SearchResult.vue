@@ -40,6 +40,7 @@
       :settings="settings"
       :is-detail-page="true"
       @track-parsed="handleParse"
+      @track-play="handleTrackPlay"
     />
 
     <!-- 歌单卡片展示 -->
@@ -183,7 +184,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select'])
+const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select', 'track-play'])
 
 // 二级页面状态
 const currentDetail = ref(null)
@@ -408,6 +409,11 @@ const hasResults = computed(() => {
 
 const handleSelect = (item) => {
   emit('select', item)
+}
+
+// 处理播放事件
+const handleTrackPlay = (track) => {
+  emit('track-play', track)
 }
 
 const handleParse = async (item, type) => {
@@ -1071,8 +1077,9 @@ const getAlbum = (track) => {
   min-width: 120px;
 }
 
-.col-action {
+.song-table td.col-action {
   width: 100px;
+  border-bottom: none !important;
 }
 
 .song-row:hover {

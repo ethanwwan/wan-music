@@ -48,6 +48,7 @@
           @parse-song="handleParseSong"
           @parse-playlist="handleParsePlaylist"
           @parse-album="handleParseAlbum"
+          @track-play="handlePlaySong"
         />
 
         <!-- 原有的其他内容保持不变 -->
@@ -216,24 +217,55 @@ const currentPlayIndex = ref(0)
 // 处理歌曲播放
 const handlePlaySong = async (track) => {
   // 将当前列表添加到播放列表
-  const tracks = displayTracks.value.length > 0 
-    ? displayTracks.value 
-    : playlistInfo.value?.tracks || []
+  let tracks = []
+  
+  // 优先使用当前显示的列表
+  if (displayTracks.value.length > 0) {
+    tracks = displayTracks.value
+  } 
+  // 其次使用歌单信息
+  else if (playlistInfo.value?.tracks?.length > 0) {
+    tracks = playlistInfo.value.tracks
+  }
+  // 如果都没有，就只播放当前这一首歌
+  else {
+    tracks = [track]
+  }
   
   // 转换为播放器所需格式
   const newPlaylist = tracks.map(t => ({
     id: t.id,
     name: t.name,
-    artist: t.artist || t.ar?.[0]?.name || '未知艺术家',
+    artist: t.artist || t.ar?.[0]?.name || (Array.isArray(t.artists) ? t.artists[0]?.name : t.artists) || '未知艺术家',
     album: t.album || t.al?.name || '未知专辑',
     cover: getCoverUrl(t),
-    lrc: t.lrc || ''
+    lrc: t.lrc || '',
+    url: t.url || '' // 添加url字段
   }))
   
   // 找到当前歌曲索引
   const index = newPlaylist.findIndex(p => p.id === track.id)
   if (index >= 0) {
+    // 如果找到了，更新当前歌曲的url和lrc（如果有新的）
+    if (track.url) {
+      newPlaylist[index].url = track.url
+    }
+    if (track.lrc) {
+      newPlaylist[index].lrc = track.lrc
+    }
     currentPlayIndex.value = index
+  } else {
+    // 如果没找到，就把这首歌加到播放列表开头
+    newPlaylist.unshift({
+      id: track.id,
+      name: track.name,
+      artist: track.artist || track.ar?.[0]?.name || (Array.isArray(track.artists) ? track.artists[0]?.name : track.artists) || '未知艺术家',
+      album: track.album || track.al?.name || '未知专辑',
+      cover: getCoverUrl(track),
+      lrc: track.lrc || '',
+      url: track.url || ''
+    })
+    currentPlayIndex.value = 0
   }
   
   // 更新播放列表（触发播放器监听）

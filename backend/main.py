@@ -872,6 +872,78 @@ def proxy_playlist_detail():
         return APIResponse.error(f"代理失败: {str(e)}", 500)
 
 
+@app.route('/stream/<path:audio_path>', methods=['GET'])
+@app.route('/stream', methods=['GET'])
+def stream_audio(audio_path=None):
+    """音频流代理 - 解决HTTP音频在HTTPS页面被阻止的问题"""
+    try:
+        import requests as req
+        
+        # 获取音频URL
+        audio_url = request.args.get('url', '')
+        
+        # 如果没有通过参数传递URL，尝试从路径解析
+        if not audio_url and audio_path:
+            audio_url = f"http://{audio_path}"
+        
+        if not audio_url:
+            return APIResponse.error("请提供音频URL参数", 400)
+        
+        api_service.logger.info(f"音频流代理请求: {audio_url}")
+        
+        # 验证URL是否来自网易云音乐
+        if 'music.126.net' not in audio_url and 'music.163.com' not in audio_url:
+            return APIResponse.error("只支持网易云音乐音频链接", 403)
+        
+        # 发送请求获取音频流
+        response = req.get(
+            audio_url,
+            stream=True,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/'
+            },
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return APIResponse.error(f"获取音频失败: {response.status_code}", response.status_code)
+        
+        # 获取Content-Type
+        content_type = response.headers.get('Content-Type', 'audio/mpeg')
+        
+        # 获取Content-Length（如果有的话）
+        content_length = response.headers.get('Content-Length')
+        
+        # 创建流式响应
+        def generate():
+            for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
+                if chunk:
+                    yield chunk
+        
+        flask_response = Response(
+            generate(),
+            content_type=content_type,
+            direct_passthrough=True
+        )
+        
+        # 复制必要的响应头
+        if content_length:
+            flask_response.headers['Content-Length'] = content_length
+        
+        # 添加CORS头
+        flask_response.headers['Access-Control-Allow-Origin'] = config.cors_origins
+        flask_response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+        flask_response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+        
+        api_service.logger.info(f"音频流代理成功: {audio_url[:50]}...")
+        return flask_response
+        
+    except Exception as e:
+        api_service.logger.error(f"音频流代理失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"音频流代理失败: {str(e)}", 500)
+
+
 @app.route('/api/v1/album/<album_id>', methods=['GET', 'POST'])
 def proxy_album_detail(album_id):
     """代理专辑详情API"""

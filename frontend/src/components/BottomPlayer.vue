@@ -1,6 +1,6 @@
 <template>
   <transition name="slide-up">
-    <div v-show="isVisible" class="bottom-player" :class="{ 'expanded': showLyrics }">
+    <div v-show="isVisible && playlist.length > 0" class="bottom-player" :class="{ 'expanded': showLyrics }">
       <!-- 主播放器区域 -->
       <div class="player-main">
         <div class="player-left">
@@ -54,22 +54,11 @@
         
         <!-- 右侧控制 -->
         <div class="player-right">
-          <!-- 音量控制 -->
-          <div class="volume-control">
-            <button class="control-btn" @click="toggleMute">
-              <span class="icon">{{ getVolumeIcon() }}</span>
-            </button>
-            <div class="volume-bar" @click="setVolume">
-              <div class="volume-track">
-                <div class="volume-played" :style="{ width: volume + '%' }"></div>
-              </div>
-            </div>
-          </div>
-          
           <!-- 功能按钮 -->
           <div class="action-buttons">
-            <button class="control-btn" @click="downloadCurrent">
-              <span class="icon">⬇</span>
+            <button class="control-btn" @click="downloadCurrent" :disabled="isDownloading">
+              <span v-if="isDownloading" class="loading-spinner"></span>
+              <span v-else class="icon">⬇</span>
             </button>
             <button class="control-btn" @click="togglePlaylist">
               <span class="icon">☰</span>
@@ -150,7 +139,7 @@ import { ElMessage } from 'element-plus'
 import { settings } from '../utils/settingsManager.js'
 import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
 import { embedMetadata } from '../services/metadataWriter.js'
-import musicApi from '../services/musicApi.js'
+import musicApi, { getMusicUrl, getLyrics } from '../services/musicApi.js'
 
 const props = defineProps({
   playlist: {
@@ -175,10 +164,10 @@ const showPlaylistModal = ref(false)
 const currentIndex = ref(0)
 const currentTime = ref(0)
 const duration = ref(0)
-const volume = ref(80)
-const isMuted = ref(false)
 const lyricsContainer = ref(null)
 const progressTrack = ref(null)
+const isDownloading = ref(false)
+const isLoadingLyrics = ref(false)
 
 const currentTrack = computed(() => {
   return props.playlist[currentIndex.value] || null
@@ -217,17 +206,17 @@ const currentLyricIndex = computed(() => {
   return -1
 })
 
-const getVolumeIcon = () => {
-  if (isMuted.value || volume.value === 0) return '🔇'
-  if (volume.value < 50) return '🔉'
-  return '🔊'
-}
-
 const formatTime = (ms) => {
   const seconds = Math.floor(ms / 1000)
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+const getProxyUrl = (url) => {
+  if (!url) return ''
+  if (url.startsWith('https')) return url
+  return `/stream?url=${encodeURIComponent(url)}`
 }
 
 const initAudio = () => {
@@ -236,7 +225,7 @@ const initAudio = () => {
     audio.value = null
   }
   audio.value = new Audio()
-  audio.value.volume = volume.value / 100
+  audio.value.volume = 0.8
   audio.value.addEventListener('timeupdate', onTimeUpdate)
   audio.value.addEventListener('loadedmetadata', onLoadedMetadata)
   audio.value.addEventListener('ended', onEnded)
@@ -277,7 +266,7 @@ const playTrack = async (index) => {
   
   if (!track?.url) {
     try {
-      const result = await musicApi.getMusicUrl(track.id, settings.selectedQuality || 'lossless')
+      const result = await getMusicUrl(track.id, settings.selectedQuality || 'lossless')
       if (result?.url) {
         track.url = result.url
       }
@@ -287,11 +276,23 @@ const playTrack = async (index) => {
     }
   }
   
+  // 获取歌词（如果没有的话）
+  if (!track?.lrc) {
+    try {
+      const lyricsResult = await getLyrics(track.id)
+      if (lyricsResult?.lrc) {
+        track.lrc = lyricsResult.lrc
+      }
+    } catch {
+      // 歌词获取失败，继续播放
+    }
+  }
+  
   if (!audio.value) {
     initAudio()
   }
   
-  audio.value.src = track.url
+  audio.value.src = getProxyUrl(track.url)
   audio.value.play().then(() => {
     isPlaying.value = true
     isVisible.value = true
@@ -336,28 +337,6 @@ const seekTo = (e) => {
   audio.value.currentTime = (percent * duration.value) / 1000
 }
 
-const setVolume = (e) => {
-  if (!audio.value) return
-  const target = e.currentTarget
-  const rect = target.getBoundingClientRect()
-  const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))
-  volume.value = Math.round(percent)
-  audio.value.volume = volume.value / 100
-  isMuted.value = volume.value === 0
-}
-
-const toggleMute = () => {
-  if (!audio.value) return
-  
-  if (isMuted.value) {
-    audio.value.volume = volume.value / 100
-    isMuted.value = false
-  } else {
-    audio.value.volume = 0
-    isMuted.value = true
-  }
-}
-
 const toggleLyrics = () => {
   showLyrics.value = !showLyrics.value
 }
@@ -378,13 +357,17 @@ const clearPlaylist = () => {
 }
 
 const downloadCurrent = async () => {
+  if (isDownloading.value) return
+  
   if (!currentTrack.value?.url) {
     ElMessage.warning('当前没有可下载的歌曲')
     return
   }
   
+  isDownloading.value = true
+  
   try {
-    const response = await fetch(currentTrack.value.url)
+    const response = await fetch(getProxyUrl(currentTrack.value.url))
     if (!response.ok) {
       throw new Error('下载失败')
     }
@@ -418,6 +401,8 @@ const downloadCurrent = async () => {
     ElMessage.success(`已下载: ${currentTrack.value.name}`)
   } catch (error) {
     ElMessage.error(`下载失败: ${error.message}`)
+  } finally {
+    isDownloading.value = false
   }
 }
 
@@ -438,27 +423,95 @@ const scrollToCurrentLyric = () => {
   }
 }
 
-watch(() => props.playlist, (newPlaylist) => {
-  if (newPlaylist.length > 0 && props.autoplay && !isPlaying.value) {
+// 监听播放列表变化
+watch(() => props.playlist, (newPlaylist, oldPlaylist) => {
+  if (newPlaylist.length > 0) {
     const index = props.currentIndex >= 0 && props.currentIndex < newPlaylist.length 
       ? props.currentIndex 
       : 0
-    playTrack(index)
+    
+    // 检查是否切换了歌曲（通过对比当前歌曲ID）
+    const oldTrackId = oldPlaylist?.[currentIndex.value]?.id
+    const newTrackId = newPlaylist[index]?.id
+    
+    // 如果是同一首歌且正在播放，不做处理
+    if (oldTrackId === newTrackId && isPlaying.value) {
+      return
+    }
+    
+    // 重置播放状态
+    currentTime.value = 0
+    duration.value = 0
+    
+    // 如果是自动播放或者切换了歌曲，重新播放
+    if (props.autoplay || oldTrackId !== newTrackId) {
+      playTrack(index)
+    }
   }
 }, { immediate: true })
 
-watch(isPlaying, (playing) => {
-  if (!playing && currentTime.value >= duration.value - 1000) {
-    setTimeout(() => {
-      if (!isPlaying.value) {
-        isVisible.value = false
-      }
-    }, 3000)
+// 监听当前索引变化
+watch(() => props.currentIndex, (newIndex, oldIndex) => {
+  if (newIndex !== oldIndex && props.playlist.length > 0) {
+    // 重置播放状态
+    currentTime.value = 0
+    duration.value = 0
+    isPlaying.value = false
+    // 播放新歌曲
+    if (props.autoplay) {
+      playTrack(newIndex)
+    }
   }
 })
 
+watch(isPlaying, (playing) => {
+  // 播放时显示播放器，播放结束后不自动隐藏
+  if (playing) {
+    isVisible.value = true
+    // 清除可能存在的自动隐藏定时器
+    if (hideTimer) {
+      clearTimeout(hideTimer)
+      hideTimer = null
+    }
+  }
+})
+
+// 滚动监听相关
+let lastScrollY = 0
+let hideTimer = null
+let showTimer = null
+
+const handleScroll = () => {
+  const currentScrollY = window.scrollY
+  
+  if (currentScrollY > lastScrollY && currentScrollY > 100) {
+    // 向上滚动超过100px，隐藏播放器
+    if (isVisible.value && isPlaying.value) {
+      isVisible.value = false
+    }
+    // 清除显示定时器
+    if (showTimer) {
+      clearTimeout(showTimer)
+      showTimer = null
+    }
+  } else if (currentScrollY < lastScrollY) {
+    // 向下滚动，显示播放器
+    if (!isVisible.value) {
+      isVisible.value = true
+    }
+    // 清除之前的定时器
+    if (hideTimer) {
+      clearTimeout(hideTimer)
+      hideTimer = null
+    }
+  }
+  
+  lastScrollY = currentScrollY
+}
+
 onMounted(() => {
   initAudio()
+  window.addEventListener('scroll', handleScroll, { passive: true })
 })
 
 onUnmounted(() => {
@@ -470,6 +523,9 @@ onUnmounted(() => {
     audio.value.removeEventListener('error', onError)
     audio.value = null
   }
+  window.removeEventListener('scroll', handleScroll)
+  if (hideTimer) clearTimeout(hideTimer)
+  if (showTimer) clearTimeout(showTimer)
 })
 </script>
 
@@ -479,12 +535,13 @@ onUnmounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+  background: rgba(30, 30, 46, 0.75);
   backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 12px 24px;
   z-index: 1000;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.15);
   transition: all 0.3s ease;
 }
 
@@ -614,6 +671,22 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
+/* Loading 旋转动画 */
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .play-btn {
   width: 56px;
   height: 56px;
@@ -695,30 +768,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 20px;
-  flex: 0 0 200px;
-}
-
-.volume-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.volume-bar {
-  width: 80px;
-  cursor: pointer;
-}
-
-.volume-track {
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.volume-played {
-  height: 100%;
-  background: #667eea;
-  border-radius: 2px;
+  flex: 0 0 120px;
 }
 
 .action-buttons {

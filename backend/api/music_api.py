@@ -109,9 +109,39 @@ class CryptoUtils:
 class HTTPClient:
     """HTTP客户端类"""
     
+    # 重试配置
+    MAX_RETRIES = 3
+    RETRY_DELAYS = [1, 2, 3]  # 每次重试的等待时间（秒）
+    
     @staticmethod
-    def post_request(url: str, params: str, cookies: Dict[str, str]) -> str:
-        """发送POST请求并返回文本响应"""
+    def _is_retryable_error(e: Exception) -> bool:
+        """判断错误是否应该重试"""
+        if isinstance(e, requests.exceptions.Timeout):
+            return True
+        if isinstance(e, requests.exceptions.ConnectionError):
+            return True
+        return False
+    
+    @staticmethod
+    def post_request_with_retry(url: str, params: str, cookies: Dict[str, str], 
+                                  retries: int = None) -> str:
+        """发送POST请求并返回文本响应，支持重试
+        
+        Args:
+            url: 请求URL
+            params: 加密参数
+            cookies: Cookie字典
+            retries: 最大重试次数，默认使用 MAX_RETRIES
+            
+        Returns:
+            响应文本
+            
+        Raises:
+            APIException: 重试次数用尽后抛出
+        """
+        if retries is None:
+            retries = HTTPClient.MAX_RETRIES
+            
         headers = {
             'User-Agent': APIConstants.USER_AGENT,
             'Referer': APIConstants.REFERER,
@@ -120,17 +150,34 @@ class HTTPClient:
         request_cookies = APIConstants.DEFAULT_COOKIES.copy()
         request_cookies.update(cookies)
         
-        try:
-            response = requests.post(url, headers=headers, cookies=request_cookies, 
-                                   data={"params": params}, timeout=30)
-            response.raise_for_status()
-            return response.text
-        except requests.RequestException as e:
-            raise APIException(f"HTTP请求失败: {e}")
+        last_error = None
+        for attempt in range(retries):
+            try:
+                response = requests.post(url, headers=headers, cookies=request_cookies, 
+                                        data={"params": params}, timeout=30)
+                response.raise_for_status()
+                return response.text
+            except requests.RequestException as e:
+                last_error = e
+                # 只有可重试的错误才进行重试
+                if HTTPClient._is_retryable_error(e) and attempt < retries - 1:
+                    delay = HTTPClient.RETRY_DELAYS[attempt]
+                    logger.warning(f"API请求失败 (尝试 {attempt + 1}/{retries}): {e}, {delay}秒后重试...")
+                    time.sleep(delay)
+                else:
+                    raise APIException(f"HTTP请求失败: {e}")
+        
+        # 不应该到达这里，但以防万一
+        raise APIException(f"HTTP请求失败: {last_error}")
+    
+    @staticmethod
+    def post_request(url: str, params: str, cookies: Dict[str, str]) -> str:
+        """发送POST请求并返回文本响应（带重试）"""
+        return HTTPClient.post_request_with_retry(url, params, cookies)
     
     @staticmethod
     def post_request_full(url: str, params: str, cookies: Dict[str, str]) -> requests.Response:
-        """发送POST请求并返回完整响应对象"""
+        """发送POST请求并返回完整响应对象（带重试）"""
         headers = {
             'User-Agent': APIConstants.USER_AGENT,
             'Referer': APIConstants.REFERER,
@@ -139,13 +186,82 @@ class HTTPClient:
         request_cookies = APIConstants.DEFAULT_COOKIES.copy()
         request_cookies.update(cookies)
         
-        try:
-            response = requests.post(url, headers=headers, cookies=request_cookies, 
-                                   data={"params": params}, timeout=30)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as e:
-            raise APIException(f"HTTP请求失败: {e}")
+        last_error = None
+        for attempt in range(HTTPClient.MAX_RETRIES):
+            try:
+                response = requests.post(url, headers=headers, cookies=request_cookies, 
+                                       data={"params": params}, timeout=30)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                last_error = e
+                if HTTPClient._is_retryable_error(e) and attempt < HTTPClient.MAX_RETRIES - 1:
+                    delay = HTTPClient.RETRY_DELAYS[attempt]
+                    logger.warning(f"API请求失败 (尝试 {attempt + 1}/{HTTPClient.MAX_RETRIES}): {e}, {delay}秒后重试...")
+                    time.sleep(delay)
+                else:
+                    raise APIException(f"HTTP请求失败: {e}")
+        
+        raise APIException(f"HTTP请求失败: {last_error}")
+    
+    @staticmethod
+    def post_with_retry(url: str, data: Dict = None, cookies: Dict[str, str] = None, timeout: int = 30) -> requests.Response:
+        """发送POST请求并返回响应对象（带重试）"""
+        headers = {
+            'User-Agent': APIConstants.USER_AGENT,
+            'Referer': APIConstants.REFERER,
+        }
+        
+        request_cookies = APIConstants.DEFAULT_COOKIES.copy()
+        if cookies:
+            request_cookies.update(cookies)
+        
+        last_error = None
+        for attempt in range(HTTPClient.MAX_RETRIES):
+            try:
+                response = requests.post(url, headers=headers, cookies=request_cookies, 
+                                       data=data, timeout=timeout)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                last_error = e
+                if HTTPClient._is_retryable_error(e) and attempt < HTTPClient.MAX_RETRIES - 1:
+                    delay = HTTPClient.RETRY_DELAYS[attempt]
+                    logger.warning(f"POST请求失败 (尝试 {attempt + 1}/{HTTPClient.MAX_RETRIES}): {e}, {delay}秒后重试...")
+                    time.sleep(delay)
+                else:
+                    raise APIException(f"POST请求失败: {e}")
+        
+        raise APIException(f"POST请求失败: {last_error}")
+    
+    @staticmethod
+    def get_with_retry(url: str, cookies: Dict[str, str] = None, timeout: int = 30) -> requests.Response:
+        """发送GET请求并返回响应对象（带重试）"""
+        headers = {
+            'User-Agent': APIConstants.USER_AGENT,
+            'Referer': APIConstants.REFERER,
+        }
+        
+        request_cookies = APIConstants.DEFAULT_COOKIES.copy()
+        if cookies:
+            request_cookies.update(cookies)
+        
+        last_error = None
+        for attempt in range(HTTPClient.MAX_RETRIES):
+            try:
+                response = requests.get(url, headers=headers, cookies=request_cookies, timeout=timeout)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                last_error = e
+                if HTTPClient._is_retryable_error(e) and attempt < HTTPClient.MAX_RETRIES - 1:
+                    delay = HTTPClient.RETRY_DELAYS[attempt]
+                    logger.warning(f"GET请求失败 (尝试 {attempt + 1}/{HTTPClient.MAX_RETRIES}): {e}, {delay}秒后重试...")
+                    time.sleep(delay)
+                else:
+                    raise APIException(f"GET请求失败: {e}")
+        
+        raise APIException(f"GET请求失败: {last_error}")
 
 
 class APIException(Exception):
@@ -213,16 +329,15 @@ class NeteaseAPI:
         """
         try:
             data = {'c': json.dumps([{"id": song_id, "v": 0}])}
-            response = requests.post(APIConstants.SONG_DETAIL_V3, data=data, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.SONG_DETAIL_V3, data=data)
             
             result = response.json()
             if result.get('code') != 200:
                 raise APIException(f"获取歌曲详情失败: {result.get('message', '未知错误')}")
             
             return result
-        except requests.RequestException as e:
-            raise APIException(f"获取歌曲详情请求失败: {e}")
+        except APIException:
+            raise
         except json.JSONDecodeError as e:
             raise APIException(f"解析歌曲详情响应失败: {e}")
     
@@ -252,22 +367,15 @@ class NeteaseAPI:
                 'yrv': '0'
             }
             
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
-            
-            response = requests.post(APIConstants.LYRIC_API, data=data, 
-                                   headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.LYRIC_API, data=data, cookies=cookies)
             
             result = response.json()
             if result.get('code') != 200:
                 raise APIException(f"获取歌词失败: {result.get('message', '未知错误')}")
             
             return result
-        except requests.RequestException as e:
-            raise APIException(f"获取歌词请求失败: {e}")
+        except APIException:
+            raise
         except json.JSONDecodeError as e:
             raise APIException(f"解析歌词响应失败: {e}")
     
@@ -287,14 +395,7 @@ class NeteaseAPI:
         """
         try:
             data = {'s': keywords, 'type': 1, 'limit': limit}
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
-            
-            response = requests.post(APIConstants.SEARCH_API, data=data, 
-                                   headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.SEARCH_API, data=data, cookies=cookies)
             
             result = response.json()
             if result.get('code') != 200:
@@ -312,8 +413,8 @@ class NeteaseAPI:
                 songs.append(song_info)
             
             return songs
-        except requests.RequestException as e:
-            raise APIException(f"搜索请求失败: {e}")
+        except APIException:
+            raise
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
@@ -333,14 +434,7 @@ class NeteaseAPI:
         """
         try:
             data = {'s': keywords, 'type': 1000, 'limit': limit}
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
-            
-            response = requests.post(APIConstants.SEARCH_API, data=data, 
-                                   headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.SEARCH_API, data=data, cookies=cookies)
             
             result = response.json()
             if result.get('code') != 200:
@@ -358,8 +452,8 @@ class NeteaseAPI:
                 playlists.append(playlist_info)
             
             return playlists
-        except requests.RequestException as e:
-            raise APIException(f"搜索请求失败: {e}")
+        except APIException:
+            raise
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
@@ -379,14 +473,7 @@ class NeteaseAPI:
         """
         try:
             data = {'s': keywords, 'type': 10, 'limit': limit}
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
-            
-            response = requests.post(APIConstants.SEARCH_API, data=data, 
-                                   headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.SEARCH_API, data=data, cookies=cookies)
             
             result = response.json()
             if result.get('code') != 200:
@@ -404,8 +491,8 @@ class NeteaseAPI:
                 albums.append(album_info)
             
             return albums
-        except requests.RequestException as e:
-            raise APIException(f"搜索请求失败: {e}")
+        except APIException:
+            raise
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
@@ -424,14 +511,7 @@ class NeteaseAPI:
         """
         try:
             data = {'id': playlist_id}
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
-            
-            response = requests.post(APIConstants.PLAYLIST_DETAIL_API, data=data, 
-                                   headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
+            response = HTTPClient.post_with_retry(APIConstants.PLAYLIST_DETAIL_API, data=data, cookies=cookies)
             
             result = response.json()
             if result.get('code') != 200:
@@ -440,8 +520,6 @@ class NeteaseAPI:
             playlist = result.get('playlist')
             if not playlist:
                 # 打印调试信息
-                import logging
-                logger = logging.getLogger('music_api')
                 logger.info(f"网易云API响应: {json.dumps(result)[:500]}")
                 raise APIException("获取歌单详情失败: 歌单不存在或已被删除")
             info = {
@@ -460,9 +538,7 @@ class NeteaseAPI:
                 batch_ids = track_ids[i:i+100]
                 song_data = {'c': json.dumps([{'id': int(sid), 'v': 0} for sid in batch_ids])}
                 
-                song_resp = requests.post(APIConstants.SONG_DETAIL_V3, data=song_data, 
-                                        headers=headers, cookies=cookies, timeout=30)
-                song_resp.raise_for_status()
+                song_resp = HTTPClient.post_with_retry(APIConstants.SONG_DETAIL_V3, data=song_data, cookies=cookies)
                 
                 song_result = song_resp.json()
                 for song in song_result.get('songs', []):
@@ -475,8 +551,8 @@ class NeteaseAPI:
                     })
             
             return info
-        except requests.RequestException as e:
-            raise APIException(f"获取歌单详情请求失败: {e}")
+        except APIException:
+            raise
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析歌单详情响应失败: {e}")
     
@@ -495,17 +571,10 @@ class NeteaseAPI:
         """
         try:
             url = f'{APIConstants.ALBUM_DETAIL_API}{album_id}'
-            headers = {
-                'User-Agent': APIConstants.USER_AGENT,
-                'Referer': APIConstants.REFERER
-            }
+            response = HTTPClient.get_with_retry(url, cookies=cookies)
             
-            logger.info(f"请求专辑详情: album_id={album_id}, url={url}")
-            response = requests.get(url, headers=headers, cookies=cookies, timeout=30)
-            response.raise_for_status()
-            
+            logger.info(f"专辑API响应: code={response.json().get('code')}")
             result = response.json()
-            logger.info(f"专辑API响应: code={result.get('code')}")
             
             if result.get('code') != 200:
                 error_msg = result.get('message', '未知错误')
@@ -533,8 +602,8 @@ class NeteaseAPI:
                 })
             
             return info
-        except requests.RequestException as e:
-            raise APIException(f"获取专辑详情请求失败: {e}")
+        except APIException:
+            raise
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析专辑详情响应失败: {e}")
     
