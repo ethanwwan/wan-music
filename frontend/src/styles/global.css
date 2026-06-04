@@ -637,6 +637,17 @@ body {
   white-space: nowrap;
 }
 
+/* loading文字样式 - 确保水平显示 */
+.loading-text {
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+  direction: ltr !important;
+  word-break: normal !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
+  display: inline-block !important;
+}
+
 /* 深色模式 APlayer 样式 - 真实CSS值 */
 .aplayer-dark-mode .aplayer {
   color: #ffffffd9 !important;

@@ -56,7 +56,7 @@
           </thead>
           <tbody>
             <tr 
-              v-for="(track, index) in displayTracks" 
+              v-for="(track, index) in currentPageTracks" 
               :key="track.id"
               class="track-row"
               :class="{ 'selected': selectedTrack && selectedTrack.id === track.id }"
@@ -185,6 +185,14 @@ export default {
   setup(props, { emit }) {
     const playlistData = computed(() => props.playlistInfo)
     const creatorLabel = computed(() => (props.playlistInfo?.isAlbum ? '作者' : '创建者'))
+    
+    // 计算当前页应该显示的歌曲（分页处理）
+    const currentPageTracks = computed(() => {
+      const start = (props.currentPage - 1) * props.pageSize
+      const end = start + props.pageSize
+      return props.displayTracks.slice(start, end)
+    })
+    
     const loading = ref(false)
     const error = ref('')
     const selectedTrack = ref(null)
@@ -262,9 +270,9 @@ export default {
           throw new Error('获取播放链接失败')
         }
         
-        // 解析成功后触发播放，带上播放URL
+        // 解析成功后触发播放，带上播放URL和完整的播放列表
         emit('track-parsed', { track, quality: qualityValue })
-        emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc })
+        emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.displayTracks)
         ElMessage.success(`开始播放：${track.name}`)
       } catch (error) {
         ElMessage.error(`播放失败：${error.message}`)
@@ -1043,31 +1051,43 @@ export default {
   width: 100%;
 }
 
-.loading-content {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: auto;
-  max-width: 100%;
+.loading-container > .loading-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 24px !important;
+  width: max-content !important;
+  min-width: 250px;
+  max-width: none !important;
+  padding: 12px !important;
 }
 
 .loading-container .el-icon {
   font-size: 40px;
   color: var(--color-primary);
   flex-shrink: 0;
+  margin-bottom: 6px !important;
 }
 
-.loading-text {
+.loading-container > .loading-content > .loading-text {
   font-size: 16px;
   font-weight: 500;
-  text-align: center;
-  white-space: nowrap;
-  overflow: visible;
-  width: auto;
-  min-width: fit-content;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  width: auto !important;
+  min-width: 200px !important;
+  max-width: none !important;
   flex-shrink: 0;
+  writing-mode: horizontal-tb !important;
+  direction: ltr !important;
+  word-break: normal !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
+  display: inline-block !important;
+  line-height: 1.5;
+  max-height: none !important;
 }
 
 .error-container {

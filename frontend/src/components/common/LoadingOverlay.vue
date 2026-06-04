@@ -106,6 +106,7 @@ const progressStatus = computed(() => {
   color: var(--el-text-color-primary);
   margin: 0 0 8px 0;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .loading-subtext {

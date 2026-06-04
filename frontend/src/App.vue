@@ -67,14 +67,14 @@
         <div class="view-container" v-show="currentView === 'playlist' && playlistInfo && displayTracks.length > 0">
           <SearchResultList
             :playlist-info="playlistInfo"
-            :display-tracks="displayTracks"
+            :display-tracks="playlistInfo?.tracks || displayTracks"
             :current-page="currentPage"
             :page-size="20"
             :total-tracks="totalTracks"
             :settings="settings"
             @track-selected="handleTrackSelected"
             @track-parsed="handleTrackParsed"
-            @track-play="handlePlaySong"
+            @track-play="(track) => handlePlaySong(track, playlistInfo?.tracks || displayTracks)"
             @page-change="handlePageChange"
           />
         </div>
@@ -223,16 +223,24 @@ const handleParseSong = (song) => {
 // 当前播放索引
 const currentPlayIndex = ref(0)
 
+// 保存当前播放列表的完整数据（用于点击播放时）
+const currentFullPlaylist = ref([])
+
 // 处理歌曲播放
-const handlePlaySong = async (track) => {
+const handlePlaySong = async (track, playlistData = null) => {
   // 调试：打印原始 track 数据
   console.log('Original track data:', track)
   
-  // 将当前列表添加到播放列表
+  // 如果传入了完整的播放列表数据，优先使用
   let tracks = []
   
+  if (playlistData && playlistData.length > 0) {
+    // 使用传入的完整播放列表
+    tracks = playlistData
+    console.log('Using provided playlist data:', playlistData.length, 'tracks')
+  }
   // 优先使用歌单的所有歌曲（不仅仅是当前页）
-  if (playlistInfo.value?.tracks?.length > 0) {
+  else if (playlistInfo.value?.tracks?.length > 0) {
     tracks = playlistInfo.value.tracks
   }
   // 其次使用当前显示的列表

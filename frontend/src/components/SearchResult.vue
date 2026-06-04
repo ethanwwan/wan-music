@@ -33,7 +33,7 @@
     <SearchResultList 
       v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
       :playlist-info="currentDetail"
-      :display-tracks="currentDetailPageData"
+      :display-tracks="detailTracks"
       :current-page="currentDetailPage"
       :page-size="detailPageSize"
       :total-tracks="detailTracks.length"
@@ -41,6 +41,7 @@
       :is-detail-page="true"
       @track-parsed="handleParse"
       @track-play="handleTrackPlay"
+      @page-change="goToDetailPage"
     />
 
     <!-- 歌单卡片展示 -->
@@ -419,6 +420,11 @@ const handleTrackPlay = (track) => {
   emit('track-play', track)
 }
 
+// 处理播放列表数据
+const handlePlaylistData = (playlistData) => {
+  emit('playlist-data', playlistData)
+}
+
 const handleParse = async (item, type) => {
   if (type === 'song') {
     emit('parse-song', item)
@@ -769,6 +775,7 @@ const getAlbum = (track) => {
   font-size: 14px;
   color: var(--color-text-muted);
   margin: 0;
+  white-space: nowrap;
 }
 
 /* 返回按钮栏 */
