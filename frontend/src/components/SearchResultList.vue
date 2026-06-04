@@ -490,6 +490,7 @@ export default {
     return {
       playlistData,
       creatorLabel,
+      currentPageTracks,
       loading,
       error,
       selectedTrack,
