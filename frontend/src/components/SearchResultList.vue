@@ -1045,10 +1045,10 @@ export default {
 
 .loading-content {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   width: auto;
   max-width: 100%;
 }

@@ -66,3 +66,7 @@ api/cookie.txt
 
 # OS files
 *.local
+backend/api/__pycache__/__init__.cpython-312.pyc
+backend/api/__pycache__/cookie_manager.cpython-312.pyc
+backend/api/__pycache__/music_api.cpython-312.pyc
+backend/api/__pycache__/music_downloader.cpython-312.pyc
