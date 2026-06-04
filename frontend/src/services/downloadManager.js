@@ -1,188 +1,298 @@
 /**
- * 下载管理器模块
- * 统一管理音乐下载功能
+ * 增强版下载管理器
+ * 使用后端API进行下载队列管理
  */
 
-import { logger } from './logger.js'
-import { DownloadError } from './errors.js'
-import { embedMetadata } from '../services/metadataWriter.js'
-import { saveBlob, getMimeByExtension, sanitizeFilename } from './downloadHelper.js'
+// 任务状态枚举
+export const DOWNLOAD_STATUSES = {
+  PENDING: 'pending',
+  DOWNLOADING: 'downloading',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  PAUSED: 'paused',
+  CANCELLED: 'cancelled'
+}
 
-class DownloadManager {
-  constructor() {
-    this.maxConcurrent = 3
-    this.activeDownloads = new Map()
-    this.queue = []
-    this.isProcessing = false
+// 本地下载队列存储
+let taskUpdateInterval = null
+let localTasks = new Map()
+let onTasksUpdateCallback = null
+
+// 设置任务更新回调
+export const setOnTasksUpdate = (callback) => {
+  onTasksUpdateCallback = callback
+}
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
   }
+  return `${size.toFixed(2)} ${units[unitIndex]}`
+}
 
-  /**
-   * 设置最大并发数
-   */
-  setMaxConcurrent(max) {
-    this.maxConcurrent = max
+// 格式化速度
+const formatSpeed = (bytesPerSecond) => {
+  if (!bytesPerSecond) return '0 KB/s'
+  const kbps = bytesPerSecond / 1024
+  if (kbps >= 1024) {
+    return `${(kbps / 1024).toFixed(2)} MB/s`
   }
+  return `${kbps.toFixed(2)} KB/s`
+}
 
-  /**
-   * 下载单个音乐
-   */
-  async download(musicInfo, options = {}) {
-    const {
-      embedMetadata: shouldEmbedMetadata = true,
-      embedLyrics = true,
-      filename = null
-    } = options
+// 格式化ETA
+const formatEta = (seconds) => {
+  if (!seconds || seconds === Infinity) return '未知'
+  if (seconds < 60) return `${Math.round(seconds)} 秒`
+  if (seconds < 3600) return `${Math.round(seconds / 60)} 分`
+  return `${(seconds / 3600).toFixed(1)} 小时`
+}
 
-    try {
-      logger.info(`开始下载: ${musicInfo.name}`)
-
-      if (!musicInfo.url) {
-        throw new DownloadError('音乐 URL 不存在', musicInfo.id)
-      }
-
-      const filenameBase = filename || sanitizeFilename(
-        `${musicInfo.artist} - ${musicInfo.name}`
-      )
-      const extension = musicInfo.source?.url?.type || 'flac'
-      const mimeType = getMimeByExtension(`.${extension}`)
-
-      const response = await fetch(musicInfo.url)
-      if (!response.ok) {
-        throw new DownloadError(
-          `下载失败: ${response.status} ${response.statusText}`,
-          musicInfo.id
-        )
-      }
-
-      let blob = await response.blob()
-
-      if (shouldEmbedMetadata) {
-        const lyrics = embedLyrics ? musicInfo.lrc : null
-        blob = await embedMetadata(blob, {
-          title: musicInfo.name,
-          artist: musicInfo.artist,
-          album: musicInfo.album,
-          coverUrl: musicInfo.cover,
-          lyrics: lyrics,
-          fileExtension: extension
-        })
-      }
-
-      const finalFilename = `${filenameBase}.${extension}`
-      saveBlob(blob, finalFilename)
-
-      logger.info(`下载完成: ${finalFilename}`)
-
-      return {
-        success: true,
-        filename: finalFilename,
-        size: blob.size,
-        id: musicInfo.id
-      }
-    } catch (error) {
-      logger.error(`下载失败: ${musicInfo.name}`, error)
-      throw new DownloadError(
-        error.message || '下载失败',
-        musicInfo.id,
-        error
-      )
-    }
-  }
-
-  /**
-   * 批量下载音乐
-   */
-  async downloadBatch(musicList, options = {}) {
-    const results = []
-    const concurrency = this.maxConcurrent
-
-    for (let i = 0; i < musicList.length; i += concurrency) {
-      const batch = musicList.slice(i, i + concurrency)
-      const batchResults = await Promise.allSettled(
-        batch.map(music => this.download(music, options))
-      )
-
-      for (let j = 0; j < batch.length; j++) {
-        const result = batchResults[j]
-        if (result.status === 'fulfilled') {
-          results.push({
-            ...result.value,
-            id: batch[j].id,
-            name: batch[j].name,
-            success: true
-          })
-        } else {
-          results.push({
-            id: batch[j].id,
-            name: batch[j].name,
-            success: false,
-            error: result.reason?.message || '下载失败'
-          })
-        }
-      }
-    }
-
-    return results
-  }
-
-  /**
-   * 添加到下载队列
-   */
-  addToQueue(musicInfo, options = {}) {
-    this.queue.push({ musicInfo, options })
-
-    if (!this.isProcessing) {
-      this.processQueue()
-    }
-  }
-
-  /**
-   * 处理下载队列
-   */
-  async processQueue() {
-    if (this.isProcessing || this.queue.length === 0) {
-      return
-    }
-
-    this.isProcessing = true
-
-    while (this.queue.length > 0) {
-      const batch = this.queue.splice(0, this.maxConcurrent)
-      await Promise.all(
-        batch.map(({ musicInfo, options }) =>
-          this.download(musicInfo, options).catch(error => ({
-            success: false,
-            error: error.message
-          }))
-        )
-      )
-    }
-
-    this.isProcessing = false
-  }
-
-  /**
-   * 取消所有下载
-   */
-  cancelAll() {
-    this.queue = []
-    this.activeDownloads.forEach((download, id) => {
-      download.abort()
+// 添加单个任务到队列
+export const addToQueue = async (musicId, quality = 'lossless', priority = 0) => {
+  try {
+    const response = await fetch('/api/download/queue', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `id=${musicId}&quality=${quality}&priority=${priority}`
     })
-    this.activeDownloads.clear()
-  }
-
-  /**
-   * 获取下载统计
-   */
-  getStats() {
-    return {
-      queueLength: this.queue.length,
-      activeDownloads: this.activeDownloads.size,
-      maxConcurrent: this.maxConcurrent
+    
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '添加任务失败')
     }
+    
+    return result.data.task_id
+  } catch (error) {
+    console.error('添加任务失败:', error)
+    throw error
   }
 }
 
-export default new DownloadManager()
-export { DownloadManager }
+// 批量添加任务到队列
+export const addBatchToQueue = async (musicIds, quality = 'lossless') => {
+  try {
+    const response = await fetch('/api/download/queue/batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ids: musicIds, quality })
+    })
+    
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '批量添加任务失败')
+    }
+    
+    return result.data.task_ids
+  } catch (error) {
+    console.error('批量添加任务失败:', error)
+    throw error
+  }
+}
+
+// 获取所有任务
+export const getAllTasks = async () => {
+  try {
+    const response = await fetch('/api/download/queue')
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '获取队列失败')
+    }
+    
+    const tasks = result.data.tasks || []
+    localTasks = new Map(tasks.map(task => [task.task_id, task]))
+    
+    if (onTasksUpdateCallback) {
+      onTasksUpdateCallback(tasks)
+    }
+    
+    return tasks
+  } catch (error) {
+    console.error('获取队列失败:', error)
+    throw error
+  }
+}
+
+// 获取单个任务状态
+export const getTaskStatus = async (taskId) => {
+  try {
+    const response = await fetch(`/api/download/task/${taskId}`)
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '获取任务状态失败')
+    }
+    
+    const task = result.data
+    localTasks.set(taskId, task)
+    
+    if (onTasksUpdateCallback) {
+      const tasks = Array.from(localTasks.values())
+      onTasksUpdateCallback(tasks)
+    }
+    
+    return task
+  } catch (error) {
+    console.error('获取任务状态失败:', error)
+    throw error
+  }
+}
+
+// 暂停任务
+export const pauseTask = async (taskId) => {
+  try {
+    const response = await fetch(`/api/download/task/${taskId}/pause`, {
+      method: 'POST'
+    })
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '暂停任务失败')
+    }
+    
+    await getAllTasks() // 刷新任务列表
+    return true
+  } catch (error) {
+    console.error('暂停任务失败:', error)
+    throw error
+  }
+}
+
+// 恢复任务
+export const resumeTask = async (taskId) => {
+  try {
+    const response = await fetch(`/api/download/task/${taskId}/resume`, {
+      method: 'POST'
+    })
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '恢复任务失败')
+    }
+    
+    await getAllTasks() // 刷新任务列表
+    return true
+  } catch (error) {
+    console.error('恢复任务失败:', error)
+    throw error
+  }
+}
+
+// 取消任务
+export const cancelTask = async (taskId) => {
+  try {
+    const response = await fetch(`/api/download/task/${taskId}/cancel`, {
+      method: 'POST'
+    })
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '取消任务失败')
+    }
+    
+    await getAllTasks() // 刷新任务列表
+    return true
+  } catch (error) {
+    console.error('取消任务失败:', error)
+    throw error
+  }
+}
+
+// 删除任务
+export const removeTask = async (taskId) => {
+  try {
+    const response = await fetch(`/api/download/task/${taskId}`, {
+      method: 'DELETE'
+    })
+    const result = await response.json()
+    if (!result.success) {
+      throw new Error(result.message || '删除任务失败')
+    }
+    
+    localTasks.delete(taskId)
+    await getAllTasks() // 刷新任务列表
+    return true
+  } catch (error) {
+    console.error('删除任务失败:', error)
+    throw error
+  }
+}
+
+// 开始轮询任务更新
+export const startTaskPolling = (intervalMs = 1000) => {
+  if (taskUpdateInterval) {
+    stopTaskPolling()
+  }
+  
+  taskUpdateInterval = setInterval(async () => {
+    try {
+      await getAllTasks()
+    } catch (error) {
+      console.error('轮询任务状态失败:', error)
+    }
+  }, intervalMs)
+  
+  console.log('开始轮询下载任务状态')
+}
+
+// 停止轮询任务更新
+export const stopTaskPolling = () => {
+  if (taskUpdateInterval) {
+    clearInterval(taskUpdateInterval)
+    taskUpdateInterval = null
+    console.log('停止轮询下载任务状态')
+  }
+}
+
+// 格式化任务显示
+export const formatTask = (task) => {
+  return {
+    ...task,
+    progress_display: {
+      downloaded: formatFileSize(task.progress?.downloaded || 0),
+      total: formatFileSize(task.progress?.total || 0),
+      percentage: Math.round(task.progress?.percentage || 0),
+      speed: formatSpeed(task.progress?.speed || 0),
+      eta: formatEta(task.progress?.eta_seconds || 0)
+    },
+    status_text: getStatusText(task.status),
+    status_color: getStatusColor(task.status)
+  }
+}
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const statusMap = {
+    [DOWNLOAD_STATUSES.PENDING]: '等待中',
+    [DOWNLOAD_STATUSES.DOWNLOADING]: '下载中',
+    [DOWNLOAD_STATUSES.COMPLETED]: '已完成',
+    [DOWNLOAD_STATUSES.FAILED]: '失败',
+    [DOWNLOAD_STATUSES.PAUSED]: '已暂停',
+    [DOWNLOAD_STATUSES.CANCELLED]: '已取消'
+  }
+  return statusMap[status] || status
+}
+
+// 获取状态颜色
+const getStatusColor = (status) => {
+  const colorMap = {
+    [DOWNLOAD_STATUSES.PENDING]: '#9ca3af',
+    [DOWNLOAD_STATUSES.DOWNLOADING]: '#3b82f6',
+    [DOWNLOAD_STATUSES.COMPLETED]: '#10b981',
+    [DOWNLOAD_STATUSES.FAILED]: '#ef4444',
+    [DOWNLOAD_STATUSES.PAUSED]: '#f59e0b',
+    [DOWNLOAD_STATUSES.CANCELLED]: '#6b7280'
+  }
+  return colorMap[status] || '#9ca3af'
+}
+
+// 获取本地缓存的任务
+export const getLocalTasks = () => {
+  return Array.from(localTasks.values())
+}

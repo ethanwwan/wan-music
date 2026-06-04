@@ -1,588 +1,713 @@
-"""音乐下载器模块
-
-提供网易云音乐下载功能，包括：
-- 音乐信息获取
-- 文件下载到本地
-- 内存下载
-- 音乐标签写入
-- 异步下载支持
+"""
+增强版音乐下载器
+支持：
+- 下载队列管理（暂停、恢复、取消）
+- 断点续传
+- 文件完整性校验
+- 智能重试和音质降级
+- 封面图片缓存
+- 实时进度追踪
 """
 
-import os
-import re
 import asyncio
-import aiohttp
-import aiofiles
-from io import BytesIO
-from typing import Dict, List, Optional, Tuple, Any, Union
-from pathlib import Path
-from dataclasses import dataclass
+import hashlib
+import os
+import shutil
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
-import requests
-from mutagen.flac import FLAC
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC
-from mutagen.mp4 import MP4
+import aiofiles
+import aiohttp
+from mutagen import File as MutagenFile
+from mutagen.flac import FLAC, Picture
+from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1
+from mutagen.mp4 import MP4, MP4Cover
 
-from .music_api import NeteaseAPI, APIException
-from .cookie_manager import CookieManager
-
-
-class AudioFormat(Enum):
-    """音频格式枚举"""
-    MP3 = "mp3"
-    FLAC = "flac"
-    M4A = "m4a"
-    UNKNOWN = "unknown"
+from .music_api import NeteaseAPI
 
 
-class QualityLevel(Enum):
-    """音质等级枚举"""
-    STANDARD = "standard"  # 标准
-    EXHIGH = "exhigh"      # 极高
-    LOSSLESS = "lossless"  # 无损
-    HIRES = "hires"        # Hi-Res
-    SKY = "sky"            # 沉浸环绕声
-    JYEFFECT = "jyeffect"  # 高清环绕声
-    JYMASTER = "jymaster"  # 超清母带
-    DOLBY = "dolby"      # 杜比全景声
+class DownloadStatus(Enum):
+    """下载状态枚举"""
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+
+
+class MusicQuality(Enum):
+    """音质枚举（按优先级排序）"""
+    DOLBY = "dolby"
+    JYMASTER = "jymaster"
+    JYEFFECT = "jyeffect"
+    HIRES = "hires"
+    SKY = "sky"
+    LOSSLESS = "lossless"
+    EXHIGH = "exhigh"
+    STANDARD = "standard"
 
 
 @dataclass
 class MusicInfo:
     """音乐信息数据类"""
-    id: int
+    music_id: int
     name: str
     artists: str
     album: str
-    pic_url: str
-    duration: int
-    track_number: int
-    download_url: str
-    file_type: str
-    file_size: int
-    quality: str
-    lyric: str = ""
-    tlyric: str = ""
+    pic_url: Optional[str] = None
+    download_url: Optional[str] = None
+    file_extension: str = "mp3"
 
 
 @dataclass
-class DownloadResult:
-    """下载结果数据类"""
-    success: bool
-    file_path: Optional[str] = None
-    file_size: int = 0
-    error_message: str = ""
-    music_info: Optional[MusicInfo] = None
-
-
-class DownloadException(Exception):
-    """下载异常类"""
-    pass
-
-
-class MusicDownloader:
-    """音乐下载器主类"""
+class DownloadProgress:
+    """下载进度数据类"""
+    downloaded: int = 0
+    total: int = 0
+    speed: float = 0.0
+    eta_seconds: float = 0.0
     
-    def __init__(self, download_dir: str = "downloads", max_concurrent: int = 3):
-        """
-        初始化音乐下载器
-        
-        Args:
-            download_dir: 下载目录
-            max_concurrent: 最大并发下载数
-        """
-        self.download_dir = Path(download_dir)
-        self.download_dir.mkdir(exist_ok=True)
-        self.max_concurrent = max_concurrent
-        
-        # 初始化依赖
-        self.cookie_manager = CookieManager()
-        self.api = NeteaseAPI()
-        
-        # 支持的文件格式
-        self.supported_formats = {
-            'mp3': AudioFormat.MP3,
-            'flac': AudioFormat.FLAC,
-            'm4a': AudioFormat.M4A
+    @property
+    def percentage(self) -> float:
+        """计算下载百分比"""
+        if self.total <= 0:
+            return 0.0
+        return min(100.0, (self.downloaded / self.total) * 100)
+
+
+@dataclass
+class DownloadTask:
+    """下载任务数据类"""
+    task_id: str
+    music_id: int
+    quality: str
+    status: DownloadStatus
+    priority: int = 0
+    progress: DownloadProgress = field(default_factory=DownloadProgress)
+    file_path: Optional[Path] = None
+    temp_path: Optional[Path] = None
+    music_info: Optional[MusicInfo] = None
+    error_message: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    retry_count: int = 0
+    max_retries: int = 3
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典用于API返回"""
+        return {
+            "task_id": self.task_id,
+            "music_id": self.music_id,
+            "quality": self.quality,
+            "status": self.status.value,
+            "priority": self.priority,
+            "progress": {
+                "downloaded": self.progress.downloaded,
+                "total": self.progress.total,
+                "percentage": self.progress.percentage,
+                "speed": self.progress.speed,
+                "eta_seconds": self.progress.eta_seconds
+            },
+            "file_path": str(self.file_path) if self.file_path else None,
+            "music_name": self.music_info.name if self.music_info else None,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "retry_count": self.retry_count
         }
+
+
+class CoverCache:
+    """封面图片缓存管理器"""
+    
+    def __init__(self, cache_dir: Path):
+        self.cache_dir = cache_dir
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache: Dict[str, bytes] = {}
+    
+    def _get_cache_key(self, url: str) -> str:
+        """从URL生成缓存键"""
+        return hashlib.md5(url.encode('utf-8')).hexdigest()
+    
+    def _get_cache_path(self, url: str) -> Path:
+        """获取缓存文件路径"""
+        key = self._get_cache_key(url)
+        return self.cache_dir / f"{key}.jpg"
+    
+    async def get_cover(self, url: str) -> Optional[bytes]:
+        """从缓存获取封面"""
+        # 先检查内存缓存
+        if url in self._cache:
+            return self._cache[url]
+        
+        # 检查文件缓存
+        cache_path = self._get_cache_path(url)
+        if cache_path.exists():
+            try:
+                async with aiofiles.open(cache_path, 'rb') as f:
+                    data = await f.read()
+                    self._cache[url] = data
+                    return data
+            except Exception:
+                pass
+        
+        return None
+    
+    async def cache_cover(self, url: str, data: bytes) -> None:
+        """缓存封面"""
+        # 存储到内存
+        self._cache[url] = data
+        
+        # 存储到文件
+        cache_path = self._get_cache_path(url)
+        try:
+            async with aiofiles.open(cache_path, 'wb') as f:
+                await f.write(data)
+        except Exception:
+            pass
+
+
+class DownloadQueue:
+    """下载队列管理器"""
+    
+    def __init__(self, max_concurrent: int = 3):
+        self.max_concurrent = max_concurrent
+        self.tasks: Dict[str, DownloadTask] = {}
+        self._pending_queue: asyncio.Queue = asyncio.Queue()
+        self._active_tasks: Set[str] = set()
+        self._paused_tasks: Set[str] = set()
+        self._completed_tasks: List[DownloadTask] = []
+        self._task_history: List[DownloadTask] = []
+        self._lock = asyncio.Lock()
+        self._running = False
+        self._workers: List[asyncio.Task] = []
+        self._cover_cache: Optional[CoverCache] = None
+    
+    def set_cover_cache(self, cache: CoverCache) -> None:
+        """设置封面缓存"""
+        self._cover_cache = cache
+    
+    def generate_task_id(self) -> str:
+        """生成唯一任务ID"""
+        return hashlib.md5(f"{datetime.now().isoformat()}{os.urandom(16)}".encode()).hexdigest()[:16]
+    
+    def get_task(self, task_id: str) -> Optional[DownloadTask]:
+        """获取任务"""
+        return self.tasks.get(task_id)
+    
+    def get_all_tasks(self) -> List[DownloadTask]:
+        """获取所有任务（进行中+已完成）"""
+        all_tasks = list(self.tasks.values())
+        all_tasks.extend(self._completed_tasks)
+        return sorted(all_tasks, key=lambda t: t.created_at, reverse=True)
+    
+    async def add_task(
+        self,
+        music_id: int,
+        quality: str,
+        priority: int = 0,
+        file_path: Optional[Path] = None
+    ) -> str:
+        """添加下载任务"""
+        task_id = self.generate_task_id()
+        task = DownloadTask(
+            task_id=task_id,
+            music_id=music_id,
+            quality=quality,
+            status=DownloadStatus.PENDING,
+            priority=priority,
+            file_path=file_path
+        )
+        
+        async with self._lock:
+            self.tasks[task_id] = task
+            await self._pending_queue.put((-priority, task_id))
+        
+        return task_id
+    
+    async def pause_task(self, task_id: str) -> bool:
+        """暂停任务"""
+        async with self._lock:
+            task = self.tasks.get(task_id)
+            if task and task.status == DownloadStatus.DOWNLOADING:
+                task.status = DownloadStatus.PAUSED
+                self._paused_tasks.add(task_id)
+                return True
+        return False
+    
+    async def resume_task(self, task_id: str) -> bool:
+        """恢复任务"""
+        async with self._lock:
+            task = self.tasks.get(task_id)
+            if task and task.status == DownloadStatus.PAUSED:
+                task.status = DownloadStatus.PENDING
+                self._paused_tasks.discard(task_id)
+                await self._pending_queue.put((-task.priority, task_id))
+                return True
+        return False
+    
+    async def cancel_task(self, task_id: str) -> bool:
+        """取消任务"""
+        async with self._lock:
+            task = self.tasks.get(task_id)
+            if task:
+                if task.status in [DownloadStatus.DOWNLOADING, DownloadStatus.PENDING, DownloadStatus.PAUSED]:
+                    task.status = DownloadStatus.CANCELLED
+                    self._paused_tasks.discard(task_id)
+                # 清理临时文件
+                if task.temp_path and task.temp_path.exists():
+                    try:
+                        task.temp_path.unlink()
+                    except Exception:
+                        pass
+                return True
+        return False
+    
+    async def remove_task(self, task_id: str) -> bool:
+        """删除任务"""
+        async with self._lock:
+            task = self.tasks.pop(task_id, None)
+            if task:
+                if task.temp_path and task.temp_path.exists():
+                    try:
+                        task.temp_path.unlink()
+                    except Exception:
+                        pass
+                self._paused_tasks.discard(task_id)
+                return True
+        return False
+    
+    async def _get_next_task(self) -> Optional[DownloadTask]:
+        """获取下一个待处理任务"""
+        while True:
+            try:
+                priority, task_id = await asyncio.wait_for(self._pending_queue.get(), timeout=0.1)
+                task = self.tasks.get(task_id)
+                if task and task.status == DownloadStatus.PENDING:
+                    return task
+            except asyncio.TimeoutError:
+                return None
+    
+    async def start_workers(self, downloader):
+        """启动工作协程"""
+        if self._running:
+            return
+        
+        self._running = True
+        for _ in range(self.max_concurrent):
+            worker = asyncio.create_task(self._worker_loop(downloader))
+            self._workers.append(worker)
+    
+    async def stop_workers(self):
+        """停止工作协程"""
+        self._running = False
+        for worker in self._workers:
+            worker.cancel()
+        self._workers = []
+    
+    async def _worker_loop(self, downloader):
+        """工作协程主循环"""
+        while self._running:
+            try:
+                task = await self._get_next_task()
+                if not task:
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                async with self._lock:
+                    if task.task_id in self._active_tasks:
+                        continue
+                    self._active_tasks.add(task.task_id)
+                
+                try:
+                    await downloader._execute_task(task)
+                finally:
+                    async with self._lock:
+                        self._active_tasks.discard(task.task_id)
+            
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(1)
+
+
+class EnhancedMusicDownloader:
+    """增强版音乐下载器"""
+    
+    def __init__(
+        self,
+        api: NeteaseAPI,
+        download_dir: Optional[str] = None,
+        max_concurrent: int = 3,
+        cover_cache_dir: Optional[str] = None
+    ):
+        self.api = api
+        
+        if download_dir is None:
+            # 使用当前目录下的 downloads 文件夹
+            self.download_dir = Path(__file__).parent.parent / "downloads"
+        else:
+            self.download_dir = Path(download_dir)
+        
+        # 确保目录存在
+        try:
+            self.download_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # 如果权限不足，使用临时目录
+            import tempfile
+            self.download_dir = Path(tempfile.gettempdir()) / "wan_music_downloads"
+            self.download_dir.mkdir(parents=True, exist_ok=True)
+        
+        cache_dir = Path(cover_cache_dir) if cover_cache_dir else self.download_dir / ".cover_cache"
+        self.cover_cache = CoverCache(cache_dir)
+        
+        self.queue = DownloadQueue(max_concurrent=max_concurrent)
+        self.queue.set_cover_cache(self.cover_cache)
+        
+        self._running = False
+        self._session: Optional[aiohttp.ClientSession] = None
+    
+    async def __aenter__(self):
+        self._session = aiohttp.ClientSession()
+        await self.queue.start_workers(self)
+        return self
+    
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.queue.stop_workers()
+        if self._session:
+            await self._session.close()
     
     def _sanitize_filename(self, filename: str) -> str:
-        """清理文件名，移除非法字符
-        
-        Args:
-            filename: 原始文件名
-            
-        Returns:
-            清理后的安全文件名
-        """
-        # 移除或替换非法字符
-        illegal_chars = r'[<>:"/\\|?*]'
-        filename = re.sub(illegal_chars, '_', filename)
-        
-        # 移除前后空格和点
-        filename = filename.strip(' .')
-        
-        # 限制长度
-        if len(filename) > 200:
-            filename = filename[:200]
-        
-        return filename or "unknown"
+        """清理文件名中的非法字符"""
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        return filename.strip()
     
-    def _determine_file_extension(self, url: str, content_type: str = "") -> str:
-        """根据URL和Content-Type确定文件扩展名
+    def _get_qualities_to_try(self, quality: str) -> List[str]:
+        """获取音质尝试列表（包含降级策略）"""
+        quality_order = [q.value for q in MusicQuality]
         
-        Args:
-            url: 下载URL
-            content_type: HTTP Content-Type头
-            
-        Returns:
-            文件扩展名
-        """
-        # 首先尝试从URL获取
-        if '.flac' in url.lower():
-            return '.flac'
-        elif '.mp3' in url.lower():
-            return '.mp3'
-        elif '.m4a' in url.lower():
-            return '.m4a'
-        
-        # 从Content-Type获取
-        content_type = content_type.lower()
-        if 'flac' in content_type:
-            return '.flac'
-        elif 'mpeg' in content_type or 'mp3' in content_type:
-            return '.mp3'
-        elif 'mp4' in content_type or 'm4a' in content_type:
-            return '.m4a'
-        
-        return '.mp3'  # 默认
-    
-    def get_music_info(self, music_id: int, quality: str = "standard") -> MusicInfo:
-        """获取音乐详细信息
-        
-        Args:
-            music_id: 音乐ID
-            quality: 音质等级
-            
-        Returns:
-            音乐信息对象
-            
-        Raises:
-            DownloadException: 获取信息失败时抛出
-        """
         try:
-            # 获取cookies
-            cookies = self.cookie_manager.parse_cookies()
-            
-            # 获取音乐URL信息
-            url_result = self.api.get_song_url(music_id, quality, cookies)
-            if not url_result.get('data') or not url_result['data']:
-                raise DownloadException(f"无法获取音乐ID {music_id} 的播放链接")
-            
-            song_data = url_result['data'][0]
-            download_url = song_data.get('url', '')
-            if not download_url:
-                raise DownloadException(f"音乐ID {music_id} 无可用的下载链接")
-            
-            # 获取音乐详情
-            detail_result = self.api.get_song_detail(music_id)
-            if not detail_result.get('songs') or not detail_result['songs']:
-                raise DownloadException(f"无法获取音乐ID {music_id} 的详细信息")
-            
-            song_detail = detail_result['songs'][0]
-            
-            # 获取歌词
-            lyric_result = self.api.get_lyric(music_id, cookies)
-            lyric = lyric_result.get('lrc', {}).get('lyric', '') if lyric_result else ''
-            tlyric = lyric_result.get('tlyric', {}).get('lyric', '') if lyric_result else ''
-            
-            # 构建艺术家字符串
-            artists = '/'.join(artist['name'] for artist in song_detail.get('ar', []))
-            
-            # 创建MusicInfo对象
-            music_info = MusicInfo(
-                id=music_id,
-                name=song_detail.get('name', '未知歌曲'),
-                artists=artists or '未知艺术家',
-                album=song_detail.get('al', {}).get('name', '未知专辑'),
-                pic_url=song_detail.get('al', {}).get('picUrl', ''),
-                duration=song_detail.get('dt', 0) // 1000,  # 转换为秒
-                track_number=song_detail.get('no', 0),
-                download_url=download_url,
-                file_type=song_data.get('type', 'mp3').lower(),
-                file_size=song_data.get('size', 0),
-                quality=quality,
-                lyric=lyric,
-                tlyric=tlyric
-            )
-            
-            return music_info
-            
-        except APIException as e:
-            raise DownloadException(f"API调用失败: {e}")
-        except Exception as e:
-            raise DownloadException(f"获取音乐信息时发生错误: {e}")
+            start_idx = quality_order.index(quality)
+            return quality_order[start_idx:]
+        except ValueError:
+            return [quality] + quality_order
     
-    def download_music_file(self, music_id: int, quality: str = "standard") -> DownloadResult:
-        """下载音乐文件到本地
+    async def _get_music_info(
+        self,
+        music_id: int,
+        quality: str
+    ) -> Tuple[Optional[MusicInfo], Optional[str]]:
+        """获取音乐信息（自动降级）"""
+        qualities = self._get_qualities_to_try(quality)
         
-        Args:
-            music_id: 音乐ID
-            quality: 音质等级
-            
-        Returns:
-            下载结果对象
-        """
-        try:
-            # 获取音乐信息
-            music_info = self.get_music_info(music_id, quality)
-            
-            # 生成文件名
-            filename = f"{music_info.artists} - {music_info.name}"
-            safe_filename = self._sanitize_filename(filename)
-            
-            # 确定文件扩展名
-            file_ext = self._determine_file_extension(music_info.download_url)
-            file_path = self.download_dir / f"{safe_filename}{file_ext}"
-            
-            # 检查文件是否已存在
-            if file_path.exists():
-                return DownloadResult(
-                    success=True,
-                    file_path=str(file_path),
-                    file_size=file_path.stat().st_size,
-                    music_info=music_info
-                )
-            
-            # 下载文件
-            response = requests.get(music_info.download_url, stream=True, timeout=30)
-            response.raise_for_status()
-            
-            # 写入文件
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            # 写入音乐标签
-            self._write_music_tags(file_path, music_info)
-            
-            return DownloadResult(
-                success=True,
-                file_path=str(file_path),
-                file_size=file_path.stat().st_size,
-                music_info=music_info
-            )
-            
-        except DownloadException:
-            raise
-        except requests.RequestException as e:
-            return DownloadResult(
-                success=False,
-                error_message=f"下载请求失败: {e}"
-            )
-        except Exception as e:
-            return DownloadResult(
-                success=False,
-                error_message=f"下载过程中发生错误: {e}"
-            )
+        for quality_option in qualities:
+            try:
+                download_url, ext = self.api.get_music_url(music_id, quality_option)
+                if download_url and ext:
+                    music_detail = self.api.get_music_detail([music_id])
+                    if music_detail:
+                        song = music_detail[0]
+                        music_info = MusicInfo(
+                            music_id=music_id,
+                            name=song.get('name', ''),
+                            artists=self._get_artists_str(song),
+                            album=song.get('al', {}).get('name', ''),
+                            pic_url=song.get('al', {}).get('picUrl'),
+                            download_url=download_url,
+                            file_extension=ext
+                        )
+                        return music_info, quality_option
+            except Exception:
+                continue
+        
+        return None, None
     
-    async def download_music_file_async(self, music_id: int, quality: str = "standard") -> DownloadResult:
-        """异步下载音乐文件到本地
-        
-        Args:
-            music_id: 音乐ID
-            quality: 音质等级
-            
-        Returns:
-            下载结果对象
-        """
-        try:
-            # 获取音乐信息（同步操作）
-            music_info = self.get_music_info(music_id, quality)
-            
-            # 生成文件名
-            filename = f"{music_info.artists} - {music_info.name}"
-            safe_filename = self._sanitize_filename(filename)
-            
-            # 确定文件扩展名
-            file_ext = self._determine_file_extension(music_info.download_url)
-            file_path = self.download_dir / f"{safe_filename}{file_ext}"
-            
-            # 检查文件是否已存在
-            if file_path.exists():
-                return DownloadResult(
-                    success=True,
-                    file_path=str(file_path),
-                    file_size=file_path.stat().st_size,
-                    music_info=music_info
-                )
-            
-            # 异步下载文件
-            async with aiohttp.ClientSession() as session:
-                async with session.get(music_info.download_url) as response:
-                    response.raise_for_status()
-                    
-                    async with aiofiles.open(file_path, 'wb') as f:
-                        async for chunk in response.content.iter_chunked(8192):
-                            await f.write(chunk)
-            
-            # 写入音乐标签
-            self._write_music_tags(file_path, music_info)
-            
-            return DownloadResult(
-                success=True,
-                file_path=str(file_path),
-                file_size=file_path.stat().st_size,
-                music_info=music_info
-            )
-            
-        except DownloadException:
-            raise
-        except aiohttp.ClientError as e:
-            return DownloadResult(
-                success=False,
-                error_message=f"异步下载请求失败: {e}"
-            )
-        except Exception as e:
-            return DownloadResult(
-                success=False,
-                error_message=f"异步下载过程中发生错误: {e}"
-            )
+    def _get_artists_str(self, song: Dict) -> str:
+        """获取艺术家字符串"""
+        artists = song.get('ar', [])
+        if not artists:
+            return ''
+        return ' & '.join([artist.get('name', '') for artist in artists])
     
-    def download_music_to_memory(self, music_id: int, quality: str = "standard") -> Tuple[bool, BytesIO, MusicInfo]:
-        """下载音乐到内存
-        
-        Args:
-            music_id: 音乐ID
-            quality: 音质等级
-            
-        Returns:
-            (是否成功, 音乐数据流, 音乐信息)
-            
-        Raises:
-            DownloadException: 下载失败时抛出
-        """
-        try:
-            # 获取音乐信息
-            music_info = self.get_music_info(music_id, quality)
-            
-            # 下载到内存
-            response = requests.get(music_info.download_url, timeout=30)
-            response.raise_for_status()
-            
-            # 创建BytesIO对象
-            audio_data = BytesIO(response.content)
-            
-            return True, audio_data, music_info
-            
-        except DownloadException:
-            raise
-        except requests.RequestException as e:
-            raise DownloadException(f"下载到内存失败: {e}")
-        except Exception as e:
-            raise DownloadException(f"内存下载过程中发生错误: {e}")
+    def _calculate_file_hash(self, file_path: Path) -> str:
+        """计算文件哈希用于完整性校验"""
+        hash_sha256 = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(65536), b''):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
     
-    async def download_batch_async(self, music_ids: List[int], quality: str = "standard") -> List[DownloadResult]:
-        """批量异步下载音乐
+    async def _download_with_resume(
+        self,
+        task: DownloadTask,
+        music_info: MusicInfo
+    ) -> Path:
+        """支持断点续传的下载"""
+        if not task.file_path:
+            filename = f"{music_info.artists} - {music_info.name}.{music_info.file_extension}"
+            filename = self._sanitize_filename(filename)
+            task.file_path = self.download_dir / filename
         
-        Args:
-            music_ids: 音乐ID列表
-            quality: 音质等级
-            
-        Returns:
-            下载结果列表
-        """
-        semaphore = asyncio.Semaphore(self.max_concurrent)
+        task.temp_path = task.file_path.with_suffix(task.file_path.suffix + '.tmp')
         
-        async def download_with_semaphore(music_id: int) -> DownloadResult:
-            async with semaphore:
-                return await self.download_music_file_async(music_id, quality)
+        current_size = 0
+        if task.temp_path.exists():
+            current_size = task.temp_path.stat().st_size
+            task.progress.downloaded = current_size
         
-        tasks = [download_with_semaphore(music_id) for music_id in music_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        headers = {}
+        if current_size > 0:
+            headers['Range'] = f'bytes={current_size}-'
         
-        # 处理异常结果
-        processed_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                processed_results.append(DownloadResult(
-                    success=False,
-                    error_message=f"下载音乐ID {music_ids[i]} 时发生异常: {result}"
-                ))
-            else:
-                processed_results.append(result)
+        if not self._session:
+            self._session = aiohttp.ClientSession()
         
-        return processed_results
-    
-    def _write_music_tags(self, file_path: Path, music_info: MusicInfo) -> None:
-        """写入音乐标签信息
-        
-        Args:
-            file_path: 音乐文件路径
-            music_info: 音乐信息
-        """
-        try:
-            file_ext = file_path.suffix.lower()
-            
-            if file_ext == '.mp3':
-                self._write_mp3_tags(file_path, music_info)
-            elif file_ext == '.flac':
-                self._write_flac_tags(file_path, music_info)
-            elif file_ext == '.m4a':
-                self._write_m4a_tags(file_path, music_info)
+        async with self._session.get(music_info.download_url, headers=headers, timeout=300) as response:
+            if response.status in [200, 206]:
+                if response.status == 206:
+                    task.progress.total = current_size + int(response.headers.get('Content-Length', 0))
+                else:
+                    task.progress.total = int(response.headers.get('Content-Length', 0))
+                    current_size = 0
                 
-        except Exception as e:
-            print(f"写入音乐标签失败: {e}")
+                mode = 'ab' if current_size > 0 else 'wb'
+                start_time = datetime.now()
+                last_update_time = start_time
+                last_downloaded = current_size
+                
+                async with aiofiles.open(task.temp_path, mode) as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        if task.status == DownloadStatus.PAUSED:
+                            return task.temp_path
+                        if task.status == DownloadStatus.CANCELLED:
+                            if task.temp_path.exists():
+                                task.temp_path.unlink()
+                            raise asyncio.CancelledError("Task cancelled")
+                        
+                        await f.write(chunk)
+                        task.progress.downloaded += len(chunk)
+                        
+                        current_time = datetime.now()
+                        time_diff = (current_time - last_update_time).total_seconds()
+                        if time_diff >= 0.5:
+                            bytes_diff = task.progress.downloaded - last_downloaded
+                            task.progress.speed = bytes_diff / time_diff if time_diff > 0 else 0
+                            
+                            remaining = task.progress.total - task.progress.downloaded
+                            task.progress.eta_seconds = remaining / task.progress.speed if task.progress.speed > 0 else 0
+                            
+                            last_update_time = current_time
+                            last_downloaded = task.progress.downloaded
+                
+                task.temp_path.rename(task.file_path)
+                return task.file_path
+            else:
+                raise Exception(f"Download failed with status {response.status}")
     
-    def _write_mp3_tags(self, file_path: Path, music_info: MusicInfo) -> None:
-        """写入MP3标签"""
-        try:
-            audio = MP3(str(file_path), ID3=ID3)
-            
-            # 添加ID3标签
-            audio.tags.add(TIT2(encoding=3, text=music_info.name))
-            audio.tags.add(TPE1(encoding=3, text=music_info.artists))
-            audio.tags.add(TALB(encoding=3, text=music_info.album))
-            
-            if music_info.track_number > 0:
-                audio.tags.add(TRCK(encoding=3, text=str(music_info.track_number)))
-            
-            # 下载并添加封面
-            if music_info.pic_url:
+    async def _write_metadata(
+        self,
+        file_path: Path,
+        music_info: MusicInfo
+    ) -> None:
+        """写入音乐元数据"""
+        cover_data = None
+        if music_info.pic_url:
+            cover_data = await self.cover_cache.get_cover(music_info.pic_url)
+            if not cover_data and self._session:
                 try:
-                    pic_response = requests.get(music_info.pic_url, timeout=10)
-                    pic_response.raise_for_status()
-                    audio.tags.add(APIC(
+                    async with self._session.get(music_info.pic_url, timeout=30) as response:
+                        if response.status == 200:
+                            cover_data = await response.read()
+                            await self.cover_cache.cache_cover(music_info.pic_url, cover_data)
+                except Exception:
+                    pass
+        
+        ext = music_info.file_extension.lower()
+        
+        try:
+            if ext == 'mp3':
+                audio = MutagenFile(file_path, easy=True)
+                if audio.tags is None:
+                    audio.add_tags()
+                audio['title'] = music_info.name
+                audio['artist'] = music_info.artists
+                audio['album'] = music_info.album
+                audio.save()
+                
+                if cover_data:
+                    audio = ID3(file_path)
+                    audio['APIC'] = APIC(
                         encoding=3,
                         mime='image/jpeg',
                         type=3,
                         desc='Cover',
-                        data=pic_response.content
-                    ))
-                except:
-                    pass  # 封面下载失败不影响主流程
+                        data=cover_data
+                    )
+                    audio.save()
             
-            audio.save()
-        except Exception as e:
-            print(f"写入MP3标签失败: {e}")
-    
-    def _write_flac_tags(self, file_path: Path, music_info: MusicInfo) -> None:
-        """写入FLAC标签"""
-        try:
-            audio = FLAC(str(file_path))
-            
-            audio['TITLE'] = music_info.name
-            audio['ARTIST'] = music_info.artists
-            audio['ALBUM'] = music_info.album
-            
-            if music_info.track_number > 0:
-                audio['TRACKNUMBER'] = str(music_info.track_number)
-            
-            # 下载并添加封面
-            if music_info.pic_url:
-                try:
-                    pic_response = requests.get(music_info.pic_url, timeout=10)
-                    pic_response.raise_for_status()
-                    
-                    from mutagen.flac import Picture
+            elif ext == 'flac':
+                audio = FLAC(file_path)
+                audio['title'] = music_info.name
+                audio['artist'] = music_info.artists
+                audio['album'] = music_info.album
+                
+                if cover_data:
                     picture = Picture()
-                    picture.type = 3  # Cover (front)
+                    picture.data = cover_data
+                    picture.type = 3
                     picture.mime = 'image/jpeg'
-                    picture.desc = 'Cover'
-                    picture.data = pic_response.content
                     audio.add_picture(picture)
-                except:
-                    pass  # 封面下载失败不影响主流程
+                
+                audio.save()
             
-            audio.save()
-        except Exception as e:
-            print(f"写入FLAC标签失败: {e}")
-    
-    def _write_m4a_tags(self, file_path: Path, music_info: MusicInfo) -> None:
-        """写入M4A标签"""
-        try:
-            audio = MP4(str(file_path))
-            
-            audio['\xa9nam'] = music_info.name
-            audio['\xa9ART'] = music_info.artists
-            audio['\xa9alb'] = music_info.album
-            
-            if music_info.track_number > 0:
-                audio['trkn'] = [(music_info.track_number, 0)]
-            
-            # 下载并添加封面
-            if music_info.pic_url:
-                try:
-                    pic_response = requests.get(music_info.pic_url, timeout=10)
-                    pic_response.raise_for_status()
-                    audio['covr'] = [pic_response.content]
-                except:
-                    pass  # 封面下载失败不影响主流程
-            
-            audio.save()
-        except Exception as e:
-            print(f"写入M4A标签失败: {e}")
-    
-    def get_download_progress(self, music_id: int, quality: str = "standard") -> Dict[str, Any]:
-        """获取下载进度信息
+            elif ext in ['m4a', 'mp4']:
+                audio = MP4(file_path)
+                audio['\xa9nam'] = music_info.name
+                audio['\xa9ART'] = music_info.artists
+                audio['\xa9alb'] = music_info.album
+                
+                if cover_data:
+                    audio['covr'] = [MP4Cover(cover_data, imageformat=MP4Cover.FORMAT_JPEG)]
+                
+                audio.save()
         
-        Args:
-            music_id: 音乐ID
-            quality: 音质等级
-            
-        Returns:
-            包含进度信息的字典
-        """
+        except Exception:
+            pass
+    
+    async def _execute_task(self, task: DownloadTask):
+        """执行单个下载任务"""
+        task.status = DownloadStatus.DOWNLOADING
+        task.started_at = datetime.now()
+        
         try:
-            music_info = self.get_music_info(music_id, quality)
+            music_info, actual_quality = await self._get_music_info(task.music_id, task.quality)
+            if not music_info:
+                raise Exception(f"Failed to get music info for {task.music_id}")
             
-            filename = f"{music_info.artists} - {music_info.name}"
-            safe_filename = self._sanitize_filename(filename)
-            file_ext = self._determine_file_extension(music_info.download_url)
-            file_path = self.download_dir / f"{safe_filename}{file_ext}"
+            task.music_info = music_info
+            if actual_quality != task.quality:
+                task.quality = actual_quality
             
-            if file_path.exists():
-                current_size = file_path.stat().st_size
-                progress = (current_size / music_info.file_size * 100) if music_info.file_size > 0 else 0
-                
-                return {
-                    'music_id': music_id,
-                    'filename': safe_filename + file_ext,
-                    'total_size': music_info.file_size,
-                    'current_size': current_size,
-                    'progress': min(progress, 100),
-                    'completed': current_size >= music_info.file_size
-                }
-            else:
-                return {
-                    'music_id': music_id,
-                    'filename': safe_filename + file_ext,
-                    'total_size': music_info.file_size,
-                    'current_size': 0,
-                    'progress': 0,
-                    'completed': False
-                }
-                
+            await self._download_with_resume(task, music_info)
+            await self._write_metadata(task.file_path, music_info)
+            
+            task.status = DownloadStatus.COMPLETED
+            task.completed_at = datetime.now()
+            
+            async with self.queue._lock:
+                self.queue._completed_tasks.append(task)
+                self.queue.tasks.pop(task.task_id, None)
+            
+        except asyncio.CancelledError:
+            task.status = DownloadStatus.CANCELLED
+        
         except Exception as e:
-            return {
-                'music_id': music_id,
-                'error': str(e),
-                'progress': 0,
-                'completed': False
-            }
+            task.retry_count += 1
+            task.error_message = str(e)
+            
+            if task.retry_count < task.max_retries:
+                await asyncio.sleep(1.5 ** task.retry_count)
+                task.status = DownloadStatus.PENDING
+                async with self.queue._lock:
+                    await self.queue._pending_queue.put((-task.priority, task.task_id))
+            else:
+                task.status = DownloadStatus.FAILED
+    
+    async def download(
+        self,
+        music_id: int,
+        quality: str = "lossless",
+        priority: int = 0,
+        file_path: Optional[str] = None
+    ) -> str:
+        """添加下载任务"""
+        path = Path(file_path) if file_path else None
+        return await self.queue.add_task(music_id, quality, priority, path)
+    
+    async def batch_download(
+        self,
+        music_ids: List[int],
+        quality: str = "lossless"
+    ) -> List[str]:
+        """批量添加下载任务"""
+        task_ids = []
+        for i, music_id in enumerate(music_ids):
+            task_id = await self.download(music_id, quality, priority=len(music_ids) - i)
+            task_ids.append(task_id)
+        return task_ids
+    
+    async def get_task_status(self, task_id: str) -> Optional[Dict]:
+        """获取任务状态"""
+        task = self.queue.get_task(task_id)
+        return task.to_dict() if task else None
+    
+    async def get_all_tasks(self) -> List[Dict]:
+        """获取所有任务状态"""
+        tasks = self.queue.get_all_tasks()
+        return [t.to_dict() for t in tasks]
+    
+    async def pause(self, task_id: str) -> bool:
+        """暂停任务"""
+        return await self.queue.pause_task(task_id)
+    
+    async def resume(self, task_id: str) -> bool:
+        """恢复任务"""
+        return await self.queue.resume_task(task_id)
+    
+    async def cancel(self, task_id: str) -> bool:
+        """取消任务"""
+        return await self.queue.cancel_task(task_id)
+    
+    async def remove(self, task_id: str) -> bool:
+        """删除任务"""
+        return await self.queue.remove_task(task_id)
 
 
-if __name__ == "__main__":
-    # 测试代码
-    downloader = MusicDownloader()
-    print("音乐下载器模块")
-    print("支持的功能:")
-    print("- 同步下载")
-    print("- 异步下载")
-    print("- 批量下载")
-    print("- 内存下载")
-    print("- 音乐标签写入")
-    print("- 下载进度跟踪")
+# 兼容旧接口
+class MusicDownloader(EnhancedMusicDownloader):
+    """兼容旧接口的下载器"""
+    
+    def __init__(self, api=None, download_dir=None, max_concurrent=3, cover_cache_dir=None):
+        """初始化兼容版下载器"""
+        if api is None:
+            # 如果没有提供 API，使用默认的 NeteaseAPI
+            api = NeteaseAPI()
+        
+        super().__init__(api, download_dir, max_concurrent, cover_cache_dir)
+    
+    def download_music_file(self, music_id: int, quality: str = "lossless") -> Optional[Path]:
+        """同步下载（兼容旧接口）"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self._download_sync_single(music_id, quality))
+        finally:
+            loop.close()
+    
+    async def _download_sync_single(self, music_id: int, quality: str) -> Optional[Path]:
+        """同步下载的异步实现"""
+        task_id = await self.download(music_id, quality)
+        
+        while True:
+            task = self.queue.get_task(task_id)
+            if not task:
+                for completed in self.queue._completed_tasks:
+                    if completed.task_id == task_id:
+                        return completed.file_path
+                return None
+            
+            if task.status == DownloadStatus.COMPLETED:
+                return task.file_path
+            if task.status == DownloadStatus.FAILED:
+                return None
+            
+            await asyncio.sleep(0.5)

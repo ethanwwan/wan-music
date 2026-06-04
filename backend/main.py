@@ -13,6 +13,7 @@ import logging
 import sys
 import time
 import traceback
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
@@ -26,7 +27,7 @@ try:
         playlist_detail, album_detail
     )
     from api.cookie_manager import CookieManager, CookieException
-    from api.music_downloader import MusicDownloader, DownloadException, AudioFormat
+    from api.music_downloader import MusicDownloader, EnhancedMusicDownloader
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保所有依赖模块存在且可用")
@@ -96,7 +97,38 @@ class MusicAPIService:
         self.downloads_path = Path(config.downloads_dir)
         self.downloads_path.mkdir(exist_ok=True)
         
+        # 初始化增强版下载器
+        try:
+            self.enhanced_downloader = EnhancedMusicDownloader(
+                api=NeteaseAPI(),
+                download_dir=str(self.downloads_path),
+                max_concurrent=3
+            )
+            # 启动下载器工作协程
+            import asyncio
+            import threading
+            self.loop = asyncio.new_event_loop()
+            self.downloader_thread = threading.Thread(target=self._run_downloader_loop, daemon=True)
+            self.downloader_thread.start()
+            self.logger.info("增强版下载器初始化完成")
+        except Exception as e:
+            self.logger.warning(f"增强版下载器初始化失败: {e}")
+            self.enhanced_downloader = None
+        
         self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
+    
+    def _run_downloader_loop(self):
+        """在单独的线程中运行下载器事件循环"""
+        asyncio.set_event_loop(self.loop)
+        self.loop.create_task(self._initialize_downloader())
+        self.loop.run_forever()
+    
+    async def _initialize_downloader(self):
+        """初始化下载器"""
+        try:
+            await self.enhanced_downloader.__aenter__()
+        except Exception as e:
+            self.logger.error(f"下载器初始化失败: {e}")
     
     def _setup_logger(self) -> logging.Logger:
         """设置日志记录器"""
@@ -112,9 +144,17 @@ class MusicAPIService:
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
             
-            # 文件处理器
+            # 文件处理器 - 使用 logs 目录
             try:
-                file_handler = logging.FileHandler('music_api.log', encoding='utf-8')
+                # 确保 logs 目录存在
+                import os
+                log_dir = Path(__file__).parent.parent / 'logs'
+                log_dir.mkdir(exist_ok=True)
+                
+                file_handler = logging.FileHandler(
+                    str(log_dir / 'music_api.log'), 
+                    encoding='utf-8'
+                )
                 file_formatter = logging.Formatter(
                     '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
                 )
@@ -570,6 +610,9 @@ def get_album():
     except Exception as e:
         api_service.logger.error(f"获取专辑异常: {e}\n{traceback.format_exc()}")
         return APIResponse.error(f"获取专辑失败: {str(e)}", 500)
+
+
+
 
 
 @app.route('/download', methods=['GET', 'POST'])
@@ -1038,6 +1081,200 @@ def proxy_qr_login():
         return APIResponse.error(f"代理失败: {str(e)}", 500)
 
 
+# ========== 增强版下载管理 API ==========
+
+def _run_async(coro):
+    """在下载器的事件循环中运行协程"""
+    if not api_service.enhanced_downloader:
+        raise Exception("增强版下载器未初始化")
+    
+    import asyncio
+    future = asyncio.run_coroutine_threadsafe(coro, api_service.loop)
+    return future.result(timeout=60)
+
+
+@app.route('/api/download/queue', methods=['POST'])
+def add_to_download_queue():
+    """添加歌曲到下载队列"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        data = api_service._safe_get_request_data()
+        music_id = data.get('id')
+        quality = data.get('quality', 'lossless')
+        priority = data.get('priority', 0)
+        
+        if not music_id:
+            return APIResponse.error("缺少必需参数: id")
+        
+        music_id = api_service._extract_music_id(music_id)
+        
+        task_id = _run_async(
+            api_service.enhanced_downloader.download(
+                music_id=music_id,
+                quality=quality,
+                priority=priority
+            )
+        )
+        
+        api_service.logger.info(f"已添加下载任务: task_id={task_id}, music_id={music_id}")
+        return APIResponse.success({'task_id': task_id}, "任务已添加到队列")
+        
+    except Exception as e:
+        api_service.logger.error(f"添加下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"添加任务失败: {str(e)}", 500)
+
+
+@app.route('/api/download/queue/batch', methods=['POST'])
+def add_batch_to_queue():
+    """批量添加歌曲到下载队列"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        data = api_service._safe_get_request_data()
+        music_ids = data.get('ids', [])
+        quality = data.get('quality', 'lossless')
+        
+        if not music_ids:
+            return APIResponse.error("缺少必需参数: ids")
+        
+        # 提取音乐ID
+        processed_ids = []
+        for music_id in music_ids:
+            processed_ids.append(api_service._extract_music_id(music_id))
+        
+        task_ids = _run_async(
+            api_service.enhanced_downloader.batch_download(
+                music_ids=processed_ids,
+                quality=quality
+            )
+        )
+        
+        api_service.logger.info(f"已批量添加 {len(task_ids)} 个下载任务")
+        return APIResponse.success({'task_ids': task_ids}, "批量任务已添加")
+        
+    except Exception as e:
+        api_service.logger.error(f"批量添加下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"批量添加失败: {str(e)}", 500)
+
+
+@app.route('/api/download/queue', methods=['GET'])
+def get_download_queue():
+    """获取下载队列状态"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        tasks = _run_async(api_service.enhanced_downloader.get_all_tasks())
+        
+        return APIResponse.success({'tasks': tasks}, "获取队列成功")
+        
+    except Exception as e:
+        api_service.logger.error(f"获取下载队列失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"获取队列失败: {str(e)}", 500)
+
+
+@app.route('/api/download/task/<task_id>', methods=['GET'])
+def get_download_task(task_id):
+    """获取单个下载任务状态"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        task = _run_async(api_service.enhanced_downloader.get_task_status(task_id))
+        
+        if task:
+            return APIResponse.success(task, "获取任务状态成功")
+        else:
+            return APIResponse.error("任务不存在", 404)
+        
+    except Exception as e:
+        api_service.logger.error(f"获取下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"获取任务失败: {str(e)}", 500)
+
+
+@app.route('/api/download/task/<task_id>/pause', methods=['POST'])
+def pause_download_task(task_id):
+    """暂停下载任务"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        success = _run_async(api_service.enhanced_downloader.pause(task_id))
+        
+        if success:
+            api_service.logger.info(f"已暂停任务: {task_id}")
+            return APIResponse.success(None, "任务已暂停")
+        else:
+            return APIResponse.error("任务无法暂停（可能不存在或不是下载中状态）", 400)
+        
+    except Exception as e:
+        api_service.logger.error(f"暂停下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"暂停失败: {str(e)}", 500)
+
+
+@app.route('/api/download/task/<task_id>/resume', methods=['POST'])
+def resume_download_task(task_id):
+    """恢复下载任务"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        success = _run_async(api_service.enhanced_downloader.resume(task_id))
+        
+        if success:
+            api_service.logger.info(f"已恢复任务: {task_id}")
+            return APIResponse.success(None, "任务已恢复")
+        else:
+            return APIResponse.error("任务无法恢复（可能不存在或不是暂停状态）", 400)
+        
+    except Exception as e:
+        api_service.logger.error(f"恢复下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"恢复失败: {str(e)}", 500)
+
+
+@app.route('/api/download/task/<task_id>/cancel', methods=['POST'])
+def cancel_download_task(task_id):
+    """取消下载任务"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        success = _run_async(api_service.enhanced_downloader.cancel(task_id))
+        
+        if success:
+            api_service.logger.info(f"已取消任务: {task_id}")
+            return APIResponse.success(None, "任务已取消")
+        else:
+            return APIResponse.error("任务不存在", 404)
+        
+    except Exception as e:
+        api_service.logger.error(f"取消下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"取消失败: {str(e)}", 500)
+
+
+@app.route('/api/download/task/<task_id>', methods=['DELETE'])
+def remove_download_task(task_id):
+    """删除下载任务"""
+    try:
+        if not api_service.enhanced_downloader:
+            return APIResponse.error("增强版下载器不可用", 500)
+        
+        success = _run_async(api_service.enhanced_downloader.remove(task_id))
+        
+        if success:
+            api_service.logger.info(f"已删除任务: {task_id}")
+            return APIResponse.success(None, "任务已删除")
+        else:
+            return APIResponse.error("任务不存在", 404)
+        
+    except Exception as e:
+        api_service.logger.error(f"删除下载任务失败: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"删除失败: {str(e)}", 500)
+
+
 def start_api_server():
     """启动API服务器"""
     try:
@@ -1054,7 +1291,17 @@ def start_api_server():
         print(f"  ├─ POST /playlist      - 获取歌单详情")
         print(f"  ├─ POST /album         - 获取专辑详情")
         print(f"  ├─ POST /download      - 下载音乐")
-        print(f"  └─ GET  /api/info      - API信息")
+        print(f"  ├─ GET  /api/info      - API信息")
+        print(f"  │")
+        print(f"  └─ 📦 增强版下载管理:")
+        print(f"     ├─ POST /api/download/queue        - 添加到下载队列")
+        print(f"     ├─ POST /api/download/queue/batch  - 批量添加到队列")
+        print(f"     ├─ GET  /api/download/queue        - 获取队列状态")
+        print(f"     ├─ GET  /api/download/task/<id>    - 获取任务状态")
+        print(f"     ├─ POST /api/download/task/<id>/pause   - 暂停任务")
+        print(f"     ├─ POST /api/download/task/<id>/resume  - 恢复任务")
+        print(f"     ├─ POST /api/download/task/<id>/cancel  - 取消任务")
+        print(f"     └─ DELETE /api/download/task/<id>   - 删除任务")
         print("\n🎵 支持的音质:")
         print(f"  standard, exhigh, lossless, hires, sky, jyeffect, jymaster")
         print("="*60)

@@ -162,6 +162,28 @@
               <el-text type="info" size="small">减少重复搜索和解析，提升相同内容再次访问速度（默认开启）</el-text>
             </div>
           </el-form-item>
+
+          <el-form-item label="缓存大小">
+            <div class="cache-info">
+              <div class="cache-size">
+                <el-icon class="cache-icon"><Database /></el-icon>
+                <span class="size-text">{{ cacheSize }}</span>
+              </div>
+              <el-button 
+                type="danger" 
+                size="small" 
+                @click="handleClearCache"
+                :loading="clearingCache"
+                class="clear-cache-btn"
+              >
+                <el-icon><Trash /></el-icon>
+                <span>清除缓存</span>
+              </el-button>
+            </div>
+            <div class="form-item-hint">
+              <el-text type="info" size="small">缓存包括搜索结果、歌曲信息等，清除后下次访问会重新获取</el-text>
+            </div>
+          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -169,11 +191,88 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close } from '@element-plus/icons-vue'
+import { computed, ref, onMounted } from 'vue'
+import { ElMessage, ElConfirm } from 'element-plus'
+import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close, Database, Trash } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
+
+// 缓存大小
+const cacheSize = ref('0 KB')
+// 清除缓存加载状态
+const clearingCache = ref(false)
+
+// 计算 localStorage 缓存大小
+const calculateCacheSize = () => {
+  let totalSize = 0
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      const value = localStorage.getItem(key)
+      if (value) {
+        totalSize += key.length + value.length
+      }
+    }
+  } catch (e) {
+    console.warn('读取 localStorage 失败:', e)
+  }
+  
+  // 转换为可读格式
+  if (totalSize < 1024) {
+    return `${totalSize} B`
+  } else if (totalSize < 1024 * 1024) {
+    return `${(totalSize / 1024).toFixed(2)} KB`
+  } else {
+    return `${(totalSize / (1024 * 1024)).toFixed(2)} MB`
+  }
+}
+
+// 刷新缓存大小
+const refreshCacheSize = () => {
+  cacheSize.value = calculateCacheSize()
+}
+
+// 清除缓存
+const handleClearCache = async () => {
+  await ElConfirm(
+    '确认清除缓存？',
+    '清除后所有缓存数据将被删除，下次访问需要重新加载',
+    {
+      confirmButtonText: '确认清除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    clearingCache.value = true
+    
+    try {
+      // 清除 localStorage
+      localStorage.clear()
+      
+      // 清除 sessionStorage
+      sessionStorage.clear()
+      
+      // 清除内存中的缓存（如果有）
+      // 这里可以添加其他缓存清理逻辑
+      
+      // 刷新缓存大小显示
+      refreshCacheSize()
+      
+      ElMessage.success('缓存已清除')
+    } catch (e) {
+      ElMessage.error('清除缓存失败')
+    } finally {
+      clearingCache.value = false
+    }
+  }).catch(() => {
+    // 用户取消
+  })
+}
+
+// 组件挂载时计算缓存大小
+onMounted(() => {
+  refreshCacheSize()
+})
 
 const props = defineProps({
   modelValue: {
@@ -481,5 +580,48 @@ const handleClose = () => {
 .theme-color-option.active .color-name {
   color: var(--theme-color);
   font-weight: 600;
+}
+
+/* 缓存信息样式 */
+.cache-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cache-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-surface-container-low);
+  border-radius: 8px;
+}
+
+.cache-icon {
+  font-size: 16px;
+  color: var(--color-primary);
+}
+
+.size-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.clear-cache-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.clear-cache-btn:hover {
+  background: #ff4d4f !important;
+}
+
+.clear-cache-btn:deep(.el-icon) {
+  font-size: 14px;
 }
 </style>

@@ -1,8 +1,38 @@
-import { ref} from 'vue'
+import { ref } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import musicApi from '../services/musicApi.js'
 import { allTracks, totalTracks, currentPage, displayTracks, updateDisplayTracks } from './paginationManager.js'
 import { settings } from './settingsManager.js'
+
+/**
+ * 判断歌曲是否无版权
+ * @param {Object} track 歌曲对象
+ * @returns {Boolean} 是否无版权
+ */
+export const isTrackUnavailable = (track) => {
+  if (!track) return true
+  
+  // 检查 fee 字段：0=免费, 1=VIP, 4=购买专辑
+  const fee = track.fee
+  // 检查 privilege 字段
+  const privilege = track.privilege || {}
+  // 检查 st (status)
+  const st = privilege.st !== undefined ? privilege.st : track.st
+  // 检查 pl (play level)
+  const pl = privilege.pl !== undefined ? privilege.pl : track.pl
+  
+  // 判断规则：
+  // 1. st === -200 (明确无版权)
+  // 2. pl === 0 (播放级别0表示不可播放)
+  // 3. fee === 1 (VIP歌曲) 或者 fee === 4 (购买专辑)，这里先不处理，保持可播放
+  
+  if (st === -200 || pl === 0) {
+    return true
+  }
+  
+  // 如果没有明确的无版权标志，视为可播放
+  return false
+}
 
 const getApiVersionLabel = () => {
   const v = settings?.apiVersion
@@ -335,7 +365,8 @@ export const parsePlaylist = async () => {
       // 为每个track初始化parsed字段为false，表示尚未解析
       const tracks = (result.data.tracks || []).map(track => ({
         ...track,
-        parsed: false
+        parsed: false,
+        unavailable: isTrackUnavailable(track) // 用API返回的字段直接判断版权
       }))
       allTracks.value = tracks
       
@@ -349,9 +380,17 @@ export const parsePlaylist = async () => {
       
       const totalTime = Math.floor((Date.now() - parseStartTime.value) / 1000)
       
+      // 统计无版权歌曲数量
+      const unavailableCount = tracks.filter(t => t.unavailable).length
+      
+      let message = `共 ${totalTracks.value} 首歌曲，用时 ${totalTime} 秒 ${getApiVersionLabel()}`
+      if (unavailableCount > 0) {
+        message += `（其中 ${unavailableCount} 首因版权问题无法播放）`
+      }
+      
       ElNotification({
         title: '歌单解析完成！',
-        message: `共 ${totalTracks.value} 首歌曲，用时 ${totalTime} 秒 ${getApiVersionLabel()}`,
+        message: message,
         type: 'success',
         duration: 5000
       })
@@ -411,16 +450,29 @@ export const parseAlbum = async () => {
     const result = await musicApi.getAlbumDetail(albumUrl.value)
     if (result.success) {
       albumInfo.value = result.data
-      allTracks.value = result.data.tracks.map(track => ({ ...track, parsed: false }))
+      const tracks = result.data.tracks.map(track => ({ 
+        ...track, 
+        parsed: false, 
+        unavailable: isTrackUnavailable(track) // 用API返回的字段直接判断版权
+      }))
+      allTracks.value = tracks
       totalTracks.value = allTracks.value.length
       currentPage.value = 1
 
       // 解析成功后立即更新显示
       updateDisplayTracks()
       
+      // 统计无版权歌曲数量
+      const unavailableCount = tracks.filter(t => t.unavailable).length
+      
+      let message = `成功解析专辑：${result.data.name} ${getApiVersionLabel()}`
+      if (unavailableCount > 0) {
+        message += `（其中 ${unavailableCount} 首因版权问题无法播放）`
+      }
+      
       ElNotification({
         title: '专辑解析成功！',
-        message: `成功解析专辑：${result.data.name} ${getApiVersionLabel()}`,
+        message: message,
         type: 'success'
       })
     } else {
@@ -486,3 +538,5 @@ export const setExampleUrl = (url, type) => {
     musicUrl.value = url
   }
 }
+
+

@@ -1,11 +1,16 @@
 <template>
-  <div class="music-card" @click="$emit('click', track)">
+  <div 
+    class="music-card" 
+    :class="{ 'unavailable': track.unavailable }"
+    @click="handleCardClick"
+  >
     <div class="card-cover">
       <img 
         v-if="track.picUrl || track.cover" 
         :src="track.picUrl || track.cover" 
         :alt="track.name"
         loading="lazy"
+        :class="{ 'grayscale': track.unavailable }"
       />
       <div v-else class="cover-placeholder">
         <el-icon :size="40"><Microphone /></el-icon>
@@ -15,12 +20,17 @@
           :icon="isPlaying ? VideoPlay : VideoPlay" 
           circle
           size="large"
-          @click.stop="$emit('play', track)"
+          :disabled="track.unavailable"
+          @click.stop="handlePlay"
+          :title="track.unavailable ? '该歌曲无版权' : '播放'"
         />
       </div>
     </div>
     <div class="card-content">
-      <h3 class="track-name" :title="track.name">{{ track.name || '未知歌曲' }}</h3>
+      <div class="track-title-line">
+        <h3 class="track-name" :title="track.name">{{ track.name || '未知歌曲' }}</h3>
+        <span v-if="track.unavailable" class="unavailable-tag">无版权</span>
+      </div>
       <p class="track-artist" :title="track.artist">{{ track.artist || '未知艺术家' }}</p>
       <div class="track-meta">
         <el-tag v-if="track.album" size="small" :title="track.album">
@@ -35,7 +45,9 @@
       <el-button 
         :icon="Download" 
         size="small"
-        @click.stop="$emit('download', track)"
+        :disabled="track.unavailable"
+        @click.stop="handleDownload"
+        :title="track.unavailable ? '该歌曲无版权' : '下载'"
       >
         下载
       </el-button>
@@ -46,6 +58,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Microphone, VideoPlay, Download } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   track: {
@@ -58,7 +71,8 @@ const props = defineProps({
       album: '',
       picUrl: '',
       cover: '',
-      duration: 0
+      duration: 0,
+      unavailable: false
     })
   },
   isPlaying: {
@@ -67,7 +81,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['click', 'play', 'download'])
+const emit = defineEmits(['click', 'play', 'download'])
 
 const formatDuration = (ms) => {
   if (!ms) return '--:--'
@@ -75,6 +89,30 @@ const formatDuration = (ms) => {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const handleCardClick = () => {
+  if (props.track.unavailable) {
+    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法播放`)
+    return
+  }
+  emit('click', props.track)
+}
+
+const handlePlay = () => {
+  if (props.track.unavailable) {
+    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法播放`)
+    return
+  }
+  emit('play', props.track)
+}
+
+const handleDownload = () => {
+  if (props.track.unavailable) {
+    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法下载`)
+    return
+  }
+  emit('download', props.track)
 }
 </script>
 
@@ -179,5 +217,49 @@ const formatDuration = (ms) => {
   border-top: 1px solid var(--el-border-color);
   display: flex;
   justify-content: flex-end;
+}
+
+.track-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.unavailable-tag {
+  font-size: 10px;
+  color: #ff4d4f;
+  background: #fff1f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.music-card.unavailable {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.music-card.unavailable:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.music-card.unavailable .card-cover img.grayscale {
+  filter: grayscale(100%);
+}
+
+.music-card.unavailable .track-name,
+.music-card.unavailable .track-artist {
+  color: #999;
+}
+
+.music-card.unavailable .card-overlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.music-card.unavailable :deep(.el-button) {
+  opacity: 0.5;
 }
 </style>

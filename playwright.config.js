@@ -13,7 +13,10 @@ export default defineConfig({
     baseURL: 'http://localhost:5176',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure'
+    video: 'retain-on-failure',
+    // 额外配置
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
   },
 
   projects: [

@@ -17,19 +17,39 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/eapi': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/weapi': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
         changeOrigin: true
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/song': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/playlist': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/album': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/download': {
+        target: 'http://localhost:5002',
+        changeOrigin: true
+      },
+      '/stream': {
+        target: 'http://localhost:5002',
         changeOrigin: true
       }
     }

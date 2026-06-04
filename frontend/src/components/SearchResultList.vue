@@ -59,40 +59,48 @@
               v-for="(track, index) in currentPageTracks" 
               :key="track.id"
               class="track-row"
-              :class="{ 'selected': selectedTrack && selectedTrack.id === track.id }"
-              @click="selectTrack(track)"
+              :class="{ 
+                'selected': selectedTrack && selectedTrack.id === track.id,
+                'unavailable': track.unavailable
+              }"
+              @click="handleTrackClick(track)"
             >
-              <td class="col-index">{{ (currentPage - 1) * pageSize + index + 1 }}</td>
+              <td class="col-index">
+                <span v-if="track.unavailable" class="unavailable-icon" title="无法播放">🚫</span>
+                <span v-else>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+              </td>
               <td class="col-cover">
                 <img
                   :src="getCover(track)"
                   :alt="track.name"
                   class="track-cover"
+                  :class="{ 'grayscale': track.unavailable }"
                   loading="lazy"
                   @error="onCoverError"
                 />
               </td>
               <td class="col-name">
-                <span class="track-name">{{ track.name }}</span>
+                <span class="track-name" :class="{ 'unavailable-text': track.unavailable }">{{ track.name }}</span>
+                <span v-if="track.unavailable" class="unavailable-reason">无版权</span>
               </td>
-              <td class="col-artist">{{ getArtist(track) }}</td>
+              <td class="col-artist" :class="{ 'unavailable-text': track.unavailable }">{{ getArtist(track) }}</td>
               <td class="col-action">
                 <button 
                   @click.stop="playTrack(track)"
-                  :disabled="parsingTrackId === track.id && parsingType === 'play'"
+                  :disabled="parsingTrackId === track.id && parsingType === 'play' || track.unavailable"
                   class="action-btn play-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play' }"
-                  title="播放"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': track.unavailable }"
+                  :title="track.unavailable ? '该歌曲无版权' : '播放'"
                 >
                   <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">▶</span>
                 </button>
                 <button 
                   @click.stop="downloadSingle(track)"
-                  :disabled="parsingTrackId === track.id && parsingType === 'download'"
+                  :disabled="parsingTrackId === track.id && parsingType === 'download' || track.unavailable"
                   class="action-btn download-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download' }"
-                  title="下载"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': track.unavailable }"
+                  :title="track.unavailable ? '该歌曲无版权' : '下载'"
                 >
                   <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">⬇</span>
@@ -209,6 +217,15 @@ export default {
       completed: 0,
       failed: 0
     })
+    
+    // 处理歌曲行点击
+    const handleTrackClick = (track) => {
+      if (track.unavailable) {
+        ElMessage.warning(`《${track.name}》因版权问题暂时无法播放`)
+        return
+      }
+      selectTrack(track)
+    }
 
     // 获取封面地址（兼容多种字段）
     const getCover = (track) => {
@@ -256,6 +273,12 @@ export default {
 
     // 播放歌曲（先解析再播放）
     const playTrack = async (track) => {
+      // 版权检查
+      if (track.unavailable) {
+        ElMessage.warning(`《${track.name}》因版权问题暂时无法播放`)
+        return
+      }
+      
       parsingTrackId.value = track.id
       parsingType.value = 'play'
       
@@ -284,6 +307,12 @@ export default {
 
     // 下载单曲
     const downloadSingle = async (track) => {
+      // 版权检查
+      if (track.unavailable) {
+        ElMessage.warning(`《${track.name}》因版权问题暂时无法下载`)
+        return
+      }
+      
       parsingTrackId.value = track.id
       parsingType.value = 'download'
       
@@ -367,22 +396,35 @@ export default {
       }
 
       try {
+        // 过滤掉无版权的歌曲
+        const availableTracks = props.displayTracks.filter(track => !track.unavailable)
+        const unavailableCount = props.displayTracks.length - availableTracks.length
+        
+        if (availableTracks.length === 0) {
+          ElMessage.warning('所有歌曲都因版权问题无法下载')
+          return
+        }
+        
         // 重置进度状态
         downloadProgress.value = {
           isDownloading: true,
           percentage: 0,
           status: '',
           currentSong: '',
-          total: props.displayTracks.length,
+          total: availableTracks.length,
           completed: 0,
           failed: 0
         }
 
-        ElMessage.info(`开始批量下载 ${props.displayTracks.length} 首歌曲...`)
+        let message = `开始批量下载 ${availableTracks.length} 首歌曲...`
+        if (unavailableCount > 0) {
+          message += `（${unavailableCount} 首因版权问题跳过）`
+        }
+        ElMessage.info(message)
 
         // 准备音乐列表，需要先解析每首歌的信息
         const musicList = []
-        for (const track of props.displayTracks) {
+        for (const track of availableTracks) {
           try {
             // 将歌曲ID转换为URL格式
             const songUrl = `https://music.163.com/song?id=${track.id}`
@@ -502,6 +544,7 @@ export default {
       downloadSingle,
       handleBatchDownload,
       handlePageChange,
+      handleTrackClick,
       formatPlayCount,
       getCover,
       onCoverError,
@@ -928,6 +971,76 @@ export default {
 .track-total {
   color: var(--color-text-muted);
   font-size: 14px;
+}
+
+/* 无版权歌曲样式 */
+.track-row.unavailable {
+  background-color: #f5f5f5 !important;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.track-row.unavailable:hover {
+  background-color: #e8e8e8 !important;
+}
+
+.track-row.unavailable .track-name,
+.track-row.unavailable .col-artist {
+  color: #999 !important;
+}
+
+.track-cover.grayscale {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+
+.unavailable-icon {
+  color: #ff4d4f;
+  font-size: 18px;
+}
+
+.unavailable-reason {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #ff4d4f;
+  background: #fff1f0;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.action-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed !important;
+}
+
+.action-btn.disabled:hover {
+  background: transparent !important;
+}
+
+/* 暗色模式 */
+.dark .track-row.unavailable {
+  background-color: #2a2a2a !important;
+}
+
+.dark .track-row.unavailable:hover {
+  background-color: #333 !important;
+}
+
+.dark .track-row.unavailable .track-name,
+.dark .track-row.unavailable .col-artist {
+  color: #666 !important;
+}
+
+.dark .track-cover.grayscale {
+  filter: grayscale(100%);
+  opacity: 0.3;
+}
+
+.dark .unavailable-reason {
+  color: #ff7875;
+  background: #2a1a1a;
 }
 
 .tracks-list {

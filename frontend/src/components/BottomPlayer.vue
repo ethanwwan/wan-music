@@ -108,13 +108,13 @@
           <div 
             v-for="(track, index) in playlist" 
             :key="track.id"
-            :class="{ 'active': currentIndex === index }"
+            :class="{ 'active': currentIndex === index, 'unavailable': track.unavailable }"
             class="playlist-item"
             @click="playTrack(index)"
           >
-            <div class="track-index">{{ index + 1 }}</div>
+            <div class="track-index">{{ track.unavailable ? '🚫' : (index + 1) }}</div>
             <div class="track-info">
-              <div class="track-name">{{ track.name }}</div>
+              <div class="track-name">{{ track.name }}<span v-if="track.unavailable" class="unavailable-badge">无版权</span></div>
               <div class="track-artist">{{ track.artist }}</div>
             </div>
             <div v-if="currentIndex === index && isPlaying" class="playing-indicator">
@@ -261,8 +261,29 @@ const onError = (e) => {
 const playTrack = async (index) => {
   if (index < 0 || index >= props.playlist.length) return
   
-  currentIndex.value = index
   const track = props.playlist[index]
+  
+  // 版权检查
+  if (track?.unavailable) {
+    ElMessage.warning(`《${track.name}》因版权问题暂时无法播放`)
+    // 尝试播放下一首
+    if (index + 1 < props.playlist.length) {
+      setTimeout(() => playTrack(index + 1), 500)
+    }
+    return
+  }
+  
+  // 停止当前播放（防止竞态条件）
+  if (audio.value) {
+    try {
+      audio.value.pause()
+      audio.value.currentTime = 0
+    } catch (e) {
+      console.warn('停止当前播放时出错:', e)
+    }
+  }
+  
+  currentIndex.value = index
   
   // 显示播放器
   isVisible.value = true
@@ -310,16 +331,6 @@ const playTrack = async (index) => {
     )
   }
   
-  // 调试：打印封面信息
-  console.log('Track cover info:', {
-    id: track.id,
-    name: track.name,
-    cover: track.cover,
-    picUrl: track.picUrl,
-    al: track.al,
-    album: track.album
-  })
-  
   if (!audio.value) {
     initAudio()
   }
@@ -328,7 +339,13 @@ const playTrack = async (index) => {
   audio.value.play().then(() => {
     isPlaying.value = true
   }).catch((err) => {
-    ElMessage.error(`播放失败: ${err.message}`)
+    // 处理播放错误
+    if (err.name === 'AbortError') {
+      console.warn('播放被中断，可能是快速切换歌曲:', err)
+    } else {
+      ElMessage.error(`播放失败: ${err.message}`)
+    }
+    isPlaying.value = false
   })
 }
 
@@ -992,6 +1009,34 @@ onUnmounted(() => {
 .playlist-item.active .track-index {
   background: #667eea;
   color: white;
+}
+
+.playlist-item.unavailable {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.playlist-item.unavailable:hover {
+  background: transparent;
+}
+
+.playlist-item.unavailable .track-index {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ff4d4f;
+}
+
+.playlist-item.unavailable .track-name,
+.playlist-item.unavailable .track-artist {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.unavailable-badge {
+  font-size: 10px;
+  color: #ff4d4f;
+  background: rgba(239, 68, 68, 0.2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
 }
 
 .track-info {

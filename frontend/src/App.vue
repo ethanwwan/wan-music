@@ -260,7 +260,8 @@ const handlePlaySong = async (track, playlistData = null) => {
     album: t.album || t.al?.name || '未知专辑',
     cover: getCoverUrl(t),
     lrc: t.lrc || '',
-    url: t.url || '' // 添加url字段
+    url: t.url || '',
+    unavailable: t.unavailable || false
   }))
   
   // 调试：打印转换后的播放列表
@@ -286,7 +287,8 @@ const handlePlaySong = async (track, playlistData = null) => {
       album: track.album || track.al?.name || '未知专辑',
       cover: getCoverUrl(track),
       lrc: track.lrc || '',
-      url: track.url || ''
+      url: track.url || '',
+      unavailable: track.unavailable || false
     })
     currentPlayIndex.value = 0
   }
