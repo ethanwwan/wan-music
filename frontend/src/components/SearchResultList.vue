@@ -17,8 +17,8 @@
             </div>
             <!-- 下载进度条 -->
             <div v-if="downloadProgress.isDownloading" class="download-progress-bar">
-              <el-progress 
-                :percentage="downloadProgress.percentage" 
+              <a-progress 
+                :percent="downloadProgress.percentage" 
                 :status="downloadProgress.status"
                 :stroke-width="6"
                 :show-text="false"
@@ -31,14 +31,14 @@
           </div>
         </div>
         <div class="header-right">
-          <el-button 
+          <a-button 
             type="primary" 
             @click="handleBatchDownload" 
             :disabled="downloadProgress.isDownloading"
             :loading="downloadProgress.isDownloading"
           >
             {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
-          </el-button>
+          </a-button>
         </div>
       </div>
 
@@ -85,30 +85,26 @@
               </td>
               <td class="col-artist" :class="{ 'unavailable-text': track.unavailable }">{{ getArtist(track) }}</td>
               <td class="col-action">
-                <el-button
+                <button 
                   @click.stop="playTrack(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'play' || track.unavailable"
-                  :loading="parsingTrackId === track.id && parsingType === 'play'"
-                  :title="track.unavailable ? '该歌曲无版权' : '播放'"
-                  circle
-                  size="small"
                   class="action-btn play-btn"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': track.unavailable }"
+                  :title="track.unavailable ? '该歌曲无版权' : '播放'"
                 >
-                  <ElIcon v-if="parsingTrackId === track.id && parsingType === 'play'"><Loading /></ElIcon>
-                  <ElIcon v-else><VideoPlay /></ElIcon>
-                </el-button>
-                <el-button
+                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
+                  <span v-else class="btn-icon">▶</span>
+                </button>
+                <button 
                   @click.stop="downloadSingle(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'download' || track.unavailable"
-                  :loading="parsingTrackId === track.id && parsingType === 'download'"
-                  :title="track.unavailable ? '该歌曲无版权' : '下载'"
-                  circle
-                  size="small"
                   class="action-btn download-btn"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': track.unavailable }"
+                  :title="track.unavailable ? '该歌曲无版权' : '下载'"
                 >
-                  <ElIcon v-if="parsingTrackId === track.id && parsingType === 'download'"><Loading /></ElIcon>
-                  <ElIcon v-else><Download /></ElIcon>
-                </el-button>
+                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
+                  <span v-else class="btn-icon">⬇</span>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -126,15 +122,14 @@
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <div class="loading-content">
-        <el-icon class="is-loading"><Loading /></el-icon>
-        <div class="loading-text">正在加载歌单信息...</div>
+        <a-spin size="large" tip="正在加载歌单信息..." />
       </div>
     </div>
 
     <!-- 错误状态 -->
     <div v-if="error" class="error-container">
-      <el-alert
-        :title="error"
+      <a-alert
+        :message="error"
         type="error"
         show-icon
         :closable="false"
@@ -143,418 +138,357 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, computed } from 'vue'
-import { ElMessage, ElButton, ElIcon, ElProgress } from 'element-plus'
-import { VideoPlay, Download } from '@element-plus/icons-vue'
-import { Loading } from '@element-plus/icons-vue'
+import { message } from 'ant-design-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
 import { embedMetadata } from '../services/metadataWriter.js'
 import Pagination from './Pagination.vue'
 
-export default {
-  name: 'SearchResultList',
-  components: {
-    ElButton,
-    ElIcon,
-    ElProgress,
-    Loading,
-    Pagination
+const props = defineProps({
+  playlistInfo: {
+    type: Object,
+    required: false,
+    default: null
   },
-  props: {
-    playlistInfo: {
-      type: Object,
-      required: false,
-      default: null
-    },
-    displayTracks: {
-      type: Array,
-      default: () => []
-    },
-    currentPage: {
-      type: Number,
-      default: 1
-    },
-    pageSize: {
-      type: Number,
-      default: 20
-    },
-    totalTracks: {
-      type: Number,
-      default: 0
-    },
-    settings: {
-      type: Object,
-      default: () => ({})
-    },
-    type: {
-      type: String,
-      default: 'search',
-      validator: (value) => ['search', 'playlist', 'album'].includes(value)
+  displayTracks: {
+    type: Array,
+    default: () => []
+  },
+  currentPage: {
+    type: Number,
+    default: 1
+  },
+  pageSize: {
+    type: Number,
+    default: 20
+  },
+  totalTracks: {
+    type: Number,
+    default: 0
+  },
+  settings: {
+    type: Object,
+    default: () => ({})
+  },
+  type: {
+    type: String,
+    default: 'search',
+    validator: (value) => ['search', 'playlist', 'album'].includes(value)
+  }
+})
+
+const emit = defineEmits(['track-selected', 'track-parsed', 'track-play', 'page-change'])
+
+const playlistData = computed(() => props.playlistInfo)
+const creatorLabel = computed(() => (props.playlistInfo?.isAlbum ? '作者' : '创建者'))
+
+// 计算当前页应该显示的歌曲（分页处理）
+const currentPageTracks = computed(() => {
+  const start = (props.currentPage - 1) * props.pageSize
+  const end = start + props.pageSize
+  return props.displayTracks.slice(start, end)
+})
+
+const loading = ref(false)
+const error = ref('')
+const selectedTrack = ref(null)
+const parsingTrackId = ref(null)
+const parsingType = ref(null)
+
+// 下载进度状态
+const downloadProgress = ref({
+  isDownloading: false,
+  percentage: 0,
+  status: '',
+  currentSong: '',
+  total: 0,
+  completed: 0,
+  failed: 0
+})
+
+// 处理歌曲行点击
+const handleTrackClick = (track) => {
+  if (track.unavailable) {
+    message.warning(`《${track.name}》因版权问题暂时无法播放`)
+    return
+  }
+  selectTrack(track)
+}
+
+// 获取封面地址（兼容多种字段）
+const getCover = (track) => {
+  const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || playlistData.value?.picUrl || ''
+  if (!coverUrl) return ''
+  if (coverUrl.startsWith('https')) return coverUrl
+  return `/stream?url=${encodeURIComponent(coverUrl)}`
+}
+
+const onCoverError = (e) => {
+  e.target.style.visibility = 'hidden'
+}
+
+// 获取歌手名称（兼容多种字段结构）
+const getArtist = (track) => {
+  return (
+    track?.artist ||
+    track?.singer ||
+    (typeof track?.artists === 'string' ? track.artists : null) ||
+    (Array.isArray(track?.artists) && track.artists[0]?.name) ||
+    (Array.isArray(track?.ar) && track.ar[0]?.name) ||
+    ''
+  )
+}
+
+// 获取专辑名称（兼容多种字段结构）
+const getAlbum = (track) => {
+  return (
+    track?.album ||
+    track?.al?.name ||
+    ''
+  )
+}
+
+// 选择歌曲
+const selectTrack = (track) => {
+  selectedTrack.value = track
+  emit('track-selected', track)
+}
+
+// 播放歌曲（先解析再播放）
+const playTrack = async (track) => {
+  if (track.unavailable) {
+    message.warning(`《${track.name}》因版权问题暂时无法播放`)
+    return
+  }
+  
+  parsingTrackId.value = track.id
+  parsingType.value = 'play'
+  
+  try {
+    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+    const songUrl = `https://music.163.com/song?id=${track.id}`
+    
+    const musicInfo = await parseMusicInfo(songUrl, qualityValue)
+    
+    if (!musicInfo?.url) {
+      throw new Error('获取播放链接失败')
     }
-  },
-  emits: ['track-selected', 'track-parsed', 'page-change'],
-  setup(props, { emit }) {
-    const playlistData = computed(() => props.playlistInfo)
-    const creatorLabel = computed(() => (props.playlistInfo?.isAlbum ? '作者' : '创建者'))
     
-    // 计算当前页应该显示的歌曲（分页处理）
-    const currentPageTracks = computed(() => {
-      const start = (props.currentPage - 1) * props.pageSize
-      const end = start + props.pageSize
-      return props.displayTracks.slice(start, end)
-    })
+    emit('track-parsed', { track, quality: qualityValue })
+    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.displayTracks)
+    message.success(`开始播放：${track.name}`)
+  } catch (error) {
+    message.error(`播放失败：${error.message}`)
+  } finally {
+    parsingTrackId.value = null
+    parsingType.value = null
+  }
+}
+
+// 下载单曲
+const downloadSingle = async (track) => {
+  if (track.unavailable) {
+    message.warning(`《${track.name}》因版权问题暂时无法下载`)
+    return
+  }
+  
+  parsingTrackId.value = track.id
+  parsingType.value = 'download'
+  
+  try {
+    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+    const writeMetadata = props.settings?.writeMetadata !== false
+    const filenameFormat = props.settings?.filenameFormat || 'song-artist'
+    const songUrl = `https://music.163.com/song?id=${track.id}`
     
-    const loading = ref(false)
-    const error = ref('')
-    const selectedTrack = ref(null)
-    const parsingTrackId = ref(null)
-    const parsingType = ref(null) // 'play' | 'download'
+    const musicInfo = await parseMusicInfo(songUrl, qualityValue)
     
-    // 下载进度状态
-    const downloadProgress = ref({
-      isDownloading: false,
+    if (!musicInfo?.url) {
+      throw new Error('获取下载链接失败')
+    }
+    
+    const extension = musicInfo.fileExtension || '.mp3'
+    
+    const response = await fetch(musicInfo.url)
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+    
+    const audioBuffer = await response.arrayBuffer()
+    
+    let finalBuffer = audioBuffer
+    if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
+      const metadata = {
+        name: track.name,
+        artist: getArtist(track),
+        album: getAlbum(track),
+        lyrics: musicInfo.lrc || '',
+        cover: getCover(track)
+      }
+      try {
+        finalBuffer = await embedMetadata(audioBuffer, metadata, extension)
+      } catch {
+      }
+    }
+    
+    const artist = getArtist(track)
+    const trackName = track.name
+    let filename
+    if (filenameFormat === 'artist-song') {
+      filename = sanitizeFilename(`${artist} - ${trackName}${extension}`)
+    } else if (filenameFormat === 'song') {
+      filename = sanitizeFilename(`${trackName}${extension}`)
+    } else {
+      filename = sanitizeFilename(`${trackName} - ${artist}${extension}`)
+    }
+    
+    const mimeTypes = {
+      '.mp3': 'audio/mpeg',
+      '.flac': 'audio/flac',
+      '.m4a': 'audio/mp4'
+    }
+    const mimeType = mimeTypes[extension] || 'audio/mpeg'
+    
+    const blob = new Blob([finalBuffer], { type: mimeType })
+    saveBlob(blob, filename)
+    
+    message.success(`已下载：${track.name}`)
+  } catch (error) {
+    message.error(`下载失败：${error.message}`)
+  } finally {
+    parsingTrackId.value = null
+    parsingType.value = null
+  }
+}
+
+// 批量下载
+const handleBatchDownload = async () => {
+  if (!props.displayTracks || props.displayTracks.length === 0) {
+    message.warning('没有可下载的歌曲')
+    return
+  }
+
+  try {
+    const availableTracks = props.displayTracks.filter(track => !track.unavailable)
+    const unavailableCount = props.displayTracks.length - availableTracks.length
+    
+    if (availableTracks.length === 0) {
+      message.warning('所有歌曲都因版权问题无法下载')
+      return
+    }
+    
+    downloadProgress.value = {
+      isDownloading: true,
       percentage: 0,
       status: '',
       currentSong: '',
-      total: 0,
+      total: availableTracks.length,
       completed: 0,
       failed: 0
-    })
-    
-    // 处理歌曲行点击
-    const handleTrackClick = (track) => {
-      if (track.unavailable) {
-        ElMessage.warning(`《${track.name}》因版权问题暂时无法播放`)
-        return
-      }
-      selectTrack(track)
     }
 
-    // 获取封面地址（兼容多种字段）
-    const getCover = (track) => {
-      const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || playlistData.value?.picUrl || ''
-      if (!coverUrl) return ''
-      // HTTP地址需要通过代理访问
-      if (coverUrl.startsWith('https')) return coverUrl
-      return `/stream?url=${encodeURIComponent(coverUrl)}`
+    let messageText = `开始批量下载 ${availableTracks.length} 首歌曲...`
+    if (unavailableCount > 0) {
+      messageText += `（${unavailableCount} 首因版权问题跳过）`
     }
+    message.info(messageText)
 
-    const onCoverError = (e) => {
-      // 加载失败时使用一个透明占位，避免破图
-      e.target.style.visibility = 'hidden'
-    }
-
-    // 获取歌手名称（兼容多种字段结构）
-    const getArtist = (track) => {
-      return (
-        track?.artist ||
-        track?.singer ||
-        (typeof track?.artists === 'string' ? track.artists : null) ||
-        (Array.isArray(track?.artists) && track.artists[0]?.name) ||
-        (Array.isArray(track?.ar) && track.ar[0]?.name) ||
-        ''
-      )
-    }
-
-    // 获取专辑名称（兼容多种字段结构）
-    const getAlbum = (track) => {
-      return (
-        track?.album ||
-        track?.al?.name ||
-        ''
-      )
-    }
-
-    // 选择歌曲
-    const selectTrack = (track) => {
-      selectedTrack.value = track
-      emit('track-selected', track)
-    }
-
-    // 播放歌曲（先解析再播放）
-    const playTrack = async (track) => {
-      // 版权检查
-      if (track.unavailable) {
-        ElMessage.warning(`《${track.name}》因版权问题暂时无法播放`)
-        return
-      }
-      
-      parsingTrackId.value = track.id
-      parsingType.value = 'play'
-      
+    const musicList = []
+    for (const track of availableTracks) {
       try {
-        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
         const songUrl = `https://music.163.com/song?id=${track.id}`
         
-        // 解析歌曲信息，获取播放链接
-        const musicInfo = await parseMusicInfo(songUrl, qualityValue)
-        
-        if (!musicInfo?.url) {
-          throw new Error('获取播放链接失败')
-        }
-        
-        // 解析成功后触发播放，带上播放URL和完整的播放列表
-        emit('track-parsed', { track, quality: qualityValue })
-        emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.displayTracks)
-        ElMessage.success(`开始播放：${track.name}`)
-      } catch (error) {
-        ElMessage.error(`播放失败：${error.message}`)
-      } finally {
-        parsingTrackId.value = null
-        parsingType.value = null
-      }
-    }
-
-    // 下载单曲
-    const downloadSingle = async (track) => {
-      // 版权检查
-      if (track.unavailable) {
-        ElMessage.warning(`《${track.name}》因版权问题暂时无法下载`)
-        return
-      }
-      
-      parsingTrackId.value = track.id
-      parsingType.value = 'download'
-      
-      try {
-        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
-        const writeMetadata = props.settings?.writeMetadata !== false
-        const filenameFormat = props.settings?.filenameFormat || 'song-artist'
-        const songUrl = `https://music.163.com/song?id=${track.id}`
-        
-        // 解析歌曲信息
-        const musicInfo = await parseMusicInfo(songUrl, qualityValue)
-        
-        if (!musicInfo?.url) {
-          throw new Error('获取下载链接失败')
-        }
-        
-        // 直接使用 musicInfo 中返回的文件扩展名（根据音质自动设置）
-        const extension = musicInfo.fileExtension || '.mp3'
-        
-        // 下载并保存
-        const response = await fetch(musicInfo.url)
-        if (!response.ok) {
-          throw new Error('下载失败')
-        }
-        
-        const audioBuffer = await response.arrayBuffer()
-        
-        let finalBuffer = audioBuffer
-        if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
-          const metadata = {
+        const quality = props.settings?.selectedQuality || 'lossless'
+        const musicInfo = await parseMusicInfo(songUrl, quality)
+        if (musicInfo && musicInfo.url) {
+          musicList.push({
+            id: track.id,
             name: track.name,
             artist: getArtist(track),
             album: getAlbum(track),
-            lyrics: musicInfo.lrc || '',
-            cover: getCover(track)
-          }
-          try {
-            finalBuffer = await embedMetadata(audioBuffer, metadata, extension)
-          } catch {
-            // 元数据写入失败，继续下载
-          }
+            url: musicInfo.url,
+            cover: getCover(track),
+            lrc: musicInfo.lrc || '',
+            fileExtension: musicInfo.fileExtension || '.mp3'
+          })
         }
-        
-        // 根据设置生成文件名
-        const artist = getArtist(track)
-        const trackName = track.name
-        let filename
-        if (filenameFormat === 'artist-song') {
-          filename = sanitizeFilename(`${artist} - ${trackName}${extension}`)
-        } else if (filenameFormat === 'song') {
-          filename = sanitizeFilename(`${trackName}${extension}`)
-        } else {
-          filename = sanitizeFilename(`${trackName} - ${artist}${extension}`)
-        }
-        
-        // 根据扩展名获取 MIME 类型
-        const mimeTypes = {
-          '.mp3': 'audio/mpeg',
-          '.flac': 'audio/flac',
-          '.m4a': 'audio/mp4'
-        }
-        const mimeType = mimeTypes[extension] || 'audio/mpeg'
-        
-        const blob = new Blob([finalBuffer], { type: mimeType })
-        saveBlob(blob, filename)
-        
-        ElMessage.success(`已下载：${track.name}`)
-      } catch (error) {
-        ElMessage.error(`下载失败：${error.message}`)
-      } finally {
-        parsingTrackId.value = null
-        parsingType.value = null
+      } catch (err) {
+        console.error(`解析歌曲失败: ${track.name}`, err)
       }
     }
 
-    // 批量下载
-    const handleBatchDownload = async () => {
-      if (!props.displayTracks || props.displayTracks.length === 0) {
-        ElMessage.warning('没有可下载的歌曲')
-        return
+    if (musicList.length === 0) {
+      throw new Error('没有成功解析的歌曲')
+    }
+
+    const result = await batchDownloadMusic(
+      musicList,
+      playlistData.value?.name || '',
+      {
+        filenameFormat: props.settings?.filenameFormat || 'artist-song',
+        writeMetadata: props.settings?.writeMetadata !== false,
+        downloadLrcFile: props.settings?.downloadLrcFile !== false,
+        selectedQuality: props.settings?.selectedQuality || 'lossless'
+      },
+      (progress) => {
+        downloadProgress.value.percentage = progress.percentage
+        downloadProgress.value.currentSong = progress.current
+        downloadProgress.value.completed = progress.completed
+        downloadProgress.value.failed = progress.failed
+        downloadProgress.value.total = progress.total
       }
+    )
 
-      try {
-        // 过滤掉无版权的歌曲
-        const availableTracks = props.displayTracks.filter(track => !track.unavailable)
-        const unavailableCount = props.displayTracks.length - availableTracks.length
-        
-        if (availableTracks.length === 0) {
-          ElMessage.warning('所有歌曲都因版权问题无法下载')
-          return
-        }
-        
-        // 重置进度状态
-        downloadProgress.value = {
-          isDownloading: true,
-          percentage: 0,
-          status: '',
-          currentSong: '',
-          total: availableTracks.length,
-          completed: 0,
-          failed: 0
-        }
+    downloadProgress.value.isDownloading = false
+    downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
+    downloadProgress.value.percentage = 100
 
-        let message = `开始批量下载 ${availableTracks.length} 首歌曲...`
-        if (unavailableCount > 0) {
-          message += `（${unavailableCount} 首因版权问题跳过）`
-        }
-        ElMessage.info(message)
-
-        // 准备音乐列表，需要先解析每首歌的信息
-        const musicList = []
-        for (const track of availableTracks) {
-          try {
-            // 将歌曲ID转换为URL格式
-            const songUrl = `https://music.163.com/song?id=${track.id}`
-            
-            // 解析歌曲信息
-            const quality = props.settings?.selectedQuality || 'lossless'
-            const musicInfo = await parseMusicInfo(songUrl, quality)
-            if (musicInfo && musicInfo.url) {
-              musicList.push({
-                id: track.id,
-                name: track.name,
-                artist: getArtist(track),
-                album: getAlbum(track),
-                url: musicInfo.url,
-                cover: getCover(track),
-                lrc: musicInfo.lrc || '',
-                fileExtension: musicInfo.fileExtension || '.mp3'
-              })
-            }
-          } catch (err) {
-            console.error(`解析歌曲失败: ${track.name}`, err)
-          }
-        }
-
-        if (musicList.length === 0) {
-          throw new Error('没有成功解析的歌曲')
-        }
-
-        // 执行批量下载
-        const result = await batchDownloadMusic(
-          musicList,
-          playlistData.value?.name || '', // 传递歌单/专辑名称作为 ZIP 文件名
-          {
-            filenameFormat: props.settings?.filenameFormat || 'artist-song',
-            writeMetadata: props.settings?.writeMetadata !== false,
-            downloadLrcFile: props.settings?.downloadLrcFile !== false,
-            selectedQuality: props.settings?.selectedQuality || 'lossless'
-          },
-          (progress) => {
-            downloadProgress.value.percentage = progress.percentage
-            downloadProgress.value.currentSong = progress.current
-            downloadProgress.value.completed = progress.completed
-            downloadProgress.value.failed = progress.failed
-            downloadProgress.value.total = progress.total
-          }
-        )
-
-        // 下载完成
-        downloadProgress.value.isDownloading = false
-        downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
-        downloadProgress.value.percentage = 100
-
-        if (result.failed === 0) {
-          ElMessage.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
-        } else {
-          ElMessage.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
-        }
-
-      } catch (error) {
-        downloadProgress.value.isDownloading = false
-        downloadProgress.value.status = 'exception'
-        ElMessage.error(`批量下载失败: ${error.message}`)
-      }
+    if (result.failed === 0) {
+      message.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
+    } else {
+      message.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
     }
 
-    // 解析歌曲
-    const parseTrack = async (track) => {
-      parsingTrackId.value = track.id
-      
-      try {
-        // 确保传递正确的音质参数，避免事件对象污染
-        const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
-        
-        // 这里调用现有的解析逻辑，传递音质参数
-        emit('track-parsed', { track, quality: qualityValue })
-        ElMessage.success(`开始解析：${track.name}`)
-      } catch {
-        ElMessage.error('解析失败，请重试')
-      } finally {
-        parsingTrackId.value = null
-      }
-    }
-
-    // 处理分页变化
-    const handlePageChange = (page) => {
-      console.log('SearchResultList: handlePageChange called with page:', page)
-      emit('page-change', page)
-    }
-
-
-    // 格式化播放量
-    const formatPlayCount = (count) => {
-      if (count >= 100000000) {
-        return Math.floor(count / 100000000) + '亿'
-      } else if (count >= 10000) {
-        return Math.floor(count / 10000) + '万'
-      }
-      return count.toString()
-    }
-
-    
-
-
-
-    return {
-      playlistData,
-      creatorLabel,
-      currentPageTracks,
-      loading,
-      error,
-      selectedTrack,
-      parsingTrackId,
-      parsingType,
-      downloadProgress,
-      selectTrack,
-      playTrack,
-      downloadSingle,
-      handleBatchDownload,
-      handlePageChange,
-      handleTrackClick,
-      formatPlayCount,
-      getCover,
-      onCoverError,
-      getArtist,
-      getAlbum,
-    }
+  } catch (error) {
+    downloadProgress.value.isDownloading = false
+    downloadProgress.value.status = 'exception'
+    message.error(`批量下载失败: ${error.message}`)
   }
+}
+
+// 解析歌曲
+const parseTrack = async (track) => {
+  parsingTrackId.value = track.id
+  
+  try {
+    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+    
+    emit('track-parsed', { track, quality: qualityValue })
+    message.success(`开始解析：${track.name}`)
+  } catch {
+    message.error('解析失败，请重试')
+  } finally {
+    parsingTrackId.value = null
+  }
+}
+
+// 处理分页变化
+const handlePageChange = (page) => {
+  console.log('SearchResultList: handlePageChange called with page:', page)
+  emit('page-change', page)
+}
+
+// 格式化播放量
+const formatPlayCount = (count) => {
+  if (count >= 100000000) {
+    return Math.floor(count / 100000000) + '亿'
+  } else if (count >= 10000) {
+    return Math.floor(count / 10000) + '万'
+  }
+  return count.toString()
 }
 </script>
 
@@ -565,6 +499,12 @@ export default {
   height: 36px;
   background: var(--color-surface-container-low);
   border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
 }
 
 .action-btn:hover {
@@ -592,6 +532,11 @@ export default {
 .play-btn,
 .download-btn {
   color: var(--color-text-muted);
+}
+
+.play-btn:hover,
+.download-btn:hover {
+  color: white !important;
 }
 
 .action-btn:hover .btn-icon {
@@ -626,7 +571,7 @@ export default {
   to { transform: rotate(360deg); }
 }
 
-/* 全局深色模式样式 - 不使用scoped以确保样式能够应用 */
+/* 全局深色模式样式 */
 .dark .tracks-section {
   background: var(--color-surface-white) !important;
   color: var(--color-on-surface) !important;
@@ -681,11 +626,13 @@ export default {
 /* 搜索结果面板 */
 .search-result-panel {
   width: 100%;
+  margin-top: 0;
 }
 
 .tracks-section {
   background: var(--color-surface-white);
   padding: 0;
+  margin-top: 0;
 }
 
 .playlist-header {
@@ -732,7 +679,7 @@ export default {
   color: var(--color-text-muted);
 }
 
-/* 二级页面模式 - 使用详情页样式 */
+/* 二级页面模式 */
 .detail-view {
   padding: 0;
 }
@@ -850,6 +797,7 @@ export default {
 .tracks-table td {
   padding: 12px 16px;
   vertical-align: middle;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .col-index {
@@ -1039,19 +987,9 @@ export default {
   border: 1px solid var(--color-primary);
 }
 
-
 .track-info {
   flex: 1;
   min-width: 0;
-}
-
-.track-cover {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  margin-right: var(--space-2);
-  background-color: var(--color-surface-variant);
 }
 
 .track-title-line {
@@ -1060,7 +998,6 @@ export default {
   gap: 8px;
   min-width: 0;
 }
-
 
 .track-name, .track-artist {
   overflow: hidden;
@@ -1075,7 +1012,6 @@ export default {
 
 .track-artist {
   color: var(--color-secondary);
-  /* 限制歌手区域占比，避免撑开主列导致侧栏移位 */
   flex: 0 0 auto;
   max-width: 45%;
   min-width: 0;
@@ -1090,174 +1026,34 @@ export default {
   align-items: center;
   gap: var(--space-1);
   font-size: 14px;
-  flex-wrap: wrap;
 }
 
 .info-item {
   color: var(--color-secondary);
-  white-space: nowrap;
 }
 
 .info-separator {
   color: var(--color-outline);
-  font-weight: bold;
 }
 
-.track-name {
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.track-actions {
-  margin-left: var(--space-2);
-  flex-shrink: 0;
-}
-
-.track-actions .el-button {
-  min-width: 60px;
-  height: 32px;
-}
-
+/* Loading状态 */
 .loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  padding: 2rem;
+}
+
+.loading-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--color-text-muted);
-  min-height: 200px;
-  width: 100%;
+  gap: 12px;
 }
 
-.loading-container > .loading-content {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 24px !important;
-  width: max-content !important;
-  min-width: 250px;
-  max-width: none !important;
-  padding: 12px !important;
-}
-
-.loading-container .el-icon {
-  font-size: 40px;
-  color: var(--color-primary);
-  flex-shrink: 0;
-  margin-bottom: 6px !important;
-}
-
-.loading-container > .loading-content > .loading-text {
-  font-size: 16px;
-  font-weight: 500;
-  text-align: center !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-  width: auto !important;
-  min-width: 200px !important;
-  max-width: none !important;
-  flex-shrink: 0;
-  writing-mode: horizontal-tb !important;
-  direction: ltr !important;
-  word-break: normal !important;
-  word-wrap: normal !important;
-  overflow-wrap: normal !important;
-  display: inline-block !important;
-  line-height: 1.5;
-  max-height: none !important;
-}
-
+/* Error状态 */
 .error-container {
-  padding: 20px;
+  padding: 2rem;
 }
-
-/* 循环解析模式样式 */
-
-.dark .track-cover {
-  background-color: var(--color-surface-variant);
-}
-
-.dark .track-artist {
-  color: var(--color-secondary);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-  
-  .header-left {
-    width: 100%;
-  }
-  
-  .header-right {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  
-  .track-item {
-    padding: var(--space-2) var(--space-1);
-    margin-bottom: var(--space-2);
-  }
-  .tracks-section {
-    padding: var(--space-3);
-  }
-  .section-header {
-    margin-bottom: var(--space-2);
-  }
-  .track-cover {
-    margin-right: var(--space-1);
-  }
-  
-  .playlist-info-bar {
-    padding: var(--space-1) var(--space-2);
-    margin-bottom: var(--space-2);
-    font-size: 12px;
-    gap: 6px;
-  }
-  
-  .track-name {
-    font-size: 14px;
-  }
-  
-  /* Loading 响应式 */
-  .loading-container {
-    padding: 40px 16px;
-    min-height: 150px;
-  }
-  
-  .loading-container .el-icon {
-    font-size: 32px;
-  }
-  
-  .loading-text {
-    font-size: 14px;
-  }
-}
-
-/* 小屏幕设备优化 */
-@media (max-width: 480px) {
-  .loading-container {
-    padding: 30px 12px;
-    min-height: 120px;
-  }
-  
-  .loading-container .el-icon {
-    font-size: 28px;
-  }
-  
-  .loading-text {
-    font-size: 13px;
-  }
-}
-
-
 </style>

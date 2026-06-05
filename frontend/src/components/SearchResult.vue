@@ -2,13 +2,13 @@
   <div v-if="hasResults || currentDetail || hasSearchResults" class="search-result-panel">
     <!-- 返回按钮（二级页面时显示） -->
     <div v-if="currentDetail" class="back-bar">
-      <el-button 
-        link
+      <a-button 
+        type="link"
         @click="goBack"
         class="back-button"
       >
         ← 返回搜索结果
-      </el-button>
+      </a-button>
     </div>
 
     <!-- 结果头部 -->
@@ -21,7 +21,7 @@
 
     <!-- 搜索类型Tab（搜索结果不为空时显示） -->
     <div v-if="hasSearchResults && !currentDetail" class="search-tabs">
-      <el-button
+      <a-button
         v-for="tab in searchTabs"
         :key="tab.key"
         :class="['search-tab', { active: currentSearchType === tab.key }]"
@@ -29,16 +29,13 @@
       >
         {{ tab.label }}
         <span v-if="getTabCount(tab.key) > 0" class="tab-count">{{ getTabCount(tab.key) }}</span>
-      </el-button>
+      </a-button>
     </div>
 
     <!-- loading 状态 -->
     <div v-if="currentDetail && currentDetail.loading" class="loading-view">
       <div class="loading-content">
-        <svg class="loading-spinner" viewBox="0 0 50 50">
-          <circle class="loading-path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
-        </svg>
-        <span class="loading-text">正在加载...</span>
+        <a-spin size="large" tip="正在加载..." />
       </div>
     </div>
 
@@ -81,9 +78,9 @@
           <p class="playlist-creator">{{ playlist.creator }}</p>
         </div>
         <div class="playlist-action">
-          <el-button size="small" type="primary" @click.stop="handleParse(playlist, 'playlist')">
+          <a-button size="small" type="primary" @click.stop="handleParse(playlist, 'playlist')">
             解析歌单
-          </el-button>
+          </a-button>
         </div>
       </div>
     </div>
@@ -112,14 +109,12 @@
           <p class="album-artist">{{ album.artist }}</p>
         </div>
         <div class="album-action">
-          <el-button size="small" type="primary" @click.stop="handleParse(album, 'album')">
+          <a-button size="small" type="primary" @click.stop="handleParse(album, 'album')">
             解析专辑
-          </el-button>
+          </a-button>
         </div>
       </div>
     </div>
-
-    
 
     <!-- 歌曲列表展示（使用 SearchResultList 组件） -->
     <SearchResultList 
@@ -169,7 +164,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { ElButton, ElMessage, ElNotification, ElProgress, ElLoading } from 'element-plus'
+import { message, notification } from 'ant-design-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import SearchResultList from './SearchResultList.vue'
@@ -246,21 +241,15 @@ const cache = ref(loadDetailCache())
 
 // 分页配置
 const currentPage = ref(1)
-const pageSize = ref(12) // 4列 * 3行 = 12个卡片
+const pageSize = ref(12)
 
 // 监听模式变化，切换时重置分页和详情状态
 watch(() => props.currentMode, () => {
-  // 重置分页
   currentPage.value = 1
   currentDetailPage.value = 1
-  
-  // 清除详情页状态
   currentDetail.value = null
   detailTracks.value = []
 })
-
-// currentPageData 是 computed，会自动响应 currentPage 的变化
-// 不需要强制更新
 
 // 获取各Tab的数据数量
 const getTabCount = (tabKey) => {
@@ -328,7 +317,6 @@ const handleSearchTabClick = (tabKey) => {
   currentSearchType.value = tabKey
   currentPage.value = 1
   
-  // 只有当对应数据为空时才触发搜索
   const currentDataCount = getTabCount(tabKey)
   if (currentDataCount === 0) {
     emit('search-type-change', tabKey)
@@ -420,21 +408,16 @@ const visiblePages = computed(() => {
   const total = totalPages.value
   const current = currentPage.value
   
-  // 总页数 <= 7，显示所有页码
   if (total <= 7) {
     for (let i = 1; i <= total; i++) {
       pages.push(i)
     }
   } else {
-    // 总页数 > 7，显示当前页附近的页码
     if (current <= 3) {
-      // 前面部分
       pages.push(1, 2, 3, 4, '...', total)
     } else if (current >= total - 2) {
-      // 后面部分
       pages.push(1, '...', total - 3, total - 2, total - 1, total)
     } else {
-      // 中间部分
       pages.push(1, '...', current - 1, current, current + 1, '...', total)
     }
   }
@@ -472,12 +455,9 @@ const handleParse = async (item, type) => {
   if (type === 'song') {
     emit('parse-song', item)
   } else if (type === 'playlist') {
-    // 重置详情页分页
     resetDetailPagination()
-    // 显示加载状态
     currentDetail.value = { ...item, loading: true }
     
-    // 检查缓存
     if (cache.value.playlist[item.id]) {
       const cached = cache.value.playlist[item.id]
       currentDetail.value = {
@@ -490,16 +470,14 @@ const handleParse = async (item, type) => {
       }
       detailTracks.value = cached.tracks
       
-      ElNotification({
-        title: '使用缓存数据',
-        message: `找到 ${detailTracks.value.length} 首歌曲`,
-        type: 'success'
+      notification.success({
+        message: '使用缓存数据',
+        description: `找到 ${detailTracks.value.length} 首歌曲`,
       })
       return
     }
     
     try {
-      // 调用解析歌单接口
       const response = await fetch('/playlist', {
         method: 'POST',
         headers: {
@@ -522,7 +500,6 @@ const handleParse = async (item, type) => {
         }
         detailTracks.value = playlist.tracks || []
         
-        // 缓存数据
         cache.value.playlist[item.id] = {
           id: playlist.id,
           name: playlist.name,
@@ -531,31 +508,26 @@ const handleParse = async (item, type) => {
           trackCount: playlist.trackCount,
           tracks: detailTracks.value
         }
-        // 持久化到 localStorage
         saveDetailCache('playlist', cache.value.playlist)
         
         if (detailTracks.value.length > 0) {
-          ElNotification({
-            title: '解析成功',
-            message: `找到 ${detailTracks.value.length} 首歌曲`,
-            type: 'success'
+          notification.success({
+            message: '解析成功',
+            description: `找到 ${detailTracks.value.length} 首歌曲`,
           })
         }
       } else {
-        ElMessage.error(result.message || '解析失败')
+        message.error(result.message || '解析失败')
         currentDetail.value = null
       }
     } catch (error) {
-      ElMessage.error('解析失败，请稍后重试')
+      message.error('解析失败，请稍后重试')
       currentDetail.value = null
     }
   } else if (type === 'album') {
-    // 重置详情页分页
     resetDetailPagination()
-    // 显示加载状态
     currentDetail.value = { ...item, loading: true }
     
-    // 检查缓存
     if (cache.value.album[item.id]) {
       const cached = cache.value.album[item.id]
       currentDetail.value = {
@@ -568,16 +540,14 @@ const handleParse = async (item, type) => {
       }
       detailTracks.value = cached.tracks
       
-      ElNotification({
-        title: '使用缓存数据',
-        message: `找到 ${detailTracks.value.length} 首歌曲`,
-        type: 'success'
+      notification.success({
+        message: '使用缓存数据',
+        description: `找到 ${detailTracks.value.length} 首歌曲`,
       })
       return
     }
     
     try {
-      // 调用解析专辑接口
       const response = await fetch('/album', {
         method: 'POST',
         headers: {
@@ -600,7 +570,6 @@ const handleParse = async (item, type) => {
         }
         detailTracks.value = album.songs || []
         
-        // 缓存数据
         cache.value.album[item.id] = {
           id: album.id,
           name: album.name,
@@ -609,22 +578,20 @@ const handleParse = async (item, type) => {
           trackCount: detailTracks.value.length,
           tracks: detailTracks.value
         }
-        // 持久化到 localStorage
         saveDetailCache('album', cache.value.album)
         
         if (detailTracks.value.length > 0) {
-          ElNotification({
-            title: '解析成功',
-            message: `找到 ${detailTracks.value.length} 首歌曲`,
-            type: 'success'
+          notification.success({
+            message: '解析成功',
+            description: `找到 ${detailTracks.value.length} 首歌曲`,
           })
         }
       } else {
-        ElMessage.error(result.message || '解析失败')
+        message.error(result.message || '解析失败')
         currentDetail.value = null
       }
     } catch (error) {
-      ElMessage.error('解析失败，请稍后重试')
+      message.error('解析失败，请稍后重试')
       currentDetail.value = null
     }
   }
@@ -638,12 +605,11 @@ const goBack = () => {
 // 批量下载
 const handleBatchDownload = async () => {
   if (!detailTracks.value || detailTracks.value.length === 0) {
-    ElMessage.warning('没有可下载的歌曲')
+    message.warning('没有可下载的歌曲')
     return
   }
 
   try {
-    // 重置进度状态
     downloadProgress.value = {
       isDownloading: true,
       percentage: 0,
@@ -654,16 +620,13 @@ const handleBatchDownload = async () => {
       failed: 0
     }
 
-    ElMessage.info(`开始批量下载 ${detailTracks.value.length} 首歌曲...`)
+    message.info(`开始批量下载 ${detailTracks.value.length} 首歌曲...`)
 
-    // 准备音乐列表，需要先解析每首歌的信息
     const musicList = []
     for (const track of detailTracks.value) {
       try {
-        // 将歌曲ID转换为URL格式
         const songUrl = `https://music.163.com/song?id=${track.id}`
         
-        // 解析歌曲信息
         const musicInfo = await parseMusicInfo(songUrl, 'lossless')
         if (musicInfo && musicInfo.url) {
           musicList.push({
@@ -686,13 +649,12 @@ const handleBatchDownload = async () => {
       throw new Error('没有成功解析的歌曲')
     }
 
-    // 执行批量下载
     const result = await batchDownloadMusic(
       musicList,
-      currentDetail.value?.name || '', // 传递歌单/专辑名称作为 ZIP 文件名
+      currentDetail.value?.name || '',
       {
         filenameFormat: settings.filenameFormat || 'artist-song',
-        writeMetadata: settings.writeMetadata !== false // 默认开启，除非明确设置为 false
+        writeMetadata: settings.writeMetadata !== false
       },
       (progress) => {
         downloadProgress.value.percentage = progress.percentage
@@ -702,20 +664,19 @@ const handleBatchDownload = async () => {
       }
     )
 
-    // 下载完成
     downloadProgress.value.isDownloading = false
     downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
 
     if (result.failed === 0) {
-      ElMessage.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
+      message.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
     } else {
-      ElMessage.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
+      message.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
     }
 
   } catch (error) {
     downloadProgress.value.isDownloading = false
     downloadProgress.value.status = 'exception'
-    ElMessage.error(`批量下载失败: ${error.message}`)
+    message.error(`批量下载失败: ${error.message}`)
   }
 }
 
@@ -774,44 +735,6 @@ const getAlbum = (track) => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  animation: loading-rotate 1s linear infinite;
-}
-
-.loading-path {
-  stroke: var(--color-primary);
-  stroke-linecap: round;
-  animation: loading-dash 1.5s ease-in-out infinite;
-}
-
-.loading-text {
-  font-size: 14px;
-  color: var(--color-text-muted);
-}
-
-@keyframes loading-rotate {
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes loading-dash {
-  0% {
-    stroke-dasharray: 1, 150;
-    stroke-dashoffset: 0;
-  }
-  50% {
-    stroke-dasharray: 90, 150;
-    stroke-dashoffset: -35;
-  }
-  100% {
-    stroke-dasharray: 90, 150;
-    stroke-dashoffset: -124;
-  }
 }
 
 .loading-text {
@@ -966,7 +889,7 @@ const getAlbum = (track) => {
   padding: 0 1rem 1rem;
 }
 
-.playlist-action :deep(.el-button) {
+.playlist-action :deep(.ant-btn) {
   width: 100%;
 }
 
@@ -1061,7 +984,7 @@ const getAlbum = (track) => {
   padding: 0 1rem 1rem;
 }
 
-.album-action :deep(.el-button) {
+.album-action :deep(.ant-btn) {
   width: 100%;
 }
 
@@ -1087,6 +1010,7 @@ const getAlbum = (track) => {
   font-weight: 600;
   background: var(--color-surface-container-low);
   white-space: nowrap;
+  border-radius: 0;
 }
 
 .song-table td {
@@ -1198,232 +1122,73 @@ const getAlbum = (track) => {
   color: var(--color-outline);
 }
 
-.header-right {
+.detail-actions {
   flex-shrink: 0;
-}
-
-/* 下载进度条 */
-.download-progress-bar {
-  margin-top: 1rem;
-  width: 100%;
-}
-
-.progress-info {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 0.5rem;
-  font-size: 13px;
+  gap: 0.5rem;
 }
 
-.current-song {
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.progress-text {
-  color: var(--color-primary);
-  font-weight: 600;
-  margin-left: 1rem;
-  flex-shrink: 0;
-}
-
-/* 详情页面歌曲表格 */
-.tracks-table-wrapper {
-  overflow-x: auto;
-}
-
-.tracks-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.tracks-table th {
-  text-align: left;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-surface-container-low);
-  white-space: nowrap;
-}
-
-.tracks-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  vertical-align: middle;
-}
-
-.track-cover {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  object-fit: cover;
-}
-
-.track-row:hover {
-  background: var(--color-surface-container-low);
-}
-
-/* 详情页分页组件样式 */
-.detail-pagination-container {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-container-low);
-}
-
-@media (max-width: 768px) {
-  .result-header {
-    padding: 1rem;
-  }
-  
-  .result-title {
-    font-size: 16px;
-  }
-  
-  .detail-header {
-    padding: 1rem;
-  }
-  
-  .detail-name {
-    font-size: 20px;
-  }
-  
-  .detail-cover {
-    width: 60px;
-    height: 60px;
-  }
-  
-  .song-table th,
-  .song-table td,
-  .tracks-table th,
-  .tracks-table td {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-  
-  .col-album {
-    display: none;
-  }
-  
-  .col-action {
-    width: 80px;
-  }
-}
-
-/* 搜索类型Tab */
-.search-tabs {
-  display: flex;
-  gap: var(--spacing-sm);
-  padding: 0 1.5rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.search-tab {
-  padding: 0.75rem 1.25rem !important;
-  height: auto !important;
-  border: none !important;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
-  background: transparent !important;
-  font-weight: 500 !important;
-  font-size: var(--font-size-body-md) !important;
-  color: var(--color-text-muted) !important;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  bottom: -1px;
-}
-
-.search-tab:hover {
-  color: var(--color-primary) !important;
-  background: var(--color-surface-container-low) !important;
-}
-
-.search-tab.active {
-  color: var(--color-primary) !important;
-  background: var(--color-surface-white) !important;
-  border-bottom: 2px solid var(--color-primary) !important;
-}
-
-.tab-count {
-  margin-left: 0.5rem;
-  padding: 2px 8px;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
+.detail-action-btn {
+  min-width: 100px;
 }
 
 /* 歌手卡片网格 */
 .artist-grid {
   display: grid;
-  grid-template-columns: repeat(1, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
   padding: 1.5rem;
 }
 
 @media (min-width: 640px) {
   .artist-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
 @media (min-width: 1024px) {
   .artist-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(6, 1fr);
   }
 }
 
 @media (min-width: 1280px) {
   .artist-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(8, 1fr);
   }
 }
 
 .artist-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
   background: var(--color-surface-container-low);
   border-radius: var(--radius-md);
-  overflow: hidden;
   transition: all 0.3s ease;
   cursor: pointer;
 }
 
 .artist-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .artist-cover-wrapper {
-  position: relative;
-  aspect-ratio: 1;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
   overflow: hidden;
+  margin-bottom: 0.75rem;
 }
 
 .artist-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
-  margin: 1rem;
-  border: 2px solid var(--color-border-subtle);
-}
-
-.artist-card:hover .artist-cover {
-  transform: scale(1.05);
 }
 
 .artist-info {
-  padding: 1rem;
   text-align: center;
 }
 
@@ -1435,6 +1200,7 @@ const getAlbum = (track) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .artist-music-count {
@@ -1443,4 +1209,80 @@ const getAlbum = (track) => {
   margin: 0;
 }
 
+/* 搜索Tab */
+.search-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-bottom: 0;
+}
+
+.search-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.search-tab:hover {
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+}
+
+.search-tab.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.tab-count {
+  font-size: 12px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+}
+
+.search-tab.active .tab-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 下载进度弹窗 */
+.download-modal-content {
+  padding: 1.5rem;
+}
+
+.download-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.download-progress-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.download-progress-info {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.download-progress-bar {
+  margin-bottom: 1rem;
+}
+
+.download-progress-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
 </style>

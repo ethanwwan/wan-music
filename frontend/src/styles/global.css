@@ -76,15 +76,6 @@
   --max-width: 1000px;
   --padding-mobile: 16px;
   --padding-desktop: 48px;
-
-  /* Element Plus 主题色配置 */
-  --el-color-primary: var(--color-primary);
-  --el-color-primary-light-3: var(--color-primary-light);
-  --el-color-primary-light-5: var(--color-primary-dim);
-  --el-color-primary-light-7: var(--color-primary-light);
-  --el-color-primary-light-8: var(--color-primary-light);
-  --el-color-primary-light-9: var(--color-primary-light);
-  --el-color-primary-dark-2: var(--color-primary-hover);
 }
 
 /* 深色模式主题变量 */
@@ -121,15 +112,6 @@
   --color-background: #121212;
   --color-notice-bg: #1e3a5f;
   --color-notice-border: #2d578a;
-  
-  /* Element Plus 深色主题配置 */
-  --el-color-primary: var(--color-primary);
-  --el-color-primary-light-3: var(--color-primary-light);
-  --el-color-primary-light-5: var(--color-primary-dim);
-  --el-color-primary-light-7: var(--color-primary-light);
-  --el-color-primary-light-8: var(--color-primary-light);
-  --el-color-primary-light-9: var(--color-primary-light);
-  --el-color-primary-dark-2: var(--color-primary-hover);
 }
 
 /* CSS 基础设置 */
@@ -160,7 +142,7 @@ body {
   --app-radius: 12px;
   --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 
-  /* Element Plus 间距尺度 */
+  /* 间距尺度 */
   --space-1: 8px;
   --space-2: 12px;
   --space-3: 16px;
@@ -228,7 +210,7 @@ body {
 }
 
 /* 顶部导航栏 */
-.el-header.app-header {
+.app-header {
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -236,19 +218,19 @@ body {
   -webkit-backdrop-filter: saturate(1.2) blur(12px);
   background: var(--app-header-bg);
   border-bottom: 1px solid var(--app-border-color);
-  height: 64px !important;
+  height: 64px;
   line-height: 64px;
 }
 
 /* 容器布局 */
-.el-container.app-container {
+.app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
 /* 主内容区域 */
-.el-main.app-main {
+.app-main {
   max-width: var(--app-max-width);
   margin: 0 auto;
   padding: var(--space-5) var(--app-padding-x);
@@ -263,40 +245,25 @@ body {
     --app-padding-x: var(--space-3);
     --app-gap: var(--space-3);
   }
-  .el-main.app-main {
+  .app-main {
     padding: var(--space-3);
   }
-  .el-header.app-header {
-    height: 56px !important;
+  .app-header {
+    height: 56px;
     line-height: 56px;
   }
 }
 
 /* 卡片统一样式 */
-.el-card,
-.el-card.is-always-shadow,
-.el-card.is-hover-shadow {
+.app-card {
   border-radius: var(--app-radius);
   box-shadow: var(--app-shadow);
   border: none;
   background: var(--app-card-bg);
 }
 
-/* 主色调按钮 */
-.el-button--primary {
-  background-color: var(--app-primary) !important;
-  border-color: var(--app-primary) !important;
-}
-.el-button--primary:hover,
-.el-button--primary:focus {
-  background-color: var(--app-primary-light) !important;
-  border-color: var(--app-primary-light) !important;
-}
-
-/* 导航按钮样式 - 已移至 NavTabs 组件中统一管理 */
-
 /* 播放器底部固定 */
-.el-footer.app-footer {
+.app-footer {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -338,9 +305,6 @@ body {
   align-items: center;
   gap: var(--space-2);
 }
-.module-title .el-icon {
-  color: var(--app-primary);
-}
 
 /* 示例歌曲标签 */
 .example-tag {
@@ -351,14 +315,6 @@ body {
 .example-tag:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-/* 输入框样式 */
-.el-input__wrapper {
-  border-radius: var(--app-radius);
-}
-.el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 /* 加载动画 */
@@ -377,16 +333,6 @@ body {
 
 .dark .loading-overlay {
   background: rgba(var(--color-surface-dark-rgb, 30, 30, 30), 0.9);
-}
-
-/* 表格样式优化 */
-.el-table {
-  border-radius: var(--app-radius);
-  overflow: hidden;
-}
-.el-table th {
-  background-color: var(--app-bg) !important;
-  font-weight: 600;
 }
 
 /* 滚动条样式 */
@@ -565,12 +511,12 @@ body {
 
 /* 音乐卡片组件 */
 .music-card {
-  background: var(--el-bg-color);
+  background: var(--app-card-bg);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--app-border-color);
 }
 
 .music-card:hover {
@@ -621,7 +567,7 @@ body {
 .track-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -630,7 +576,7 @@ body {
 
 .track-artist {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   margin: 0 0 8px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -647,82 +593,3 @@ body {
   overflow-wrap: normal !important;
   display: inline-block !important;
 }
-
-/* 深色模式 APlayer 样式 - 真实CSS值 */
-.aplayer-dark-mode .aplayer {
-  color: #ffffffd9 !important;
-  box-shadow: none !important;
-  background: #141414 !important;
-  border: 1px solid #303030 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-info {
-  border-bottom: 1px solid #303030 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-info .aplayer-music .aplayer-title {
-  color: #ffffffd9 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-info .aplayer-music .aplayer-author,
-.aplayer-dark-mode .aplayer .aplayer-info .aplayer-controller .aplayer-time {
-  color: #ffffff73 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon path {
-  fill: #ffffffa6 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-info .aplayer-controller .aplayer-time .aplayer-icon:hover path {
-  fill: #ffffffd9 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-list {
-  border: 1px solid #303030 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-list ol li {
-  border-top: 1px solid #303030 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-list ol li:hover,
-.aplayer-dark-mode .aplayer .aplayer-list ol li.aplayer-list-light {
-  background: #1f1f1f !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-list ol li .aplayer-list-title {
-  color: #ffffffd9 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-list ol li .aplayer-list-author {
-  color: #ffffff73 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-lrc:before {
-  background: linear-gradient(#141414 0, #fff0) !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-lrc:after {
-  background: linear-gradient(#fff0 0, #141414) !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-lrc p {
-  color: #ffffff73 !important;
-}
-
-.aplayer-dark-mode .aplayer .aplayer-lrc p.aplayer-lrc-current {
-  color: #ffffffd9 !important;
-}
-
-/* 设置抽屉样式 */
-.settings-drawer.el-drawer {
-  width: 450px !important;
-  max-width: 450px !important;
-}
-
-.settings-drawer .el-drawer__container {
-  width: 450px !important;
-  max-width: 450px !important;
-}
-
-

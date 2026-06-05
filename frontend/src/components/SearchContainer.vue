@@ -1,5 +1,5 @@
 <template>
-  <el-card class="main-card" shadow="hover">
+  <a-card class="main-card" :hoverable="true">
     <!-- 输入头部 -->
     <div v-if="currentMode !== 'rank'" class="input-header">
       <div>
@@ -10,29 +10,26 @@
 
     <!-- 榜单选择器 -->
     <div v-if="currentMode === 'rank'" class="charts-select-container">
-      <el-select v-model="selectedChart" placeholder="选择榜单" size="large" style="width: 100%">
-        <el-option label="飙升榜" value="19723756" />
-        <el-option label="新歌榜" value="3779629" />
-        <el-option label="原创榜" value="2884035" />
-        <el-option label="热歌榜" value="3778678" />
-      </el-select>
+      <a-select v-model:value="selectedChart" placeholder="选择榜单" size="large" style="width: 100%">
+        <a-select-option value="19723756">飙升榜</a-select-option>
+        <a-select-option value="3779629">新歌榜</a-select-option>
+        <a-select-option value="2884035">原创榜</a-select-option>
+        <a-select-option value="3778678">热歌榜</a-select-option>
+      </a-select>
     </div>
 
     <!-- 标准输入区 -->
     <div v-if="currentMode !== 'rank'" class="input-section">
       <div class="input-row">
-        <el-input
-          v-model="inputValue"
+        <a-input
+          v-model:value="inputValue"
           :placeholder="placeholder"
           size="large"
-          clearable
+          allow-clear
           @keyup.enter="handleParse"
-        >
-          <template #prefix>
-            <el-icon><Link /></el-icon>
-          </template>
-        </el-input>
-        <el-button
+          prefix-icon="link"
+        />
+        <a-button
           type="primary"
           size="large"
           @click="handleParse"
@@ -40,22 +37,21 @@
           :disabled="!inputValue.trim()"
         >
           开始解析
-        </el-button>
+        </a-button>
       </div>
 
       <!-- 示例数据 -->
       <div class="example-section">
         <span class="example-label">{{ exampleTitle }}</span>
         <div class="example-tags">
-          <el-tag
+          <a-tag
             v-for="link in exampleLinks"
             :key="link.name"
             class="example-tag"
             @click="handleExampleClick(link)"
-            effect="plain"
           >
             {{ link.name }}
-          </el-tag>
+          </a-tag>
         </div>
       </div>
 
@@ -66,24 +62,22 @@
           <span class="history-clear" @click="handleClearHistory">清除历史</span>
         </div>
         <div class="history-tags">
-          <el-tag
+          <a-tag
             v-for="record in historyRecords"
             :key="record.name"
             class="history-tag"
             @click="handleHistoryClick(record)"
-            effect="plain"
           >
             {{ record.name }}
-          </el-tag>
+          </a-tag>
         </div>
       </div>
     </div>
-  </el-card>
+  </a-card>
 </template>
 
 <script setup>
 import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
-import { Link } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 
 // 历史记录存储的localStorage key
@@ -297,31 +291,20 @@ defineExpose({
   }
 }
 
-.input-row :deep(.el-input) {
+.input-row :deep(.ant-input) {
   flex-grow: 1;
   height: 48px;
-}
-
-.input-row :deep(.el-input__wrapper) {
   border-radius: 0.5rem;
   border: 1px solid var(--color-border-subtle);
   padding: 0 1.5rem;
 }
 
-.input-row :deep(.el-input__wrapper:hover) {
-  border-color: var(--color-border-subtle);
-}
-
-.input-row :deep(.el-input__wrapper.is-focus) {
+.input-row :deep(.ant-input:focus) {
   box-shadow: 0 0 0 2px rgba(0, 87, 194, 0.2);
   border-color: var(--color-primary);
 }
 
-.input-row :deep(.el-input__placeholder) {
-  color: #8C8C8C;
-}
-
-.input-row :deep(.el-button--primary) {
+.input-row :deep(.ant-btn-primary) {
   height: 48px;
   padding: 0 2rem;
   background: var(--color-primary);
@@ -334,27 +317,18 @@ defineExpose({
   transition: all 0.2s;
 }
 
-.input-row :deep(.el-button--primary:hover) {
+.input-row :deep(.ant-btn-primary:hover) {
   background: var(--color-primary);
   opacity: 0.9;
 }
 
-.input-row :deep(.el-button--primary:active) {
+.input-row :deep(.ant-btn-primary:active) {
   transform: scale(0.95);
 }
 
-.input-row :deep(.el-button--primary:disabled) {
+.input-row :deep(.ant-btn-primary:disabled) {
   opacity: 0.5;
   transform: none;
-}
-
-.input-row :deep(.el-button--primary.is-loading) {
-  background: var(--color-primary);
-  opacity: 0.8;
-}
-
-.input-row :deep(.el-button--primary.is-loading .el-loading-spinner) {
-  color: white;
 }
 
 .example-section {
@@ -385,7 +359,6 @@ defineExpose({
   border-radius: var(--radius-sm);
   font-size: var(--font-size-label);
   color: var(--color-secondary);
-  margin-left: 0 !important;
 }
 
 .example-tag:hover {
@@ -438,7 +411,6 @@ defineExpose({
   border-radius: var(--radius-sm);
   font-size: var(--font-size-label);
   color: var(--color-primary);
-  margin-left: 0 !important;
 }
 
 .history-tag:hover {

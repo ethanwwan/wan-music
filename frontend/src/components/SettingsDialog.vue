@@ -1,24 +1,24 @@
 <template>
-  <el-drawer
-    v-model="drawerVisible"
+  <a-drawer
+    v-model:open="drawerVisible"
     width="450px"
-    direction="rtl"
-    :close-on-click-modal="true"
-    :show-close="true"
-    :with-header="false"
+    placement="right"
+    :closable="true"
+    :mask-closable="true"
+    :header-style="{ display: 'none' }"
     class="settings-drawer"
   >
     <!-- 自定义头部 -->
     <div class="custom-header">
       <span class="header-title">设置</span>
-      <el-icon class="close-icon" @click="drawerVisible = false"><Close /></el-icon>
+      <a-icon class="close-icon" @click="drawerVisible = false" component="Close" />
     </div>
     
     <div class="settings-content">
       <!-- 主题设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <el-icon><Brush /></el-icon>
+          <a-icon component="Palette" />
           <span>主题设置</span>
         </div>
         
@@ -31,7 +31,7 @@
               :class="{ active: themeMode === 'light' }"
               @click="handleThemeModeChange('light')"
             >
-              <el-icon class="mode-icon"><Sunny /></el-icon>
+              <a-icon class="mode-icon" component="Sunny" />
               <span class="mode-name">亮色</span>
             </div>
             <div 
@@ -39,7 +39,7 @@
               :class="{ active: themeMode === 'dark' }"
               @click="handleThemeModeChange('dark')"
             >
-              <el-icon class="mode-icon"><Moon /></el-icon>
+              <a-icon class="mode-icon" component="Moon" />
               <span class="mode-name">深色</span>
             </div>
             <div 
@@ -47,7 +47,7 @@
               :class="{ active: themeMode === 'auto' }"
               @click="handleThemeModeChange('auto')"
             >
-              <el-icon class="mode-icon"><Monitor /></el-icon>
+              <a-icon class="mode-icon" component="Monitor" />
               <span class="mode-name">跟随系统</span>
             </div>
           </div>
@@ -75,134 +75,142 @@
       <!-- 音质设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <el-icon><Headset /></el-icon>
+          <a-icon component="Headphones" />
           <span>音质设置</span>
         </div>
-        <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
-          <el-form-item label="默认音质">
-            <el-select
-              v-model="settings.selectedQuality"
+        <a-form :model="settings" layout="horizontal" class="settings-form">
+          <a-form-item label="默认音质">
+            <a-select
+              v-model:value="settings.selectedQuality"
               @change="handleSave"
-              style="width: 160px"
+              :style="{ width: '160px' }"
             >
-              <el-option label="标准 (128kbps)" value="standard" />
-              <el-option label="极高 (320kbps)" value="exhigh" />
-              <el-option label="无损 (FLAC)" value="lossless" />
-              <el-option label="Hi-Res (FLAC 24bit)" value="hires" />
-              <el-option label="沉浸 (Dolby Atmos)" value="sky" />
-              <el-option label="环绕 (Sony 360RA)" value="jyeffect" />
-              <el-option label="母带 (FLAC 24bit/96kHz)" value="jymaster" />
-            </el-select>
+              <a-select-option value="standard">标准 (128kbps)</a-select-option>
+              <a-select-option value="exhigh">极高 (320kbps)</a-select-option>
+              <a-select-option value="lossless">无损 (FLAC)</a-select-option>
+              <a-select-option value="hires">Hi-Res (FLAC 24bit)</a-select-option>
+              <a-select-option value="sky">沉浸 (Dolby Atmos)</a-select-option>
+              <a-select-option value="jyeffect">环绕 (Sony 360RA)</a-select-option>
+              <a-select-option value="jymaster">母带 (FLAC 24bit/96kHz)</a-select-option>
+            </a-select>
             <div class="form-item-hint">
-              <el-text type="info" size="small">解析和下载时使用的默认音质（默认：无损）</el-text>
+              <a-tag color="blue" bordered>解析和下载时使用的默认音质（默认：无损）</a-tag>
             </div>
-          </el-form-item>
-        </el-form>
+          </a-form-item>
+        </a-form>
       </div>
 
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <el-icon><Download /></el-icon>
+          <a-icon component="Download" />
           <span>下载配置</span>
         </div>
-        <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
-          <el-form-item label="文件命名格式">
-            <el-select
-              v-model="settings.filenameFormat"
+        <a-form :model="settings" layout="horizontal" class="settings-form">
+          <a-form-item label="文件命名格式">
+            <a-select
+              v-model:value="settings.filenameFormat"
               @change="handleSave"
-              style="width: 160px"
+              :style="{ width: '160px' }"
             >
-              <el-option label="歌曲名 - 歌手名" value="song-artist" />
-              <el-option label="歌手名 - 歌曲名" value="artist-song" />
-              <el-option label="仅歌曲名" value="song-only" />
-            </el-select>
+              <a-select-option value="song-artist">歌曲名 - 歌手名</a-select-option>
+              <a-select-option value="artist-song">歌手名 - 歌曲名</a-select-option>
+              <a-select-option value="song-only">仅歌曲名</a-select-option>
+            </a-select>
             <div class="form-item-hint">
-              <el-text type="info" size="small">
+              <a-tag color="blue" bordered>
                 示例：{{ settings.filenameFormat === 'artist-song' ? '歌手 - 歌曲' : (settings.filenameFormat === 'song-only' ? '歌曲' : '歌曲 - 歌手') }}
-              </el-text>
+              </a-tag>
             </div>
-          </el-form-item>
+          </a-form-item>
 
-          <el-form-item label="自动写入元数据">
-            <el-switch
-              v-model="settings.writeMetadata"
+          <a-form-item label="自动写入元数据">
+            <a-switch
+              v-model:checked="settings.writeMetadata"
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">写入歌曲名、歌手、专辑、封面、歌词等信息（默认开启）</el-text>
+              <a-tag color="blue" bordered>写入歌曲名、歌手、专辑、封面、歌词等信息（默认开启）</a-tag>
             </div>
-          </el-form-item>
+          </a-form-item>
 
-          <el-form-item label="下载LRC歌词文件">
-            <el-switch
-              v-model="settings.downloadLrcFile"
+          <a-form-item label="下载LRC歌词文件">
+            <a-switch
+              v-model:checked="settings.downloadLrcFile"
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">批量下载时同时生成独立的LRC歌词文件（默认开启）</el-text>
+              <a-tag color="blue" bordered>批量下载时同时生成独立的LRC歌词文件（默认开启）</a-tag>
             </div>
-          </el-form-item>
-        </el-form>
+          </a-form-item>
+        </a-form>
       </div>
 
       <!-- 解析设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <el-icon><Link /></el-icon>
+          <a-icon component="LinkOutlined" />
           <span>解析配置</span>
         </div>
-        <el-form :model="settings" label-width="120px" label-position="left" class="settings-form">
-          <el-form-item label="启用缓存">
-            <el-switch
-              v-model="settings.enableCache"
+        <a-form :model="settings" layout="horizontal" class="settings-form">
+          <a-form-item label="启用缓存">
+            <a-switch
+              v-model:checked="settings.enableCache"
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <el-text type="info" size="small">减少重复搜索和解析，提升相同内容再次访问速度（默认开启）</el-text>
+              <a-tag color="blue" bordered>减少重复搜索和解析，提升相同内容再次访问速度（默认开启）</a-tag>
             </div>
-          </el-form-item>
+          </a-form-item>
 
-          <el-form-item label="缓存大小">
+          <a-form-item label="缓存大小">
             <div class="cache-info">
               <div class="cache-size">
-                <el-icon class="cache-icon"><Folder /></el-icon>
+                <a-icon class="cache-icon" component="Folder" />
                 <span class="size-text">{{ cacheSize }}</span>
               </div>
-              <el-button 
+              <a-button 
                 type="danger" 
                 size="small" 
                 @click="handleClearCache"
                 :loading="clearingCache"
                 class="clear-cache-btn"
               >
-                <el-icon><Delete /></el-icon>
+                <a-icon component="Delete" />
                 <span>清除缓存</span>
-              </el-button>
+              </a-button>
             </div>
             <div class="form-item-hint">
-              <el-text type="info" size="small">缓存包括搜索结果、歌曲信息等，清除后下次访问会重新获取</el-text>
+              <a-tag color="blue" bordered>缓存包括搜索结果、歌曲信息等，清除后下次访问会重新获取</a-tag>
             </div>
-          </el-form-item>
-        </el-form>
+          </a-form-item>
+        </a-form>
       </div>
     </div>
-  </el-drawer>
+  </a-drawer>
 </template>
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close, Folder, Delete } from '@element-plus/icons-vue'
+import { message, Modal } from 'ant-design-vue'
+import { 
+  Download, 
+  LinkOutlined, 
+  Palette, 
+  Headphones, 
+  Sunny, 
+  Moon, 
+  Monitor, 
+  Close, 
+  Folder, 
+  Delete 
+} from '@ant-design/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
 
-// 缓存大小
 const cacheSize = ref('0 KB')
-// 清除缓存加载状态
 const clearingCache = ref(false)
 
-// 计算 localStorage 缓存大小
 const calculateCacheSize = () => {
   let totalSize = 0
   try {
@@ -217,7 +225,6 @@ const calculateCacheSize = () => {
     console.warn('读取 localStorage 失败:', e)
   }
   
-  // 转换为可读格式
   if (totalSize < 1024) {
     return `${totalSize} B`
   } else if (totalSize < 1024 * 1024) {
@@ -227,49 +234,33 @@ const calculateCacheSize = () => {
   }
 }
 
-// 刷新缓存大小
 const refreshCacheSize = () => {
   cacheSize.value = calculateCacheSize()
 }
 
-// 清除缓存
 const handleClearCache = async () => {
-  await ElMessageBox.confirm(
-    '确认清除缓存？',
-    '清除后所有缓存数据将被删除，下次访问需要重新加载',
-    {
-      confirmButtonText: '确认清除',
-      cancelButtonText: '取消',
-      type: 'warning'
+  Modal.confirm({
+    title: '确认清除缓存？',
+    content: '清除后所有缓存数据将被删除，下次访问需要重新加载',
+    okText: '确认清除',
+    cancelText: '取消',
+    onOk: async () => {
+      clearingCache.value = true
+      
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+        refreshCacheSize()
+        message.success('缓存已清除')
+      } catch (e) {
+        message.error('清除缓存失败')
+      } finally {
+        clearingCache.value = false
+      }
     }
-  ).then(async () => {
-    clearingCache.value = true
-    
-    try {
-      // 清除 localStorage
-      localStorage.clear()
-      
-      // 清除 sessionStorage
-      sessionStorage.clear()
-      
-      // 清除内存中的缓存（如果有）
-      // 这里可以添加其他缓存清理逻辑
-      
-      // 刷新缓存大小显示
-      refreshCacheSize()
-      
-      ElMessage.success('缓存已清除')
-    } catch (e) {
-      ElMessage.error('清除缓存失败')
-    } finally {
-      clearingCache.value = false
-    }
-  }).catch(() => {
-    // 用户取消
   })
 }
 
-// 组件挂载时计算缓存大小
 onMounted(() => {
   refreshCacheSize()
 })
@@ -288,12 +279,9 @@ const drawerVisible = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
-// 主题模式：light, dark, auto
 const themeMode = ref('light')
-// 选中的主题色
 const selectedThemeColor = ref('#0057c2')
 
-// 主题色选项（6种经典色）
 const themeColors = [
   { name: '默认蓝', value: 'blue', hex: '#0057c2' },
   { name: '活力红', value: 'red', hex: '#e53935' },
@@ -303,7 +291,6 @@ const themeColors = [
   { name: '深邃青', value: 'cyan', hex: '#00acc1' }
 ]
 
-// 初始化时从 localStorage 读取主题设置
 const initThemeSettings = () => {
   const savedThemeMode = localStorage.getItem('themeMode')
   const savedThemeColor = localStorage.getItem('themeColor')
@@ -320,29 +307,25 @@ const initThemeSettings = () => {
   }
 }
 
-// 组件挂载时初始化
 initThemeSettings()
 
-// 处理主题模式切换
 const handleThemeModeChange = (mode) => {
   themeMode.value = mode
   localStorage.setItem('themeMode', mode)
   
   if (mode === 'auto') {
-    // 跟随系统
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
     setTheme(prefersDark ? 'dark' : 'light')
-    ElMessage.success('已设置为跟随系统')
+    message.success('已设置为跟随系统')
   } else if (mode === 'dark') {
     setTheme('dark')
-    ElMessage.success('已切换到深色主题')
+    message.success('已切换到深色主题')
   } else {
     setTheme('light')
-    ElMessage.success('已切换到亮色主题')
+    message.success('已切换到亮色主题')
   }
 }
 
-// 处理主题色切换
 const handleThemeColorChange = (colorValue) => {
   const color = themeColors.find(c => c.value === colorValue)
   if (!color) return
@@ -350,22 +333,20 @@ const handleThemeColorChange = (colorValue) => {
   selectedThemeColor.value = color.hex
   localStorage.setItem('themeColor', colorValue)
   
-  // 应用主题色
   document.documentElement.style.setProperty('--color-primary', color.hex)
   
-  // 如果是深色模式，确保保持深色
   if (themeMode.value === 'dark') {
     setTheme('dark')
   } else {
     setTheme('light')
   }
   
-  ElMessage.success(`已切换到${color.name}`)
+  message.success(`已切换到${color.name}`)
 }
 
 const handleSave = () => {
   saveSettings()
-  ElMessage.success('设置已保存')
+  message.success('设置已保存')
 }
 
 const handleClose = () => {
@@ -375,7 +356,6 @@ const handleClose = () => {
 </script>
 
 <style scoped>
-/* 自定义头部样式 */
 .custom-header {
   display: flex;
   align-items: center;
@@ -402,18 +382,17 @@ const handleClose = () => {
 
 .settings-content {
   padding: 16px 0;
-  height: calc(100% - 57px); /* 减去头部高度 */
+  height: calc(100% - 57px);
   overflow-y: auto;
 }
 
-/* 隐藏滚动条 */
 .settings-content::-webkit-scrollbar {
   display: none;
 }
 
 .settings-content {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .setting-section {
@@ -434,7 +413,7 @@ const handleClose = () => {
   margin-bottom: 16px;
 }
 
-.section-title .el-icon {
+.section-title svg {
   font-size: 18px;
   color: var(--color-primary);
 }
@@ -443,26 +422,22 @@ const handleClose = () => {
   padding: 0 8px;
 }
 
-.settings-form :deep(.el-form-item) {
+.settings-form :deep(.ant-form-item) {
   margin-bottom: 16px;
 }
 
-.settings-form :deep(.el-form-item:last-child) {
+.settings-form :deep(.ant-form-item:last-child) {
   margin-bottom: 0;
-}
-
-.settings-form :deep(.el-form-item__content) {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
 }
 
 .form-item-hint {
   margin-top: 4px;
 }
 
-/* 子标题样式 */
+.form-item-hint :deep(.ant-tag) {
+  font-size: 12px;
+}
+
 .subsection-title {
   font-size: 14px;
   font-weight: 500;
@@ -471,7 +446,6 @@ const handleClose = () => {
   padding-left: 4px;
 }
 
-/* 主题模式选项 */
 .theme-mode-section {
   margin-bottom: 20px;
 }
@@ -527,7 +501,6 @@ const handleClose = () => {
   font-weight: 600;
 }
 
-/* 主题色选项 */
 .theme-color-section {
   margin-top: 20px;
 }
@@ -582,7 +555,6 @@ const handleClose = () => {
   font-weight: 600;
 }
 
-/* 缓存信息样式 */
 .cache-info {
   display: flex;
   align-items: center;
@@ -615,13 +587,5 @@ const handleClose = () => {
   gap: 6px;
   padding: 8px 16px;
   font-size: 13px;
-}
-
-.clear-cache-btn:hover {
-  background: #ff4d4f !important;
-}
-
-.clear-cache-btn:deep(.el-icon) {
-  font-size: 14px;
 }
 </style>
