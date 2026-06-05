@@ -36,6 +36,7 @@
           :playlists="playlistSearchResults"
           :albums="albumSearchResults"
           :artists="artistSearchResults"
+          :loading="loading"
           @parse-song="handleParseSong"
           @parse-playlist="handleParsePlaylist"
           @parse-album="handleParseAlbum"
@@ -84,7 +85,7 @@
       <FloatingActions @open-settings="showSettingsDialog = true" />
 
       <!-- 设置对话框 -->
-      <SettingsDialog v-model:visible="showSettingsDialog" />
+      <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
 
       <!-- 底部播放器 -->
       <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" />
@@ -93,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 
 // 导入组件
@@ -139,9 +140,39 @@ const searchConfig = {
 const exampleLinks = getExampleLinks('search')
 const exampleTitle = getExampleTitle('search')
 
-// 主题配置
-const themeToken = {
-  colorPrimary: '#1890ff',
+// 主题配置 - 响应式主题token
+const themeToken = reactive({
+  colorPrimary: '#0057c2',
+})
+
+// 从localStorage读取保存的主题色
+const getSavedThemeColor = () => {
+  const saved = localStorage.getItem('themeColor')
+  const themeColors = [
+    { name: '默认蓝', value: 'blue', hex: '#0057c2' },
+    { name: '活力红', value: 'red', hex: '#e53935' },
+    { name: '优雅紫', value: 'purple', hex: '#722ed1' },
+    { name: '清新绿', value: 'green', hex: '#13c2c2' },
+    { name: '温暖橙', value: 'orange', hex: '#fa8c16' },
+    { name: '浪漫粉', value: 'pink', hex: '#eb2f96' },
+  ]
+  if (saved) {
+    const color = themeColors.find(c => c.value === saved)
+    return color ? color.hex : '#0057c2'
+  }
+  return '#0057c2'
+}
+
+// 监听主题色变化
+const handleStorageChange = (e) => {
+  if (e.key === 'themeColor') {
+    themeToken.colorPrimary = getSavedThemeColor()
+  }
+}
+
+// 处理主题色变化（从设置对话框）
+const handleThemeColorChange = (color) => {
+  themeToken.colorPrimary = color
 }
 
 const handleNoticeClose = () => {
@@ -291,11 +322,20 @@ onMounted(() => {
   loadSettings()
   initDeviceDetection()
   initThemeFromLocalStorage()
+  
+  // 初始化主题色
+  themeToken.colorPrimary = getSavedThemeColor()
+  
+  // 添加localStorage变化监听
+  window.addEventListener('storage', handleStorageChange)
 })
 
 onUnmounted(() => {
   cleanupDeviceDetection()
   cleanupTimer()
+  
+  // 移除localStorage变化监听
+  window.removeEventListener('storage', handleStorageChange)
 })
 </script>
 

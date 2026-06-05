@@ -55,6 +55,11 @@
 
     <!-- 歌单卡片展示 -->
     <div v-if="displayMode === 'playlist' && !currentDetail" class="playlist-grid">
+      <!-- loading 状态 -->
+      <div v-if="props.loading" class="loading-container">
+        <a-spin size="large" tip="正在搜索..." />
+      </div>
+      <!-- 搜索结果 -->
       <div 
         v-for="playlist in currentPageData" 
         :key="playlist.id" 
@@ -86,6 +91,11 @@
 
     <!-- 专辑卡片展示 -->
     <div v-if="displayMode === 'album' && !currentDetail" class="album-grid">
+      <!-- loading 状态 -->
+      <div v-if="props.loading" class="loading-container">
+        <a-spin size="large" tip="正在搜索..." />
+      </div>
+      <!-- 搜索结果 -->
       <div 
         v-for="album in currentPageData" 
         :key="album.id" 
@@ -131,6 +141,11 @@
 
     <!-- 歌手卡片展示 -->
     <div v-if="displayMode === 'artist' && !currentDetail" class="artist-grid">
+      <!-- loading 状态 -->
+      <div v-if="props.loading" class="loading-container">
+        <a-spin size="large" tip="正在搜索..." />
+      </div>
+      <!-- 搜索结果 -->
       <div 
         v-for="artist in currentPageData" 
         :key="artist.id" 
@@ -190,6 +205,10 @@ const props = defineProps({
   artists: {
     type: Array,
     default: () => []
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -864,6 +883,15 @@ const getAlbum = (track) => {
   padding: 4px 12px;
   background: var(--color-surface-container-low);
   border-radius: 20px;
+}
+
+/* loading 容器 */
+.loading-container {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
 }
 
 /* 歌单卡片网格 */

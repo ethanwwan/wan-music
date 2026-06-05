@@ -104,30 +104,21 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
   if (mode === 'search') {
     loading.value = true
     try {
-      // 同时搜索所有类型
-      const [songResult, artistResult, playlistResult, albumResult] = await Promise.all([
-        musicApi.searchMusic(musicUrl.value),
-        musicApi.searchArtist(musicUrl.value),
-        musicApi.searchPlaylist(musicUrl.value),
-        musicApi.searchAlbum(musicUrl.value)
-      ])
-      
+      // 只搜索单曲
+      const songResult = await musicApi.searchMusic(musicUrl.value)
+
       musicInfo.value = { name: musicUrl.value }
-      
-      // 更新所有搜索结果
+
+      // 更新单曲搜索结果，清空其他类型结果
       searchResults.value = songResult.success ? (songResult.data.songs || []) : []
-      artistSearchResults.value = artistResult.success ? (artistResult.data || []) : []
-      playlistSearchResults.value = playlistResult.success ? (playlistResult.data || []) : []
-      albumSearchResults.value = albumResult.success ? (albumResult.data || []) : []
-      
-      // 计算总结果数
-      const totalResults = searchResults.value.length + artistSearchResults.value.length + 
-                          playlistSearchResults.value.length + albumSearchResults.value.length
-      
-      if (totalResults > 0) {
+      artistSearchResults.value = []
+      playlistSearchResults.value = []
+      albumSearchResults.value = []
+
+      if (searchResults.value.length > 0) {
         notification.open({
           title: '搜索成功',
-          message: `找到 ${searchResults.value.length} 首歌曲, ${artistSearchResults.value.length} 位歌手, ${playlistSearchResults.value.length} 个歌单, ${albumSearchResults.value.length} 张专辑`,
+          message: `找到 ${searchResults.value.length} 首歌曲`,
           type: 'success'
         })
       } else {
