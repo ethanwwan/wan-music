@@ -13,17 +13,18 @@
         :class="{ 'grayscale': track.unavailable }"
       />
       <div v-else class="cover-placeholder">
-        <a-icon :size="40" icon="Music" />
+        <AudioOutlined :size="40" />
       </div>
       <div class="card-overlay">
         <a-button 
-          :icon="isPlaying ? 'PlayCircle' : 'PlayCircle'" 
           shape="circle"
           size="large"
           :disabled="track.unavailable"
           @click.stop="handlePlay"
           :title="track.unavailable ? '该歌曲无版权' : '播放'"
-        />
+        >
+          <PlayCircleOutlined />
+        </a-button>
       </div>
     </div>
     <div class="card-content">
@@ -43,12 +44,12 @@
     </div>
     <div class="card-actions">
       <a-button 
-        :icon="Download" 
         size="small"
         :disabled="track.unavailable"
         @click.stop="handleDownload"
         :title="track.unavailable ? '该歌曲无版权' : '下载'"
       >
+        <DownloadOutlined />
         下载
       </a-button>
     </div>
@@ -57,7 +58,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Download } from '@ant-design/icons-vue'
+import { DownloadOutlined, AudioOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 
 const props = defineProps({

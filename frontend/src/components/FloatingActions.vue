@@ -6,7 +6,7 @@
       @click="handleToggleTheme" 
       :title="isDark ? '切换亮色主题' : '切换深色主题'"
     >
-      <component :is="isDark ? Sunny : Moon" class="action-icon" />
+      <component :is="isDark ? StarFilled : CloudFilled" class="action-icon" />
     </button>
     <!-- 回到顶部 -->
     <button 
@@ -15,7 +15,7 @@
       @click="handleScrollTop" 
       title="回到顶部"
     >
-      <ArrowUp class="action-icon" />
+      <ArrowUpOutlined class="action-icon" />
     </button>
     <!-- 设置 -->
     <button 
@@ -23,14 +23,14 @@
       @click="handleOpenSettings" 
       title="设置"
     >
-      <Setting class="action-icon" />
+      <SettingOutlined class="action-icon" />
     </button>
   </aside>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Moon, Sunny, Setting, ArrowUp } from '@element-plus/icons-vue'
+import { CloudFilled, StarFilled, SettingOutlined, ArrowUpOutlined } from '@ant-design/icons-vue'
 import { isDark, toggleTheme } from '../utils/themeManager.js'
 
 const emit = defineEmits(['open-settings'])

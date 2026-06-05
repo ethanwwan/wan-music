@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { ElMessage, ElNotification } from 'element-plus'
+import { message, notification } from 'ant-design-vue'
 import musicApi from '../services/musicApi.js'
 import { allTracks, totalTracks, currentPage, displayTracks, updateDisplayTracks } from './paginationManager.js'
 import { settings } from './settingsManager.js'
@@ -96,7 +96,7 @@ export const cleanupTimer = () => {
  */
 export const parseMusic = async (selectedQuality, mode = 'music') => {
   if (!musicUrl.value.trim()) {
-    ElMessage.warning('请输入内容')
+    message.warning('请输入内容')
     return
   }
 
@@ -104,32 +104,41 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
   if (mode === 'search') {
     loading.value = true
     try {
-      // 只搜索单曲
-      const songResult = await musicApi.searchMusic(musicUrl.value)
+      // 同时搜索所有类型
+      const [songResult, artistResult, playlistResult, albumResult] = await Promise.all([
+        musicApi.searchMusic(musicUrl.value),
+        musicApi.searchArtist(musicUrl.value),
+        musicApi.searchPlaylist(musicUrl.value),
+        musicApi.searchAlbum(musicUrl.value)
+      ])
       
       musicInfo.value = { name: musicUrl.value }
       
-      // 更新单曲搜索结果，清空其他类型结果
+      // 更新所有搜索结果
       searchResults.value = songResult.success ? (songResult.data.songs || []) : []
-      artistSearchResults.value = []
-      playlistSearchResults.value = []
-      albumSearchResults.value = []
+      artistSearchResults.value = artistResult.success ? (artistResult.data || []) : []
+      playlistSearchResults.value = playlistResult.success ? (playlistResult.data || []) : []
+      albumSearchResults.value = albumResult.success ? (albumResult.data || []) : []
       
-      if (searchResults.value.length > 0) {
-        ElNotification({
+      // 计算总结果数
+      const totalResults = searchResults.value.length + artistSearchResults.value.length + 
+                          playlistSearchResults.value.length + albumSearchResults.value.length
+      
+      if (totalResults > 0) {
+        notification.open({
           title: '搜索成功',
-          message: `找到 ${searchResults.value.length} 首歌曲`,
+          message: `找到 ${searchResults.value.length} 首歌曲, ${artistSearchResults.value.length} 位歌手, ${playlistSearchResults.value.length} 个歌单, ${albumSearchResults.value.length} 张专辑`,
           type: 'success'
         })
       } else {
-        ElMessage.warning('未找到相关结果')
+        message.warning('未找到相关结果')
       }
     } catch (error) {
       searchResults.value = []
       artistSearchResults.value = []
       playlistSearchResults.value = []
       albumSearchResults.value = []
-      ElMessage.error('搜索失败，请稍后重试')
+      message.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -156,18 +165,18 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       playlistInfo.value = result
       if (result.success && result.data) {
         playlistSearchResults.value = result.data
-        ElNotification({
+        notification.open({
           title: '搜索成功',
           message: `找到 ${result.data.length || 0} 个歌单`,
           type: 'success'
         })
       } else {
         playlistSearchResults.value = []
-        ElMessage.warning(result.error || '搜索结果为空')
+        message.warning(result.error || '搜索结果为空')
       }
     } catch (error) {
       playlistSearchResults.value = []
-      ElMessage.error('搜索失败，请稍后重试')
+      message.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -194,18 +203,18 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       albumInfo.value = result
       if (result.success && result.data) {
         albumSearchResults.value = result.data
-        ElNotification({
+        notification.open({
           title: '搜索成功',
           message: `找到 ${result.data.length || 0} 张专辑`,
           type: 'success'
         })
       } else {
         albumSearchResults.value = []
-        ElMessage.warning(result.error || '搜索结果为空')
+        message.warning(result.error || '搜索结果为空')
       }
     } catch (error) {
       albumSearchResults.value = []
-      ElMessage.error('搜索失败，请稍后重试')
+      message.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -219,18 +228,18 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       const result = await musicApi.searchArtist(musicUrl.value)
       if (result.success && result.data) {
         artistSearchResults.value = result.data
-        ElNotification({
+        notification.open({
           title: '搜索成功',
           message: `找到 ${result.data.length || 0} 位歌手`,
           type: 'success'
         })
       } else {
         artistSearchResults.value = []
-        ElMessage.warning(result.error || '搜索结果为空')
+        message.warning(result.error || '搜索结果为空')
       }
     } catch (error) {
       artistSearchResults.value = []
-      ElMessage.error('搜索失败，请稍后重试')
+      message.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -249,18 +258,18 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
         // 将榜单歌曲作为搜索结果展示
         searchResults.value = result.data.tracks || []
         playlistInfo.value = result.data
-        ElNotification({
+        notification.open({
           title: '榜单获取成功',
           message: `成功获取榜单：${result.data.name || '未知榜单'}，共 ${searchResults.value.length} 首歌曲`,
           type: 'success'
         })
       } else {
         searchResults.value = []
-        ElMessage.warning(result.error || '获取榜单失败')
+        message.warning(result.error || '获取榜单失败')
       }
     } catch (error) {
       searchResults.value = []
-      ElMessage.error('获取榜单失败，请稍后重试')
+      message.error('获取榜单失败，请稍后重试')
     } finally {
       loading.value = false
     }
@@ -286,7 +295,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
         }
       }
 
-      ElNotification({
+      notification.open({
         title: '解析成功',
         message: `成功解析歌曲：${result.name} (${result.qualityName}) ${getApiVersionLabel()}`,
         type: 'success'
@@ -297,7 +306,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       
       if (error.message && error.message.includes('API服务器暂时不可用')) {
         errorMessage = 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'
-        ElMessage({
+        message.info({
           message: errorMessage,
           type: 'warning',
           duration: 8000,
@@ -305,7 +314,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
         })
       } else if (error.message && (error.message.includes('付费') || error.message.includes('版权限制'))) {
         errorMessage = '该歌曲为付费或受版权限制，暂无法获取播放链接'
-        ElMessage({
+        message.info({
           message: errorMessage,
           type: 'error',
           duration: 6000,
@@ -313,7 +322,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
         })
       } else if (error.message && (error.message.includes('下架') || error.message.includes('无法获取'))) {
         errorMessage = '该歌曲已下架或者无法获取'
-        ElMessage({
+        message.info({
           message: errorMessage,
           type: 'error',
           duration: 6000,
@@ -321,14 +330,14 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
         })
       } else if (error.message && error.message.includes('网络连接失败')) {
         errorMessage = error.message
-        ElMessage({
+        message.info({
           message: errorMessage,
           type: 'error',
           duration: 6000,
           showClose: true
         })
       } else {
-        ElMessage.error(error.message || errorMessage)
+        message.error(error.message || errorMessage)
       }
     } finally {
       loading.value = false
@@ -342,18 +351,18 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     const result = await musicApi.searchMusic(musicUrl.value)
     if (result.success && result.data.songs && result.data.songs.length > 0) {
       searchResults.value = result.data.songs
-      ElNotification({
+      notification.open({
         title: '搜索成功',
         message: `找到 ${result.data.songs.length} 首相关歌曲`,
         type: 'success'
       })
     } else {
       searchResults.value = []
-      ElMessage.warning(result.error || '搜索结果为空')
+      message.warning(result.error || '搜索结果为空')
     }
   } catch (error) {
     searchResults.value = []
-    ElMessage.error('搜索失败，请稍后重试')
+    message.error('搜索失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -374,13 +383,13 @@ export const parsePlaylist = async () => {
   // 直接使用导入的ref对象
   
   if (!playlistUrl.value.trim()) {
-    ElMessage.warning('请输入歌单链接')
+    message.warning('请输入歌单链接')
     return
   }
 
   // 验证歌单链接格式
   if (!musicApi.validatePlaylistUrl(playlistUrl.value)) {
-    ElMessage.error('请输入有效的网易云音乐歌单链接')
+    message.error('请输入有效的网易云音乐歌单链接')
     return
   }
 
@@ -424,7 +433,7 @@ export const parsePlaylist = async () => {
         message += `（其中 ${unavailableCount} 首因版权问题无法播放）`
       }
       
-      ElNotification({
+      notification.open({
         title: '歌单解析完成！',
         message: message,
         type: 'success',
@@ -439,7 +448,7 @@ export const parsePlaylist = async () => {
     
     if (error.message && error.message.includes('API服务器暂时不可用')) {
       errorMessage = 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'
-      ElMessage({
+      message.info({
         message: errorMessage,
         type: 'warning',
         duration: 8000,
@@ -447,14 +456,14 @@ export const parsePlaylist = async () => {
       })
     } else if (error.message && error.message.includes('网络请求失败')) {
       errorMessage = error.message
-      ElMessage({
+      message.info({
         message: errorMessage,
         type: 'error',
         duration: 6000,
         showClose: true
       })
     } else {
-      ElMessage.error(error.message || errorMessage)
+      message.error(error.message || errorMessage)
     }
     
   } finally {
@@ -470,12 +479,12 @@ export const parsePlaylist = async () => {
  */
 export const parseAlbum = async () => {
   if (!albumUrl.value.trim()) {
-    ElMessage.warning('请输入专辑链接')
+    message.warning('请输入专辑链接')
     return
   }
 
   if (!musicApi.validateAlbumUrl(albumUrl.value)) {
-    ElMessage.error('请输入有效的网易云音乐专辑链接')
+    message.error('请输入有效的网易云音乐专辑链接')
     return
   }
 
@@ -506,7 +515,7 @@ export const parseAlbum = async () => {
         message += `（其中 ${unavailableCount} 首因版权问题无法播放）`
       }
       
-      ElNotification({
+      notification.open({
         title: '专辑解析成功！',
         message: message,
         type: 'success'
@@ -515,7 +524,7 @@ export const parseAlbum = async () => {
       throw new Error(result.error)
     }
   } catch (error) {
-    ElMessage.error(error.message || '专辑解析失败，请检查链接是否正确')
+    message.error(error.message || '专辑解析失败，请检查链接是否正确')
   } finally {
     stopTimer()
     albumLoading.value = false

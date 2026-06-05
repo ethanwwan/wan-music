@@ -11,14 +11,14 @@
     <!-- 自定义头部 -->
     <div class="custom-header">
       <span class="header-title">设置</span>
-      <a-icon class="close-icon" @click="drawerVisible = false" icon="Close" />
+      <CloseOutlined class="close-icon" @click="drawerVisible = false" />
     </div>
     
     <div class="settings-content">
       <!-- 主题设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon icon="Palette" />
+          <BgColorsOutlined />
           <span>主题设置</span>
         </div>
         
@@ -31,7 +31,7 @@
               :class="{ active: themeMode === 'light' }"
               @click="handleThemeModeChange('light')"
             >
-              <a-icon class="mode-icon" icon="Sun" />
+              <StarFilled class="mode-icon" />
               <span class="mode-name">亮色</span>
             </div>
             <div 
@@ -39,7 +39,7 @@
               :class="{ active: themeMode === 'dark' }"
               @click="handleThemeModeChange('dark')"
             >
-              <a-icon class="mode-icon" icon="Moon" />
+              <CloudFilled class="mode-icon" />
               <span class="mode-name">深色</span>
             </div>
             <div 
@@ -47,7 +47,7 @@
               :class="{ active: themeMode === 'auto' }"
               @click="handleThemeModeChange('auto')"
             >
-              <a-icon class="mode-icon" icon="Monitor" />
+              <MonitorOutlined class="mode-icon" />
               <span class="mode-name">跟随系统</span>
             </div>
           </div>
@@ -75,7 +75,7 @@
       <!-- 音质设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon component="Headphones" />
+          <AudioOutlined />
           <span>音质设置</span>
         </div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
@@ -103,7 +103,7 @@
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon icon="Download" />
+          <DownloadOutlined />
           <span>下载配置</span>
         </div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
@@ -149,7 +149,7 @@
       <!-- 解析设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon icon="Link" />
+          <LinkOutlined />
           <span>解析配置</span>
         </div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
@@ -166,7 +166,7 @@
           <a-form-item label="缓存大小">
             <div class="cache-info">
               <div class="cache-size">
-                <a-icon class="cache-icon" icon="FolderOpen" />
+                <FolderOpenOutlined class="cache-icon" />
                 <span class="size-text">{{ cacheSize }}</span>
               </div>
               <a-button 
@@ -176,7 +176,7 @@
                 :loading="clearingCache"
                 class="clear-cache-btn"
               >
-                <a-icon icon="Delete" />
+                <DeleteOutlined />
                 <span>清除缓存</span>
               </a-button>
             </div>
@@ -193,9 +193,23 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { 
+  CloseOutlined, 
+  BgColorsOutlined, 
+  StarFilled, 
+  CloudFilled, 
+  MonitorOutlined, 
+  AudioOutlined, 
+  DownloadOutlined, 
+  LinkOutlined, 
+  FolderOpenOutlined, 
+  DeleteOutlined 
+} from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
+
+const emit = defineEmits(['theme-color-change', 'update:open'])
 
 const cacheSize = ref('0 KB')
 const clearingCache = ref(false)
@@ -255,17 +269,15 @@ onMounted(() => {
 })
 
 const props = defineProps({
-  modelValue: {
+  open: {
     type: Boolean,
     default: false
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
-
 const drawerVisible = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
+  get: () => props.open,
+  set: (value) => emit('update:open', value)
 })
 
 const themeMode = ref('light')
@@ -329,6 +341,9 @@ const handleThemeColorChange = (colorValue) => {
   } else {
     setTheme('light')
   }
+  
+  // 通知父组件主题色变化
+  emit('theme-color-change', color.hex)
   
   message.success(`已切换到${color.name}`)
 }

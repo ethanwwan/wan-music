@@ -28,7 +28,6 @@
         @click="handleSearchTabClick(tab.key)"
       >
         {{ tab.label }}
-        <span v-if="getTabCount(tab.key) > 0" class="tab-count">{{ getTabCount(tab.key) }}</span>
       </a-button>
     </div>
 
@@ -78,7 +77,7 @@
           <p class="playlist-creator">{{ playlist.creator }}</p>
         </div>
         <div class="playlist-action">
-          <a-button size="small" type="primary" @click.stop="handleParse(playlist, 'playlist')">
+          <a-button size="middle" type="primary" @click.stop="handleParse(playlist, 'playlist')">
             解析歌单
           </a-button>
         </div>
@@ -109,7 +108,7 @@
           <p class="album-artist">{{ album.artist }}</p>
         </div>
         <div class="album-action">
-          <a-button size="small" type="primary" @click.stop="handleParse(album, 'album')">
+          <a-button size="middle" type="primary" @click.stop="handleParse(album, 'album')">
             解析专辑
           </a-button>
         </div>
@@ -148,6 +147,11 @@
         <div class="artist-info">
           <h4 class="artist-name">{{ artist.name }}</h4>
           <p class="artist-music-count">{{ artist.musicCount }} 首歌曲</p>
+        </div>
+        <div class="artist-action">
+          <a-button size="middle" type="primary" @click.stop="handleParse(artist, 'artist')">
+            解析歌手
+          </a-button>
         </div>
       </div>
     </div>
@@ -225,9 +229,11 @@ const downloadProgress = ref({
 const loadDetailCache = () => {
   const storedPlaylist = localStorage.getItem('wan-music-playlist-cache')
   const storedAlbum = localStorage.getItem('wan-music-album-cache')
+  const storedArtist = localStorage.getItem('wan-music-artist-cache')
   return {
     playlist: storedPlaylist ? JSON.parse(storedPlaylist) : {},
-    album: storedAlbum ? JSON.parse(storedAlbum) : {}
+    album: storedAlbum ? JSON.parse(storedAlbum) : {},
+    artist: storedArtist ? JSON.parse(storedArtist) : {}
   }
 }
 
@@ -579,6 +585,76 @@ const handleParse = async (item, type) => {
           tracks: detailTracks.value
         }
         saveDetailCache('album', cache.value.album)
+        
+        if (detailTracks.value.length > 0) {
+          notification.success({
+            message: '解析成功',
+            description: `找到 ${detailTracks.value.length} 首歌曲`,
+          })
+        }
+      } else {
+        message.error(result.message || '解析失败')
+        currentDetail.value = null
+      }
+    } catch (error) {
+      message.error('解析失败，请稍后重试')
+      currentDetail.value = null
+    }
+  } else if (type === 'artist') {
+    resetDetailPagination()
+    currentDetail.value = { ...item, loading: true }
+    
+    if (cache.value.artist[item.id]) {
+      const cached = cache.value.artist[item.id]
+      currentDetail.value = {
+        id: cached.id,
+        name: cached.name,
+        coverImgUrl: cached.avatarUrl,
+        artist: cached.name,
+        trackCount: cached.trackCount,
+        loading: false
+      }
+      detailTracks.value = cached.tracks
+      
+      notification.success({
+        message: '使用缓存数据',
+        description: `找到 ${detailTracks.value.length} 首歌曲`,
+      })
+      return
+    }
+    
+    try {
+      const response = await fetch('/artist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `id=${item.id}`
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        const artist = result.data.artist || result.data
+        currentDetail.value = {
+          id: artist.id,
+          name: artist.name,
+          coverImgUrl: artist.avatarUrl,
+          artist: artist.name,
+          trackCount: artist.songs?.length || artist.musicCount || 0,
+          loading: false
+        }
+        detailTracks.value = artist.songs || []
+        
+        cache.value.artist = cache.value.artist || {}
+        cache.value.artist[item.id] = {
+          id: artist.id,
+          name: artist.name,
+          avatarUrl: artist.avatarUrl,
+          trackCount: detailTracks.value.length,
+          tracks: detailTracks.value
+        }
+        saveDetailCache('artist', cache.value.artist)
         
         if (detailTracks.value.length > 0) {
           notification.success({
@@ -1209,6 +1285,15 @@ const getAlbum = (track) => {
   margin: 0;
 }
 
+.artist-action {
+  padding: 0.75rem 1rem 0;
+  width: 100%;
+}
+
+.artist-action :deep(.ant-btn) {
+  width: 100%;
+}
+
 /* 搜索Tab */
 .search-tabs {
   display: flex;
@@ -1240,17 +1325,6 @@ const getAlbum = (track) => {
 .search-tab.active {
   background: var(--color-primary);
   color: #fff;
-}
-
-.tab-count {
-  font-size: 12px;
-  padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 10px;
-}
-
-.search-tab.active .tab-count {
-  background: rgba(255, 255, 255, 0.25);
 }
 
 /* 下载进度弹窗 */
