@@ -23,7 +23,7 @@ from flask import Flask, request, send_file, render_template, Response
 try:
     from api.music_api import (
         NeteaseAPI, APIException, QualityLevel,
-        url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album,
+        url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album, search_artist,
         playlist_detail, album_detail
     )
     from api.cookie_manager import CookieManager, CookieException
@@ -549,6 +549,33 @@ def search_album_api():
         return APIResponse.error(f"搜索失败: {str(e)}", 500)
 
 
+@app.route('/search/artist', methods=['GET', 'POST'])
+@app.route('/api/search/artist', methods=['GET', 'POST'])  # 新增歌手搜索接口
+def search_artist_api():
+    """搜索歌手API"""
+    try:
+        data = api_service._safe_get_request_data()
+        keyword = data.get('keyword') or data.get('keywords') or data.get('q') or data.get('s')
+        
+        if not keyword:
+            return APIResponse.error("请提供搜索关键词")
+        
+        limit = int(data.get('limit', 20))
+        if limit > 100:
+            limit = 100
+        
+        cookies = api_service._get_cookies()
+        result = search_artist(keyword, cookies, limit)
+        
+        return APIResponse.success(result, "搜索完成")
+        
+    except ValueError as e:
+        return APIResponse.error(f"参数格式错误: {str(e)}")
+    except Exception as e:
+        api_service.logger.error(f"搜索歌手异常: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"搜索失败: {str(e)}", 500)
+
+
 @app.route('/playlist', methods=['GET', 'POST'])
 @app.route('/Playlist', methods=['GET', 'POST'])  # 向后兼容
 @app.route('/api/v6/playlist/detail', methods=['POST'])  # 兼容前端调用
@@ -610,6 +637,90 @@ def get_album():
     except Exception as e:
         api_service.logger.error(f"获取专辑异常: {e}\n{traceback.format_exc()}")
         return APIResponse.error(f"获取专辑失败: {str(e)}", 500)
+
+
+@app.route('/artist', methods=['GET', 'POST'])
+@app.route('/Artist', methods=['GET', 'POST'])  # 向后兼容
+def get_artist():
+    """获取歌手详情API - 获取歌手热门歌曲"""
+    try:
+        # 获取请求参数
+        data = api_service._safe_get_request_data()
+        artist_id = data.get('id')
+        
+        api_service.logger.info(f"收到歌手请求: artist_id={artist_id}")
+        
+        # 参数验证
+        if not artist_id:
+            return APIResponse.error("必须提供 'id' 参数")
+        
+        cookies = api_service._get_cookies()
+        
+        # 调用网易云音乐API获取歌手热门歌曲
+        import requests as req
+        response = req.post(
+            'https://music.163.com/weapi/v1/artist/detail',
+            data={'id': artist_id},
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        result = response.json()
+        
+        if result.get('code') != 200:
+            return APIResponse.error(f"获取歌手详情失败: {result.get('message', '未知错误')}")
+        
+        # 获取歌手热门歌曲
+        hot_songs_response = req.post(
+            'https://music.163.com/weapi/artist/top/song',
+            data={'id': artist_id, 'limit': 50, 'offset': 0},
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
+                'Referer': 'https://music.163.com/',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            cookies=cookies,
+            timeout=10
+        )
+        
+        hot_songs_result = hot_songs_response.json()
+        
+        # 构建响应数据
+        artist_data = result.get('data', {}).get('artist', {})
+        songs = hot_songs_result.get('songs', [])
+        
+        # 格式化歌曲列表
+        formatted_songs = []
+        for song in songs:
+            formatted_songs.append({
+                'id': song['id'],
+                'name': song['name'],
+                'artist': '/'.join(ar['name'] for ar in song.get('ar', [])),
+                'album': song.get('al', {}).get('name', ''),
+                'picUrl': song.get('al', {}).get('picUrl', ''),
+                'duration': song.get('dt', 0)
+            })
+        
+        response_data = {
+            'artist': {
+                'id': artist_data.get('id'),
+                'name': artist_data.get('name'),
+                'avatarUrl': artist_data.get('picUrl', artist_data.get('cover', '')),
+                'musicCount': artist_data.get('musicSize', len(songs)),
+                'songs': formatted_songs
+            }
+        }
+        
+        return APIResponse.success(response_data, "获取歌手详情成功")
+        
+    except Exception as e:
+        api_service.logger.error(f"获取歌手异常: {e}\n{traceback.format_exc()}")
+        return APIResponse.error(f"获取歌手失败: {str(e)}", 500)
 
 
 

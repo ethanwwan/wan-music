@@ -496,6 +496,44 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
+    def search_artist(self, keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+        """搜索歌手
+        
+        Args:
+            keywords: 搜索关键词
+            cookies: 用户cookies
+            limit: 返回数量限制
+            
+        Returns:
+            歌手信息列表
+            
+        Raises:
+            APIException: API调用失败时抛出
+        """
+        try:
+            data = {'s': keywords, 'type': 100, 'limit': limit}
+            response = HTTPClient.post_with_retry(APIConstants.SEARCH_API, data=data, cookies=cookies)
+            
+            result = response.json()
+            if result.get('code') != 200:
+                raise APIException(f"搜索失败: {result.get('message', '未知错误')}")
+            
+            artists = []
+            for item in result.get('result', {}).get('artists', []):
+                artist_info = {
+                    'id': item['id'],
+                    'name': item['name'],
+                    'avatarUrl': item.get('picUrl', item.get('img1v1Url', '')),
+                    'musicCount': item.get('musicSize', 0)
+                }
+                artists.append(artist_info)
+            
+            return artists
+        except APIException:
+            raise
+        except (json.JSONDecodeError, KeyError) as e:
+            raise APIException(f"解析搜索响应失败: {e}")
+    
     def get_playlist_detail(self, playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌单详情
         
@@ -823,6 +861,12 @@ def search_album(keywords: str, cookies: Dict[str, str], limit: int = 10) -> Lis
     """搜索专辑（向后兼容）"""
     api = NeteaseAPI()
     return api.search_album(keywords, cookies, limit)
+
+
+def search_artist(keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
+    """搜索歌手（向后兼容）"""
+    api = NeteaseAPI()
+    return api.search_artist(keywords, cookies, limit)
 
 
 def playlist_detail(playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
