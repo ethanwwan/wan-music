@@ -34,7 +34,6 @@
           size="large"
           @click="handleParse"
           :loading="loading"
-          :disabled="!inputValue.trim()"
         >
           开始解析
         </a-button>
@@ -78,6 +77,7 @@
 
 <script setup>
 import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
+import { message } from 'ant-design-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 
 // 历史记录存储的localStorage key
@@ -194,12 +194,15 @@ const handleHistoryClick = (record) => {
 }
 
 const handleParse = () => {
-  if (inputValue.value.trim()) {
-    emit('parse', {
-      url: inputValue.value,
-      quality: selectedQuality.value
-    })
+  const value = inputValue.value.trim()
+  if (!value) {
+    message.warning('请输入歌曲名、歌手名、专辑名或歌单名')
+    return
   }
+  emit('parse', {
+    url: value,
+    quality: selectedQuality.value
+  })
 }
 
 const handleExampleClick = (link) => {
@@ -291,17 +294,22 @@ defineExpose({
   }
 }
 
-.input-row :deep(.ant-input) {
+.input-row :deep(.ant-input-affix-wrapper) {
   flex-grow: 1;
   height: 48px;
   border-radius: 0.5rem;
   border: 1px solid var(--color-border-subtle);
-  padding: 0 1.5rem;
+  transition: all 0.2s;
 }
 
-.input-row :deep(.ant-input:focus) {
+.input-row :deep(.ant-input-affix-wrapper:focus-within) {
   box-shadow: 0 0 0 2px rgba(0, 87, 194, 0.2);
   border-color: var(--color-primary);
+}
+
+.input-row :deep(.ant-input) {
+  border: none;
+  box-shadow: none;
 }
 
 .input-row :deep(.ant-btn-primary) {

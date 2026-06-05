@@ -510,12 +510,12 @@ const formatPlayCount = (count) => {
 .action-btn:hover {
   background: var(--color-primary) !important;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
 .action-btn:active {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .action-btn:disabled {
@@ -554,7 +554,7 @@ const formatPlayCount = (count) => {
 .loading-spinner {
   width: 18px;
   height: 18px;
-  border: 3px solid rgba(99, 102, 241, 0.2);
+  border: 3px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: btn-spin 0.8s linear infinite;

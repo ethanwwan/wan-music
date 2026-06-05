@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
+import path from 'path'
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: path.join(__dirname, 'tests'),
+  testMatch: ['**/*.mjs', '**/*.test.js', '**/*.spec.js'],
   outputDir: './tests/results',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -10,7 +12,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5176',
+    baseURL: 'http://localhost:5175',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

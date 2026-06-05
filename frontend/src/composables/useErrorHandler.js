@@ -3,19 +3,15 @@
  * 统一管理错误处理逻辑
  */
 
-import { ElMessage, ElNotification } from 'element-plus'
+import { message, notification } from 'ant-design-vue'
 
 export function useErrorHandler() {
   const handleApiError = (error, context = '') => {
     console.error(`[API Error] ${context}:`, error)
 
-    const message = error.message || error.msg || '请求失败，请稍后重试'
+    const msg = error.message || error.msg || '请求失败，请稍后重试'
 
-    ElMessage.error({
-      message,
-      duration: 3000,
-      showClose: true
-    })
+    message.error(msg)
 
     return { success: false, error, context }
   }
@@ -23,11 +19,7 @@ export function useErrorHandler() {
   const handleNetworkError = (error) => {
     console.error('[Network Error]:', error)
 
-    ElMessage.error({
-      message: '网络连接失败，请检查网络设置',
-      duration: 4000,
-      showClose: true
-    })
+    message.error('网络连接失败，请检查网络设置')
 
     return { success: false, error }
   }
@@ -35,13 +27,9 @@ export function useErrorHandler() {
   const handleValidationError = (error, field = '') => {
     console.error(`[Validation Error] ${field}:`, error)
 
-    const message = field ? `${field}: ${error.message}` : error.message
+    const msg = field ? `${field}: ${error.message}` : error.message
 
-    ElMessage.warning({
-      message,
-      duration: 3000,
-      showClose: true
-    })
+    message.warning(msg)
 
     return { success: false, error }
   }
@@ -49,64 +37,45 @@ export function useErrorHandler() {
   const handleDownloadError = (error, filename = '') => {
     console.error('[Download Error]:', error)
 
-    const message = filename 
+    const msg = filename 
       ? `下载失败: ${filename}` 
       : '下载失败，请稍后重试'
 
-    ElMessage.error({
-      message,
-      duration: 4000,
-      showClose: true
-    })
+    message.error(msg)
 
     return { success: false, error }
   }
 
-  const showSuccess = (message = '操作成功') => {
-    ElMessage.success({
-      message,
-      duration: 2000,
-      showClose: true
+  const showSuccess = (msg = '操作成功') => {
+    message.success(msg)
+  }
+
+  const showWarning = (msg = '警告') => {
+    message.warning(msg)
+  }
+
+  const showInfo = (msg = '提示') => {
+    message.info(msg)
+  }
+
+  const notifySuccess = (title = '成功', msg = '') => {
+    notification.success({
+      message: title,
+      description: msg
     })
   }
 
-  const showWarning = (message = '警告') => {
-    ElMessage.warning({
-      message,
-      duration: 3000,
-      showClose: true
+  const notifyError = (title = '错误', msg = '') => {
+    notification.error({
+      message: title,
+      description: msg
     })
   }
 
-  const showInfo = (message = '提示') => {
-    ElMessage.info({
-      message,
-      duration: 2000,
-      showClose: true
-    })
-  }
-
-  const notifySuccess = (title = '成功', message = '') => {
-    ElNotification.success({
-      title,
-      message,
-      duration: 3000
-    })
-  }
-
-  const notifyError = (title = '错误', message = '') => {
-    ElNotification.error({
-      title,
-      message,
-      duration: 5000
-    })
-  }
-
-  const notifyWarning = (title = '警告', message = '') => {
-    ElNotification.warning({
-      title,
-      message,
-      duration: 4000
+  const notifyWarning = (title = '警告', msg = '') => {
+    notification.warning({
+      message: title,
+      description: msg
     })
   }
 

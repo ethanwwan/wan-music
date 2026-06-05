@@ -1,20 +1,21 @@
 <template>
   <div v-if="visible" class="notice-bar">
     <div class="notice-content">
-      <a-icon :size="24" icon="InfoCircle" class="notice-icon" />
+      <InfoCircleOutlined :size="24" class="notice-icon" />
       <div class="notice-text">
         <span class="notice-title">{{ title }}</span>
         <p class="notice-desc">{{ message }}</p>
       </div>
     </div>
     <button class="notice-close" @click="handleClose">
-      <a-icon icon="Close" />
+      <CloseOutlined />
     </button>
   </div>
 </template>
 
 <script setup>
 import { ref, defineProps, defineEmits } from 'vue'
+import { InfoCircleOutlined, CloseOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps({
   title: {

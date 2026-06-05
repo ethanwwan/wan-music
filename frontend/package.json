@@ -14,12 +14,10 @@
     "test:install": "playwright install --with-deps"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
     "@vueuse/core": "^10.7.0",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.12.2",
     "browser-id3-writer": "^6.3.1",
-    "element-plus": "^2.11.2",
     "jszip": "^3.10.1",
     "pinia": "^2.1.7",
     "vue": "^3.5.18"
