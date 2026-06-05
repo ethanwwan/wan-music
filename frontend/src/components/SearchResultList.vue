@@ -90,30 +90,24 @@
                   :disabled="parsingTrackId === track.id && parsingType === 'play' || track.unavailable"
                   :loading="parsingTrackId === track.id && parsingType === 'play'"
                   :title="track.unavailable ? '该歌曲无版权' : '播放'"
-                  icon="Play"
                   circle
                   size="small"
                   class="action-btn play-btn"
                 >
-                  <template #icon>
-                    <ElIcon v-if="parsingTrackId === track.id && parsingType === 'play'"><Loading /></ElIcon>
-                    <ElIcon v-else><VideoPlay /></ElIcon>
-                  </template>
+                  <ElIcon v-if="parsingTrackId === track.id && parsingType === 'play'"><Loading /></ElIcon>
+                  <ElIcon v-else><VideoPlay /></ElIcon>
                 </el-button>
                 <el-button
                   @click.stop="downloadSingle(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'download' || track.unavailable"
                   :loading="parsingTrackId === track.id && parsingType === 'download'"
                   :title="track.unavailable ? '该歌曲无版权' : '下载'"
-                  icon="Download"
                   circle
                   size="small"
                   class="action-btn download-btn"
                 >
-                  <template #icon>
-                    <ElIcon v-if="parsingTrackId === track.id && parsingType === 'download'"><Loading /></ElIcon>
-                    <ElIcon v-else><Download /></ElIcon>
-                  </template>
+                  <ElIcon v-if="parsingTrackId === track.id && parsingType === 'download'"><Loading /></ElIcon>
+                  <ElIcon v-else><Download /></ElIcon>
                 </el-button>
               </td>
             </tr>
