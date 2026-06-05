@@ -230,14 +230,11 @@ export default {
 
     // 获取封面地址（兼容多种字段）
     const getCover = (track) => {
-      return (
-        track?.picUrl ||
-        track?.cover ||
-        track?.al?.picUrl ||
-        track?.album?.picUrl ||
-        playlistData.value?.picUrl ||
-        ''
-      )
+      const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || playlistData.value?.picUrl || ''
+      if (!coverUrl) return ''
+      // HTTP地址需要通过代理访问
+      if (coverUrl.startsWith('https')) return coverUrl
+      return `/stream?url=${encodeURIComponent(coverUrl)}`
     }
 
     const onCoverError = (e) => {
