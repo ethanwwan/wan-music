@@ -85,26 +85,36 @@
               </td>
               <td class="col-artist" :class="{ 'unavailable-text': track.unavailable }">{{ getArtist(track) }}</td>
               <td class="col-action">
-                <button 
+                <el-button
                   @click.stop="playTrack(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'play' || track.unavailable"
-                  class="action-btn play-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': track.unavailable }"
+                  :loading="parsingTrackId === track.id && parsingType === 'play'"
                   :title="track.unavailable ? '该歌曲无版权' : '播放'"
+                  icon="Play"
+                  circle
+                  size="small"
+                  class="action-btn play-btn"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
-                  <span v-else class="btn-icon">▶</span>
-                </button>
-                <button 
+                  <template #icon>
+                    <ElIcon v-if="parsingTrackId === track.id && parsingType === 'play'"><Loading /></ElIcon>
+                    <ElIcon v-else><VideoPlay /></ElIcon>
+                  </template>
+                </el-button>
+                <el-button
                   @click.stop="downloadSingle(track)"
                   :disabled="parsingTrackId === track.id && parsingType === 'download' || track.unavailable"
-                  class="action-btn download-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': track.unavailable }"
+                  :loading="parsingTrackId === track.id && parsingType === 'download'"
                   :title="track.unavailable ? '该歌曲无版权' : '下载'"
+                  icon="Download"
+                  circle
+                  size="small"
+                  class="action-btn download-btn"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
-                  <span v-else class="btn-icon">⬇</span>
-                </button>
+                  <template #icon>
+                    <ElIcon v-if="parsingTrackId === track.id && parsingType === 'download'"><Loading /></ElIcon>
+                    <ElIcon v-else><Download /></ElIcon>
+                  </template>
+                </el-button>
               </td>
             </tr>
           </tbody>
@@ -142,6 +152,7 @@
 <script>
 import { ref, computed } from 'vue'
 import { ElMessage, ElButton, ElIcon, ElProgress } from 'element-plus'
+import { VideoPlay, Download } from '@element-plus/icons-vue'
 import { Loading } from '@element-plus/icons-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
@@ -558,57 +569,25 @@ export default {
 .action-btn {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  border: none;
-  outline: none;
-  outline-offset: 0;
   background: var(--color-surface-container-low);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-  line-height: 1;
-  vertical-align: middle;
+  border: none;
 }
 
 .action-btn:hover {
-  background: var(--color-primary);
+  background: var(--color-primary) !important;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-  outline: none;
-  border: none;
 }
 
 .action-btn:active {
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
-  outline: none;
-  border: none;
-}
-
-.action-btn:focus {
-  outline: none;
-  border: none;
-}
-
-.action-btn:focus-visible {
-  outline: none;
-  border: none;
 }
 
 .action-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-  outline: none;
-  border: none;
-}
-
-.action-btn:disabled .btn-icon {
-  color: var(--color-text-muted);
+  background: var(--color-surface-container-low) !important;
 }
 
 .action-btn.is-loading:disabled {
