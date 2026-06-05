@@ -11,14 +11,14 @@
     <!-- 自定义头部 -->
     <div class="custom-header">
       <span class="header-title">设置</span>
-      <a-icon class="close-icon" @click="drawerVisible = false" component="Close" />
+      <a-icon class="close-icon" @click="drawerVisible = false" icon="Close" />
     </div>
     
     <div class="settings-content">
       <!-- 主题设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon component="Palette" />
+          <a-icon icon="Palette" />
           <span>主题设置</span>
         </div>
         
@@ -31,7 +31,7 @@
               :class="{ active: themeMode === 'light' }"
               @click="handleThemeModeChange('light')"
             >
-              <a-icon class="mode-icon" component="Sunny" />
+              <a-icon class="mode-icon" icon="Sun" />
               <span class="mode-name">亮色</span>
             </div>
             <div 
@@ -39,7 +39,7 @@
               :class="{ active: themeMode === 'dark' }"
               @click="handleThemeModeChange('dark')"
             >
-              <a-icon class="mode-icon" component="Moon" />
+              <a-icon class="mode-icon" icon="Moon" />
               <span class="mode-name">深色</span>
             </div>
             <div 
@@ -47,7 +47,7 @@
               :class="{ active: themeMode === 'auto' }"
               @click="handleThemeModeChange('auto')"
             >
-              <a-icon class="mode-icon" component="Monitor" />
+              <a-icon class="mode-icon" icon="Monitor" />
               <span class="mode-name">跟随系统</span>
             </div>
           </div>
@@ -103,7 +103,7 @@
       <!-- 下载设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon component="Download" />
+          <a-icon icon="Download" />
           <span>下载配置</span>
         </div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
@@ -149,7 +149,7 @@
       <!-- 解析设置 -->
       <div class="setting-section">
         <div class="section-title">
-          <a-icon component="LinkOutlined" />
+          <a-icon icon="Link" />
           <span>解析配置</span>
         </div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
@@ -166,7 +166,7 @@
           <a-form-item label="缓存大小">
             <div class="cache-info">
               <div class="cache-size">
-                <a-icon class="cache-icon" component="Folder" />
+                <a-icon class="cache-icon" icon="FolderOpen" />
                 <span class="size-text">{{ cacheSize }}</span>
               </div>
               <a-button 
@@ -176,7 +176,7 @@
                 :loading="clearingCache"
                 class="clear-cache-btn"
               >
-                <a-icon component="Delete" />
+                <a-icon icon="Delete" />
                 <span>清除缓存</span>
               </a-button>
             </div>
@@ -193,18 +193,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { 
-  Download, 
-  LinkOutlined, 
-  Palette, 
-  Headphones, 
-  Sunny, 
-  Moon, 
-  Monitor, 
-  Close, 
-  Folder, 
-  Delete 
-} from '@ant-design/icons-vue'
+
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
 

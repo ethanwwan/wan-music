@@ -1,23 +1,20 @@
 <template>
   <div v-if="visible" class="notice-bar">
     <div class="notice-content">
-      <el-icon :size="24" class="notice-icon">
-        <InfoFilled />
-      </el-icon>
+      <a-icon :size="24" icon="InfoCircle" class="notice-icon" />
       <div class="notice-text">
         <span class="notice-title">{{ title }}</span>
         <p class="notice-desc">{{ message }}</p>
       </div>
     </div>
     <button class="notice-close" @click="handleClose">
-      <el-icon><Close /></el-icon>
+      <a-icon icon="Close" />
     </button>
   </div>
 </template>
 
 <script setup>
 import { ref, defineProps, defineEmits } from 'vue'
-import { InfoFilled, Close } from '@element-plus/icons-vue'
 
 const props = defineProps({
   title: {

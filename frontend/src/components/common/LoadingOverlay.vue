@@ -8,8 +8,8 @@
         <p v-if="text" class="loading-text">{{ text }}</p>
         <p v-if="subText" class="loading-subtext">{{ subText }}</p>
         <div v-if="progress !== null" class="progress-bar">
-          <el-progress 
-            :percentage="progress" 
+          <a-progress 
+            :percent="progress" 
             :status="progressStatus"
             :stroke-width="6"
           />
@@ -89,8 +89,8 @@ const progressStatus = computed(() => {
 .circle {
   width: 100%;
   height: 100%;
-  border: 4px solid var(--el-border-color);
-  border-top-color: var(--el-color-primary);
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -103,7 +103,7 @@ const progressStatus = computed(() => {
 
 .loading-text {
   font-size: 16px;
-  color: var(--el-text-color-primary);
+  color: var(--color-text-primary);
   margin: 0 0 8px 0;
   font-weight: 500;
   white-space: nowrap;
@@ -111,7 +111,7 @@ const progressStatus = computed(() => {
 
 .loading-subtext {
   font-size: 14px;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-secondary);
   margin: 0;
 }
 

@@ -13,12 +13,12 @@
         :class="{ 'grayscale': track.unavailable }"
       />
       <div v-else class="cover-placeholder">
-        <el-icon :size="40"><Microphone /></el-icon>
+        <a-icon :size="40" icon="Music" />
       </div>
       <div class="card-overlay">
-        <el-button 
-          :icon="isPlaying ? VideoPlay : VideoPlay" 
-          circle
+        <a-button 
+          :icon="isPlaying ? 'PlayCircle' : 'PlayCircle'" 
+          shape="circle"
           size="large"
           :disabled="track.unavailable"
           @click.stop="handlePlay"
@@ -33,16 +33,16 @@
       </div>
       <p class="track-artist" :title="track.artist">{{ track.artist || '未知艺术家' }}</p>
       <div class="track-meta">
-        <el-tag v-if="track.album" size="small" :title="track.album">
+        <a-tag v-if="track.album" :title="track.album">
           {{ track.album }}
-        </el-tag>
+        </a-tag>
         <span v-if="track.duration" class="duration">
           {{ formatDuration(track.duration) }}
         </span>
       </div>
     </div>
     <div class="card-actions">
-      <el-button 
+      <a-button 
         :icon="Download" 
         size="small"
         :disabled="track.unavailable"
@@ -50,15 +50,15 @@
         :title="track.unavailable ? '该歌曲无版权' : '下载'"
       >
         下载
-      </el-button>
+      </a-button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { Microphone, VideoPlay, Download } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Download } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 
 const props = defineProps({
   track: {
@@ -93,7 +93,7 @@ const formatDuration = (ms) => {
 
 const handleCardClick = () => {
   if (props.track.unavailable) {
-    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法播放`)
+    message.warning(`《${props.track.name}》因版权问题暂时无法播放`)
     return
   }
   emit('click', props.track)
@@ -101,7 +101,7 @@ const handleCardClick = () => {
 
 const handlePlay = () => {
   if (props.track.unavailable) {
-    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法播放`)
+    message.warning(`《${props.track.name}》因版权问题暂时无法播放`)
     return
   }
   emit('play', props.track)
@@ -109,7 +109,7 @@ const handlePlay = () => {
 
 const handleDownload = () => {
   if (props.track.unavailable) {
-    ElMessage.warning(`《${props.track.name}》因版权问题暂时无法下载`)
+    message.warning(`《${props.track.name}》因版权问题暂时无法下载`)
     return
   }
   emit('download', props.track)
@@ -118,12 +118,12 @@ const handleDownload = () => {
 
 <style scoped>
 .music-card {
-  background: var(--el-bg-color);
+  background: var(--color-background);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--color-border);
 }
 
 .music-card:hover {
@@ -136,7 +136,7 @@ const handleDownload = () => {
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  background: var(--el-fill-color-light);
+  background: var(--color-surface-container-low);
 }
 
 .card-cover img {
@@ -156,7 +156,7 @@ const handleDownload = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-muted);
 }
 
 .card-overlay {
@@ -184,7 +184,7 @@ const handleDownload = () => {
 .track-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--color-text-primary);
   margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -193,7 +193,7 @@ const handleDownload = () => {
 
 .track-artist {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-secondary);
   margin: 0 0 8px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -205,7 +205,7 @@ const handleDownload = () => {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-muted);
 }
 
 .duration {
@@ -214,7 +214,7 @@ const handleDownload = () => {
 
 .card-actions {
   padding: 8px 12px;
-  border-top: 1px solid var(--el-border-color);
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
 }
@@ -259,7 +259,7 @@ const handleDownload = () => {
   background: rgba(0, 0, 0, 0.3);
 }
 
-.music-card.unavailable :deep(.el-button) {
+.music-card.unavailable :deep(.ant-btn) {
   opacity: 0.5;
 }
 </style>

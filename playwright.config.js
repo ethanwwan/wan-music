@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5175',
+    baseURL: 'http://localhost:5176',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -44,7 +44,7 @@ export default defineConfig({
 
   webServer: {
     command: 'npm run dev:frontend',
-    url: 'http://localhost:5175',
+    url: 'http://localhost:5176',
     reuseExistingServer: true,
     timeout: 120000,
   },

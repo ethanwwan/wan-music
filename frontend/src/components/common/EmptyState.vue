@@ -2,7 +2,7 @@
   <div class="empty-state">
     <div class="empty-icon">
       <slot name="icon">
-        <el-icon :size="64"><Document /></el-icon>
+        <a-icon :size="64" icon="FileText" />
       </slot>
     </div>
     <h3 v-if="title" class="empty-title">{{ title }}</h3>
@@ -14,8 +14,6 @@
 </template>
 
 <script setup>
-import { Document } from '@element-plus/icons-vue'
-
 defineProps({
   title: {
     type: String,
@@ -39,20 +37,20 @@ defineProps({
 }
 
 .empty-icon {
-  color: var(--el-text-color-placeholder);
+  color: var(--color-text-muted);
   margin-bottom: 16px;
 }
 
 .empty-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--color-text-primary);
   margin: 0 0 8px 0;
 }
 
 .empty-description {
   font-size: 14px;
-  color: var(--el-text-color-secondary);
+  color: var(--color-text-secondary);
   margin: 0;
   max-width: 300px;
 }
