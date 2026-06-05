@@ -1,16 +1,16 @@
 <template>
-  <div :class="isDetailPage ? 'detail-view' : 'search-result-panel'">
+  <div :class="type !== 'search' ? 'detail-view' : 'search-result-panel'">
     <!-- 歌曲列表 -->
-    <div v-if="playlistData && totalTracks > 0" :class="isDetailPage ? '' : 'tracks-section'">
-      <!-- 歌单标题区域 -->
-      <div :class="isDetailPage ? 'detail-header' : 'playlist-header'">
+    <div v-if="totalTracks > 0" :class="type !== 'search' ? '' : 'tracks-section'">
+      <!-- 歌单/专辑标题区域（只有在有详情数据时显示） -->
+      <div v-if="playlistData" :class="type !== 'search' ? 'detail-header' : 'playlist-header'">
         <div class="header-left">
-          <div v-if="playlistData.coverImgUrl" :class="isDetailPage ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
-            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" :class="isDetailPage ? 'detail-cover' : 'playlist-cover'" />
+          <div v-if="playlistData.coverImgUrl" :class="type !== 'search' ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
+            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" :class="type !== 'search' ? 'detail-cover' : 'playlist-cover'" />
           </div>
-          <div :class="isDetailPage ? 'detail-info' : 'playlist-info'">
-            <h1 :class="isDetailPage ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
-            <div :class="isDetailPage ? 'detail-meta' : 'playlist-meta'">
+          <div :class="type !== 'search' ? 'detail-info' : 'playlist-info'">
+            <h1 :class="type !== 'search' ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
+            <div :class="type !== 'search' ? 'detail-meta' : 'playlist-meta'">
               <span class="meta-item">{{ creatorLabel }}：{{ playlistData.creator }}</span>
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
@@ -184,9 +184,10 @@ export default {
       type: Object,
       default: () => ({})
     },
-    isDetailPage: {
-      type: Boolean,
-      default: false
+    type: {
+      type: String,
+      default: 'search',
+      validator: (value) => ['search', 'playlist', 'album'].includes(value)
     }
   },
   emits: ['track-selected', 'track-parsed', 'page-change'],
@@ -707,17 +708,14 @@ export default {
 </style>
 
 <style scoped>
-/* 单独展示模式 - 带圆角和阴影 */
+/* 搜索结果面板 */
 .search-result-panel {
   width: 100%;
 }
 
 .tracks-section {
   background: var(--color-surface-white);
-  border-radius: var(--radius-md);
   padding: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
 }
 
 .playlist-header {
@@ -876,11 +874,11 @@ export default {
   color: var(--color-text-muted);
   background: var(--color-surface-container-low);
   white-space: nowrap;
+  border-radius: 0 !important;
 }
 
 .tracks-table td {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
 }
 

@@ -17,26 +17,17 @@
           @close="handleNoticeClose"
         />
 
-        <!-- Nav Tabs 组件 -->
-        <NavTabs 
-          v-model="currentView"
-          :modes="modes"
-          @change="handleViewChange"
-        />
-
         <!-- Search Container 组件 -->
         <SearchContainer
           ref="searchContainerRef"
-          :current-mode="currentView"
-          :title="getCurrentMode().title"
-          :description="getCurrentMode().desc"
-          :placeholder="getCurrentMode().placeholder"
+          :title="searchConfig.title"
+          :description="searchConfig.description"
+          :placeholder="searchConfig.placeholder"
           :example-links="exampleLinks"
-          :example-title="getCurrentExampleTitle()"
+          :example-title="exampleTitle"
           :loading="loading"
           @parse="handleParse"
           @example-click="handleExampleClick"
-          @chart-change="handleChartChange"
         />
 
         <!-- 搜索结果面板组件 -->
@@ -44,11 +35,12 @@
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :albums="albumSearchResults"
-          :current-mode="currentView"
+          :artists="artistSearchResults"
           @parse-song="handleParseSong"
           @parse-playlist="handleParsePlaylist"
           @parse-album="handleParseAlbum"
           @track-play="handlePlaySong"
+          @search-type-change="handleSearchTypeChange"
         />
 
         <!-- 原有的其他内容保持不变 -->
@@ -104,31 +96,28 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Moon, Sunny, Setting } from '@element-plus/icons-vue'
 
-// 导入新创建的组件
+// 导入组件
 import HeroHeader from './components/HeroHeader.vue'
 import SystemNotice from './components/SystemNotice.vue'
-import NavTabs from './components/NavTabs.vue'
 import SearchContainer from './components/SearchContainer.vue'
 import SearchResult from './components/SearchResult.vue'
 import Footer from './components/Footer.vue'
 import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
-
-// 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
 import SearchResultList from './components/SearchResultList.vue'
 
 // 导入工具函数
-import musicApi, { QUALITY_LEVELS } from './services/musicApi.js'
+import musicApi from './services/musicApi.js'
 import { isDark, toggleTheme, initThemeFromLocalStorage } from './utils/themeManager.js'
 import { settings, loadSettings, saveSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults,
+    musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults,
     currentParsingTrack, parsingProgress
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { isMobile, initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
-import { getCurrentExampleLinks, getExampleTitle } from './utils/exampleData.js'
+import { getExampleLinks, getExampleTitle } from './utils/exampleData.js'
 
 // 响应式数据
 const currentView = ref('search')
@@ -139,67 +128,33 @@ const searchContainerRef = ref(null)
 // 播放列表
 const playerPlaylist = ref([])
 
-// 模式配置 - 按顺序：1 搜索，2 单曲，3 歌单，4 专辑，5 榜单
-const modes = [
-  { key: 'search', label: '搜索', title: '输入搜索关键词', desc: '支持搜索歌曲、歌手、专辑等', placeholder: '请输入搜索关键词' },
-  { key: 'music', label: '单曲', title: '输入歌曲 URL 或 ID', desc: '支持单曲分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐单曲链接或ID' },
-  { key: 'playlist', label: '歌单', title: '输入歌单 URL 或 ID', desc: '支持歌单分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐歌单链接或ID' },
-  { key: 'album', label: '专辑', title: '输入专辑 URL 或 ID', desc: '支持专辑分享链接或直接输入数字ID', placeholder: '在此输入网易云音乐专辑链接或ID' },
-  { key: 'rank', label: '榜单', title: '选择官方榜单', desc: '获取网易云官方实时排行榜数据', placeholder: '' }
-]
-
-// 示例链接 - 使用计算属性，随视图切换自动更新
-const exampleLinks = computed(() => {
-  return getCurrentExampleLinks(currentView.value)
-})
-
-// 方法
-const getCurrentMode = () => {
-  return modes.find(m => m.key === currentView.value) || modes[0]
+// 搜索配置
+const searchConfig = {
+  title: '输入搜索关键词',
+  description: '支持搜索歌曲、歌手、歌单、专辑',
+  placeholder: '请输入歌曲名、歌手名、专辑名或歌单名'
 }
 
-const getCurrentExampleTitle = () => {
-  return getExampleTitle(currentView.value)
-}
+// 示例链接
+const exampleLinks = getExampleLinks('search')
+const exampleTitle = getExampleTitle('search')
 
 const handleNoticeClose = () => {
   console.log('Notice closed')
 }
 
-const handleViewChange = (view) => {
-  currentView.value = view
-  // 切换模式时不清空搜索结果，保持每个模式的独立状态
-  // 只清空其他模式的解析详情结果
-  if (view === 'music') {
-    clearPlaylistResult()
-    clearAlbumResult()
-  } else if (view === 'playlist') {
-    clearMusicResult()
-    clearAlbumResult()
-  } else if (view === 'album') {
-    clearMusicResult()
-    clearPlaylistResult()
-  }
-}
-
 const handleParse = async ({ url }) => {
   musicUrl.value = url
-  // 从设置中读取音质
   const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, currentView.value)
+  await parseMusic(quality, 'search')
   
-  // 解析成功后添加到历史记录
   if (searchContainerRef.value && url.trim()) {
     searchContainerRef.value.addHistoryRecord(url.trim())
   }
 }
 
 const handleExampleClick = (link) => {
-  setExampleUrl(link.url, currentView.value)
-}
-
-const handleChartChange = (chartId) => {
-  console.log('Chart changed:', chartId)
+  setExampleUrl(link.url, 'search')
 }
 
 const handlePageChange = (page) => {
@@ -211,8 +166,13 @@ const handlePageChange = (page) => {
   console.log('Display tracks updated:', displayTracks.value.slice(0, 3))
 }
 
+const handleSearchTypeChange = async (searchType) => {
+  console.log('Search type changed to:', searchType)
+  const quality = settings.selectedQuality || 'lossless'
+  await parseMusic(quality, searchType)
+}
+
 const handleParseSong = (song) => {
-  currentView.value = 'music'
   musicUrl.value = `https://music.163.com/song?id=${song.id}`
   const quality = settings.selectedQuality || 'lossless'
   parseMusic(quality, 'music')

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasResults || currentDetail" class="search-result-panel">
+  <div v-if="hasResults || currentDetail || hasSearchResults" class="search-result-panel">
     <!-- 返回按钮（二级页面时显示） -->
     <div v-if="currentDetail" class="back-bar">
       <el-button 
@@ -19,17 +19,30 @@
       </div>
     </div>
 
+    <!-- 搜索类型Tab（搜索结果不为空时显示） -->
+    <div v-if="hasSearchResults && !currentDetail" class="search-tabs">
+      <el-button
+        v-for="tab in searchTabs"
+        :key="tab.key"
+        :class="['search-tab', { active: currentSearchType === tab.key }]"
+        @click="handleSearchTabClick(tab.key)"
+      >
+        {{ tab.label }}
+        <span v-if="getTabCount(tab.key) > 0" class="tab-count">{{ getTabCount(tab.key) }}</span>
+      </el-button>
+    </div>
+
     <!-- loading 状态 -->
     <div v-if="currentDetail && currentDetail.loading" class="loading-view">
-      <div class="loading-spinner">
-        <svg class="spinner" viewBox="0 0 50 50">
-          <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
+      <div class="loading-content">
+        <svg class="loading-spinner" viewBox="0 0 50 50">
+          <circle class="loading-path" cx="25" cy="25" r="20" fill="none" stroke-width="4"></circle>
         </svg>
-        <p class="loading-text">正在加载...</p>
+        <span class="loading-text">正在加载...</span>
       </div>
     </div>
 
-    <!-- 歌单详情页面（二级页面）- 使用 SearchResultList 组件 -->
+    <!-- 歌单/专辑详情页面 - 使用 SearchResultList 组件 -->
     <SearchResultList 
       v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
       :playlist-info="currentDetail"
@@ -38,7 +51,7 @@
       :page-size="detailPageSize"
       :total-tracks="detailTracks.length"
       :settings="settings"
-      :is-detail-page="true"
+      :type="currentDetail.isAlbum ? 'album' : 'playlist'"
       @track-parsed="handleParse"
       @track-play="handleTrackPlay"
       @page-change="goToDetailPage"
@@ -106,61 +119,57 @@
       </div>
     </div>
 
-    <!-- 分页组件（歌单和专辑搜索结果） -->
+    
+
+    <!-- 歌曲列表展示（使用 SearchResultList 组件） -->
+    <SearchResultList 
+      v-if="displayMode === 'search' && !currentDetail && songs.length > 0"
+      :display-tracks="songs"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      :total-tracks="songs.length"
+      :settings="settings"
+      :type="displayMode"
+      @track-parsed="handleTrackParse"
+      @track-play="handleTrackPlay"
+      @page-change="goToPage"
+    />
+
+    <!-- 歌手卡片展示 -->
+    <div v-if="displayMode === 'artist' && !currentDetail" class="artist-grid">
+      <div 
+        v-for="artist in currentPageData" 
+        :key="artist.id" 
+        class="artist-card"
+      >
+        <div class="artist-cover-wrapper">
+          <img 
+            :src="artist.avatarUrl" 
+            :alt="artist.name" 
+            class="artist-cover"
+            loading="lazy"
+          />
+        </div>
+        <div class="artist-info">
+          <h4 class="artist-name">{{ artist.name }}</h4>
+          <p class="artist-music-count">{{ artist.musicCount }} 首歌曲</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分页组件（歌手、歌单和专辑搜索结果） -->
     <Pagination 
-      v-if="(displayMode === 'playlist' || displayMode === 'album') && !currentDetail && totalCount > 0"
+      v-if="(displayMode === 'playlist' || displayMode === 'album' || displayMode === 'artist') && !currentDetail && totalCount > 0"
       :total-count="totalCount"
       :page-size="pageSize"
       v-model="currentPage"
     />
-
-    <!-- 歌曲列表展示 -->
-    <div v-if="displayMode === 'search' && !currentDetail" class="song-list-container">
-      <div class="song-table-wrapper">
-        <table class="song-table">
-          <thead>
-            <tr>
-              <th class="col-index">序号</th>
-              <th class="col-cover"></th>
-              <th class="col-song">歌曲</th>
-              <th class="col-artist">歌手</th>
-              <th class="col-album">专辑</th>
-              <th class="col-action">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(song, index) in songs" :key="song.id" class="song-row">
-              <td class="col-index">{{ index + 1 }}</td>
-              <td class="col-cover">
-                <img 
-                  v-if="song.picUrl" 
-                  :src="song.picUrl" 
-                  :alt="song.name" 
-                  class="song-cover"
-                  loading="lazy"
-                />
-              </td>
-              <td class="col-song">
-                <div class="song-info">
-                  <span class="song-name">{{ song.name }}</span>
-                </div>
-              </td>
-              <td class="col-artist">{{ song.artists }}</td>
-              <td class="col-album">{{ song.album }}</td>
-              <td class="col-action">
-                <el-button size="small" @click="handleParse(song, 'song')">解析单曲</el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { ElButton, ElMessage, ElNotification, ElProgress } from 'element-plus'
+import { ElButton, ElMessage, ElNotification, ElProgress, ElLoading } from 'element-plus'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import SearchResultList from './SearchResultList.vue'
@@ -179,13 +188,24 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  currentMode: {
-    type: String,
-    default: 'search'
+  artists: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select', 'track-play'])
+const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select', 'track-play', 'search-type-change'])
+
+// 搜索类型Tab配置
+const searchTabs = [
+  { key: 'search', label: '单曲' },
+  { key: 'artist', label: '歌手' },
+  { key: 'playlist', label: '歌单' },
+  { key: 'album', label: '专辑' }
+]
+
+// 当前搜索类型
+const currentSearchType = ref('search')
 
 // 二级页面状态
 const currentDetail = ref(null)
@@ -242,18 +262,35 @@ watch(() => props.currentMode, () => {
 // currentPageData 是 computed，会自动响应 currentPage 的变化
 // 不需要强制更新
 
+// 获取各Tab的数据数量
+const getTabCount = (tabKey) => {
+  switch (tabKey) {
+    case 'search':
+      return props.songs.length
+    case 'artist':
+      return props.artists.length
+    case 'playlist':
+      return props.playlists.length
+    case 'album':
+      return props.albums.length
+    default:
+      return 0
+  }
+}
+
+// 是否有搜索结果
+const hasSearchResults = computed(() => {
+  return props.songs.length > 0 || props.artists.length > 0 || props.playlists.length > 0 || props.albums.length > 0
+})
+
 const displayMode = computed(() => {
-  // 严格根据当前模式显示对应类型的结果
-  // 每个模式只显示自己的数据，不回退到其他模式
-  if (props.currentMode === 'playlist') return 'playlist'
-  if (props.currentMode === 'album') return 'album'
-  if (props.currentMode === 'search' || props.currentMode === 'music' || props.currentMode === 'rank') return 'search'
-  return null
+  return currentSearchType.value
 })
 
 const title = computed(() => {
   const titles = {
-    search: '歌曲搜索结果',
+    search: '单曲搜索结果',
+    artist: '歌手搜索结果',
     playlist: '歌单搜索结果',
     album: '专辑搜索结果'
   }
@@ -261,11 +298,7 @@ const title = computed(() => {
 })
 
 const totalCount = computed(() => {
-  // 只计算当前模式对应的数据数量
-  if (props.currentMode === 'playlist') return props.playlists.length
-  if (props.currentMode === 'album') return props.albums.length
-  if (props.currentMode === 'search' || props.currentMode === 'music') return props.songs.length
-  return 0
+  return getTabCount(currentSearchType.value)
 })
 
 // 分页计算
@@ -278,15 +311,29 @@ const currentPageData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   
-  // 只返回当前模式对应的数据
-  if (props.currentMode === 'playlist') {
-    return props.playlists.slice(start, end)
+  switch (currentSearchType.value) {
+    case 'playlist':
+      return props.playlists.slice(start, end)
+    case 'album':
+      return props.albums.slice(start, end)
+    case 'artist':
+      return props.artists.slice(start, end)
+    default:
+      return []
   }
-  if (props.currentMode === 'album') {
-    return props.albums.slice(start, end)
-  }
-  return []
 })
+
+// Tab切换方法
+const handleSearchTabClick = (tabKey) => {
+  currentSearchType.value = tabKey
+  currentPage.value = 1
+  
+  // 只有当对应数据为空时才触发搜索
+  const currentDataCount = getTabCount(tabKey)
+  if (currentDataCount === 0) {
+    emit('search-type-change', tabKey)
+  }
+}
 
 // 分页方法
 const goToPage = (page) => {
@@ -397,18 +444,7 @@ const visiblePages = computed(() => {
 
 const hasResults = computed(() => {
   if (currentDetail.value) return true
-  
-  switch (props.currentMode) {
-    case 'search':
-    case 'music':
-      return props.songs.length > 0
-    case 'playlist':
-      return props.playlists.length > 0
-    case 'album':
-      return props.albums.length > 0
-    default:
-      return totalCount.value > 0
-  }
+  return getTabCount(currentSearchType.value) > 0
 })
 
 const handleSelect = (item) => {
@@ -416,8 +452,15 @@ const handleSelect = (item) => {
 }
 
 // 处理播放事件
-const handleTrackPlay = (track) => {
-  emit('track-play', track)
+const handleTrackPlay = (track, playlist) => {
+  emit('track-play', track, playlist)
+}
+
+// 处理解析事件
+const handleTrackParse = (data) => {
+  if (data?.track) {
+    emit('parse-song', data.track, data.quality)
+  }
 }
 
 // 处理播放列表数据
@@ -726,37 +769,37 @@ const getAlbum = (track) => {
   padding: 2rem;
 }
 
-.loading-spinner {
+.loading-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  transform: none !important;
+  gap: 12px;
 }
 
-.loading-spinner .loading-text {
-  transform: none !important;
-}
-
-.spinner {
+.loading-spinner {
   width: 40px;
   height: 40px;
-  animation: rotate 1s linear infinite;
+  animation: loading-rotate 1s linear infinite;
 }
 
-.spinner .path {
+.loading-path {
   stroke: var(--color-primary);
   stroke-linecap: round;
-  animation: dash 1.5s ease-in-out infinite;
+  animation: loading-dash 1.5s ease-in-out infinite;
 }
 
-@keyframes rotate {
+.loading-text {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+@keyframes loading-rotate {
   100% {
     transform: rotate(360deg);
   }
 }
 
-@keyframes dash {
+@keyframes loading-dash {
   0% {
     stroke-dasharray: 1, 150;
     stroke-dashoffset: 0;
@@ -1274,6 +1317,130 @@ const getAlbum = (track) => {
   .col-action {
     width: 80px;
   }
+}
+
+/* 搜索类型Tab */
+.search-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: 0 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.search-tab {
+  padding: 0.75rem 1.25rem !important;
+  height: auto !important;
+  border: none !important;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
+  background: transparent !important;
+  font-weight: 500 !important;
+  font-size: var(--font-size-body-md) !important;
+  color: var(--color-text-muted) !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  bottom: -1px;
+}
+
+.search-tab:hover {
+  color: var(--color-primary) !important;
+  background: var(--color-surface-container-low) !important;
+}
+
+.search-tab.active {
+  color: var(--color-primary) !important;
+  background: var(--color-surface-white) !important;
+  border-bottom: 2px solid var(--color-primary) !important;
+}
+
+.tab-count {
+  margin-left: 0.5rem;
+  padding: 2px 8px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 歌手卡片网格 */
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .artist-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .artist-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .artist-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.artist-card {
+  background: var(--color-surface-container-low);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.artist-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.artist-cover-wrapper {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.artist-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 1rem;
+  border: 2px solid var(--color-border-subtle);
+}
+
+.artist-card:hover .artist-cover {
+  transform: scale(1.05);
+}
+
+.artist-info {
+  padding: 1rem;
+  text-align: center;
+}
+
+.artist-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-music-count {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
 }
 
 </style>

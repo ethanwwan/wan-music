@@ -51,6 +51,7 @@ export const albumInfo = ref(null)
 export const searchResults = ref([])
 export const playlistSearchResults = ref([])
 export const albumSearchResults = ref([])
+export const artistSearchResults = ref([])
 
 // 移除循环解析模式相关状态
 
@@ -103,21 +104,31 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
   if (mode === 'search') {
     loading.value = true
     try {
-      const result = await musicApi.searchMusic(musicUrl.value)
-      musicInfo.value = { ...result, name: musicUrl.value }
-      if (result.success) {
-        searchResults.value = result.data.songs || []
+      // 只搜索单曲
+      const songResult = await musicApi.searchMusic(musicUrl.value)
+      
+      musicInfo.value = { name: musicUrl.value }
+      
+      // 更新单曲搜索结果，清空其他类型结果
+      searchResults.value = songResult.success ? (songResult.data.songs || []) : []
+      artistSearchResults.value = []
+      playlistSearchResults.value = []
+      albumSearchResults.value = []
+      
+      if (searchResults.value.length > 0) {
         ElNotification({
           title: '搜索成功',
-          message: `找到 ${searchResults.value.length || 0} 首相关歌曲`,
+          message: `找到 ${searchResults.value.length} 首歌曲`,
           type: 'success'
         })
       } else {
-        searchResults.value = []
-        ElMessage.warning(result.error || '搜索结果为空')
+        ElMessage.warning('未找到相关结果')
       }
     } catch (error) {
       searchResults.value = []
+      artistSearchResults.value = []
+      playlistSearchResults.value = []
+      albumSearchResults.value = []
       ElMessage.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false
@@ -194,6 +205,31 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       }
     } catch (error) {
       albumSearchResults.value = []
+      ElMessage.error('搜索失败，请稍后重试')
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
+  // 歌手搜索模式
+  if (mode === 'artist') {
+    loading.value = true
+    try {
+      const result = await musicApi.searchArtist(musicUrl.value)
+      if (result.success && result.data) {
+        artistSearchResults.value = result.data
+        ElNotification({
+          title: '搜索成功',
+          message: `找到 ${result.data.length || 0} 位歌手`,
+          type: 'success'
+        })
+      } else {
+        artistSearchResults.value = []
+        ElMessage.warning(result.error || '搜索结果为空')
+      }
+    } catch (error) {
+      artistSearchResults.value = []
       ElMessage.error('搜索失败，请稍后重试')
     } finally {
       loading.value = false

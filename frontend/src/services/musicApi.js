@@ -633,8 +633,9 @@ export const searchMusic = async (keyword) => {
           id: song.id,
           name: song.name,
           artists: song.artists || [],
-          album: song.album || {},
-          duration: song.duration || 0
+          album: song.album || (song.al ? song.al.name : ''),
+          duration: song.duration || 0,
+          picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || ''
         }))
       }
       
@@ -738,6 +739,56 @@ export const searchAlbum = async (keyword) => {
       
       // 缓存结果
       setCachedSearchResult('album', keyword, searchData)
+      
+      return {
+        success: true,
+        data: searchData
+      }
+    } else {
+      return {
+        success: false,
+        error: result.message || '搜索失败'
+      }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || '搜索失败'
+    }
+  }
+}
+
+// 搜索歌手
+export const searchArtist = async (keyword) => {
+  try {
+    // 检查缓存
+    const cached = getCachedSearchResult('artist', keyword)
+    if (cached) {
+      return { success: true, data: cached }
+    }
+
+    const response = await fetch('/search/artist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ keyword })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      const searchData = result.data.map(artist => ({
+        id: artist.id,
+        name: artist.name,
+        avatarUrl: artist.avatarUrl || artist.picUrl || '',
+        musicCount: artist.musicCount || artist.songCount || 0,
+        albumCount: artist.albumCount || 0,
+        fansCount: artist.fansCount || 0
+      }))
+      
+      // 缓存结果
+      setCachedSearchResult('artist', keyword, searchData)
       
       return {
         success: true,
@@ -1027,5 +1078,6 @@ export default {
   getAlbumDetail,
   searchMusic,
   searchPlaylist,
-  searchAlbum
+  searchAlbum,
+  searchArtist
 }
