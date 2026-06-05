@@ -166,7 +166,7 @@
           <el-form-item label="缓存大小">
             <div class="cache-info">
               <div class="cache-size">
-                <el-icon class="cache-icon"><Database /></el-icon>
+                <el-icon class="cache-icon"><Folder /></el-icon>
                 <span class="size-text">{{ cacheSize }}</span>
               </div>
               <el-button 
@@ -176,7 +176,7 @@
                 :loading="clearingCache"
                 class="clear-cache-btn"
               >
-                <el-icon><Trash /></el-icon>
+                <el-icon><Delete /></el-icon>
                 <span>清除缓存</span>
               </el-button>
             </div>
@@ -192,8 +192,8 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { ElMessage, ElConfirm } from 'element-plus'
-import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close, Database, Trash } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Link, Brush, Headset, Sunny, Moon, Monitor, Close, Folder, Delete } from '@element-plus/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
 
@@ -234,7 +234,7 @@ const refreshCacheSize = () => {
 
 // 清除缓存
 const handleClearCache = async () => {
-  await ElConfirm(
+  await ElMessageBox.confirm(
     '确认清除缓存？',
     '清除后所有缓存数据将被删除，下次访问需要重新加载',
     {

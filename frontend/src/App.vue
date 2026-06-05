@@ -57,9 +57,8 @@
           <!-- 音乐播放器组件 -->
           <MusicPlayer
             v-if="musicInfo"
-            :music-info="musicInfo"
-            :music-url="musicInfo.url"
-            @track-parsed="handleTrackParsed"
+            :playlist="[musicInfo]"
+            :current-index="0"
           />
         </div>
 
@@ -95,7 +94,7 @@
       <SettingsDialog v-model="showSettingsDialog" />
 
       <!-- 底部播放器 -->
-      <BottomPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" />
+      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" />
     </el-container>
   </el-config-provider>
 </template>
@@ -118,7 +117,6 @@ import SettingsDialog from './components/SettingsDialog.vue'
 // 导入原有组件
 import MusicPlayer from './components/MusicPlayer.vue'
 import SearchResultList from './components/SearchResultList.vue'
-import BottomPlayer from './components/BottomPlayer.vue'
 
 // 导入工具函数
 import musicApi, { QUALITY_LEVELS } from './services/musicApi.js'
