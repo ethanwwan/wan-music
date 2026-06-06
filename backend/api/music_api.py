@@ -567,14 +567,33 @@ class NeteaseAPI:
             artist_info = {}
             
             if songs:
-                # 从第一首歌中提取歌手信息
-                first_song = songs[0]
-                artists = first_song.get('ar', [])
-                if artists:
-                    artist_info['id'] = artists[0].get('id')
-                    artist_info['name'] = artists[0].get('name')
-                    artist_info['avatarUrl'] = artists[0].get('picUrl', '')
+                # 根据请求的artist_id查找正确的歌手信息
+                # 遍历歌曲，找到匹配的歌手
+                found_artist = None
+                for song in songs:
+                    artists = song.get('ar', [])
+                    for artist in artists:
+                        if str(artist.get('id')) == str(artist_id):
+                            found_artist = artist
+                            break
+                    if found_artist:
+                        break
+                
+                # 如果找到匹配的歌手，使用其信息
+                if found_artist:
+                    artist_info['id'] = found_artist.get('id')
+                    artist_info['name'] = found_artist.get('name')
+                    artist_info['avatarUrl'] = found_artist.get('picUrl', '')
                     artist_info['musicCount'] = len(songs)
+                else:
+                    # 如果没有找到匹配的，使用第一首歌的第一个歌手作为 fallback
+                    first_song = songs[0]
+                    artists = first_song.get('ar', [])
+                    if artists:
+                        artist_info['id'] = artists[0].get('id')
+                        artist_info['name'] = artists[0].get('name')
+                        artist_info['avatarUrl'] = artists[0].get('picUrl', '')
+                        artist_info['musicCount'] = len(songs)
             
             # 格式化歌曲列表
             formatted_songs = []

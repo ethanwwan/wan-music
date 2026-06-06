@@ -175,13 +175,14 @@ const getProxyUrl = (url) => {
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
 }
 
 .cover-placeholder.fallback {
   position: absolute;
   top: 0;
   left: 0;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
 }
 
 .card-overlay {

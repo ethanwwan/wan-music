@@ -714,17 +714,30 @@ const handleParse = async (item, type) => {
     }
   } else if (type === 'artist') {
     resetDetailPagination()
-    currentDetail.value = { ...item, loading: true }
+    
+    // 直接使用卡片中的歌手信息，避免API返回错误的歌手信息
+    currentDetail.value = {
+      id: item.id,
+      name: item.name,
+      coverImgUrl: item.coverImgUrl,
+      artist: item.name,
+      creator: item.name,
+      trackCount: 0,
+      loading: true,
+      isArtist: true
+    }
     
     if (cache.value.artist[item.id]) {
       const cached = cache.value.artist[item.id]
       currentDetail.value = {
         id: cached.id,
         name: cached.name,
-        coverImgUrl: cached.avatarUrl,
+        coverImgUrl: getProxyUrl(cached.avatarUrl) || item.coverImgUrl,
         artist: cached.name,
+        creator: cached.name,
         trackCount: cached.trackCount,
-        loading: false
+        loading: false,
+        isArtist: true
       }
       detailTracks.value = cached.tracks
       
@@ -747,23 +760,26 @@ const handleParse = async (item, type) => {
       const result = await response.json()
       
       if (result.success && result.data) {
-        const artist = result.data.artist || result.data
+        const artistData = result.data.artist || result.data
+        
+        // 优先使用卡片中的歌手信息，避免API返回错误的歌手（如合唱歌曲的情况）
         currentDetail.value = {
-          id: artist.id,
-          name: artist.name,
-          coverImgUrl: artist.avatarUrl,
-          artist: artist.name,
-          trackCount: artist.songs?.length || artist.musicCount || 0,
+          id: item.id,
+          name: item.name,
+          coverImgUrl: item.coverImgUrl,
+          artist: item.name,
+          creator: item.name,
+          trackCount: artistData.songs?.length || artistData.musicCount || 0,
           loading: false,
           isArtist: true
         }
-        detailTracks.value = artist.songs || []
+        detailTracks.value = artistData.songs || []
         
         cache.value.artist = cache.value.artist || {}
         cache.value.artist[item.id] = {
-          id: artist.id,
-          name: artist.name,
-          avatarUrl: artist.avatarUrl,
+          id: artistData.id,
+          name: artistData.name || item.name,
+          avatarUrl: artistData.avatarUrl || artistData.picUrl || '',
           trackCount: detailTracks.value.length,
           tracks: detailTracks.value
         }
@@ -1051,7 +1067,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
   color: var(--color-text-muted);
 }
 
@@ -1164,7 +1180,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
   color: var(--color-text-muted);
 }
 
@@ -1417,7 +1433,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
   color: var(--color-text-muted);
 }
 

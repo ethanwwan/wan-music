@@ -204,6 +204,7 @@ const handlePageChange = (page) => {
 
 const handleSearchTypeChange = async (searchType) => {
   console.log('Search type changed to:', searchType)
+  console.log('musicUrl.value at artist tab switch:', musicUrl.value)
   const quality = settings.selectedQuality || 'lossless'
   await parseMusic(quality, searchType)
 }

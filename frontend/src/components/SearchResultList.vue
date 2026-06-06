@@ -867,7 +867,7 @@ const formatPlayCount = (count) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
   color: var(--color-text-muted);
 }
 
@@ -877,7 +877,7 @@ const formatPlayCount = (count) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-container-low);
+  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
   color: var(--color-text-muted);
 }
 
