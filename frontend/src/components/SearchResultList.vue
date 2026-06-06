@@ -5,8 +5,19 @@
       <!-- 歌单/专辑标题区域（只有在有详情数据时显示） -->
       <div v-if="playlistData" :class="type !== 'search' ? 'detail-header' : 'playlist-header'">
         <div class="header-left">
-          <div v-if="playlistData.coverImgUrl" :class="type !== 'search' ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
-            <img :src="playlistData.coverImgUrl" :alt="playlistData.name" :class="type !== 'search' ? 'detail-cover' : 'playlist-cover'" />
+          <div :class="type !== 'search' ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
+            <img 
+              v-if="playlistData.coverImgUrl"
+              :src="playlistData.coverImgUrl" 
+              :alt="playlistData.name" 
+              :class="type !== 'search' ? 'detail-cover' : 'playlist-cover'" 
+              @error="handleCoverError($event)"
+            />
+            <div v-else class="cover-placeholder">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
           </div>
           <div :class="type !== 'search' ? 'detail-info' : 'playlist-info'">
             <h1 :class="type !== 'search' ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
@@ -70,14 +81,22 @@
                 <span v-else>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
               </td>
               <td class="col-cover">
-                <img
-                  :src="getCover(track)"
-                  :alt="track.name"
-                  class="track-cover"
-                  :class="{ 'grayscale': track.unavailable }"
-                  loading="lazy"
-                  @error="onCoverError"
-                />
+                <div class="track-cover-wrapper">
+                  <img
+                    v-if="getCover(track)"
+                    :src="getCover(track)"
+                    :alt="track.name"
+                    class="track-cover"
+                    :class="{ 'grayscale': track.unavailable }"
+                    loading="lazy"
+                    @error="handleTrackCoverError($event)"
+                  />
+                  <div v-else class="track-cover-placeholder">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    </svg>
+                  </div>
+                </div>
               </td>
               <td class="col-name">
                 <span class="track-name" :class="{ 'unavailable-text': track.unavailable }">{{ track.name }}</span>
@@ -222,12 +241,29 @@ const handleTrackClick = (track) => {
 const getCover = (track) => {
   const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || playlistData.value?.picUrl || ''
   if (!coverUrl) return ''
-  if (coverUrl.startsWith('https')) return coverUrl
   return `/stream?url=${encodeURIComponent(coverUrl)}`
 }
 
 const onCoverError = (e) => {
   e.target.style.visibility = 'hidden'
+}
+
+const handleCoverError = (event) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholder = target.parentElement.querySelector('.cover-placeholder')
+  if (placeholder) {
+    placeholder.style.display = 'flex'
+  }
+}
+
+const handleTrackCoverError = (event) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholder = target.parentElement.querySelector('.track-cover-placeholder')
+  if (placeholder) {
+    placeholder.style.display = 'flex'
+  }
 }
 
 // 获取歌手名称（兼容多种字段结构）
@@ -797,7 +833,6 @@ const formatPlayCount = (count) => {
 .tracks-table td {
   padding: 12px 16px;
   vertical-align: middle;
-  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .col-index {
@@ -812,11 +847,38 @@ const formatPlayCount = (count) => {
   padding: 8px 8px;
 }
 
-.track-cover {
+.track-cover-wrapper {
   width: 40px;
   height: 40px;
   border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.track-cover {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+
+.track-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-muted);
+}
+
+.cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-muted);
 }
 
 .col-name {
@@ -841,7 +903,6 @@ const formatPlayCount = (count) => {
   text-align: center;
   padding: 6px 8px;
   margin: 0;
-  border-bottom: none !important;
   box-sizing: border-box;
   white-space: nowrap;
   vertical-align: middle;
@@ -856,7 +917,7 @@ const formatPlayCount = (count) => {
 }
 
 .track-row:hover {
-  background: var(--color-surface-container-low);
+  background: var(--color-primary-light);
 }
 
 .track-row.selected {

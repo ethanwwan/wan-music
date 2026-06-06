@@ -38,7 +38,7 @@
       </div>
     </div>
 
-    <!-- 歌单/专辑详情页面 - 使用 SearchResultList 组件 -->
+    <!-- 歌单/专辑/歌手详情页面 - 使用 SearchResultList 组件 -->
     <SearchResultList 
       v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
       :playlist-info="currentDetail"
@@ -47,7 +47,7 @@
       :page-size="detailPageSize"
       :total-tracks="detailTracks.length"
       :settings="settings"
-      :type="currentDetail.isAlbum ? 'album' : 'playlist'"
+      :type="getDetailType()"
       @track-parsed="handleParse"
       @track-play="handleTrackPlay"
       @page-change="goToDetailPage"
@@ -68,11 +68,18 @@
       >
         <div class="playlist-cover-wrapper">
           <img 
-            :src="playlist.coverImgUrl" 
+            v-if="playlist.coverImgUrl"
+            :src="getProxyUrl(playlist.coverImgUrl)" 
             :alt="playlist.name" 
             class="playlist-cover"
             loading="lazy"
+            @error="handleImageError($event)"
           />
+          <div v-else class="playlist-cover-placeholder">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+          </div>
           <div class="playlist-overlay">
             <span class="track-count">{{ playlist.trackCount }} 首</span>
           </div>
@@ -104,11 +111,18 @@
       >
         <div class="album-cover-wrapper">
           <img 
-            :src="album.coverImgUrl" 
+            v-if="album.coverImgUrl"
+            :src="getProxyUrl(album.coverImgUrl)" 
             :alt="album.name" 
             class="album-cover"
             loading="lazy"
+            @error="handleImageError($event)"
           />
+          <div v-else class="album-cover-placeholder">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+          </div>
           <div class="album-overlay">
             <span class="track-count">{{ album.trackCount }} 首</span>
           </div>
@@ -153,11 +167,18 @@
       >
         <div class="artist-cover-wrapper">
           <img 
-            :src="artist.avatarUrl" 
+            v-if="artist.avatarUrl"
+            :src="getProxyUrl(artist.avatarUrl)" 
             :alt="artist.name" 
             class="artist-cover"
             loading="lazy"
+            @error="handleArtistImageError($event)"
           />
+          <div v-else class="artist-cover-placeholder">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+          </div>
         </div>
         <div class="artist-info">
           <h4 class="artist-name">{{ artist.name }}</h4>
@@ -175,7 +196,7 @@
     <Pagination 
       v-if="(displayMode === 'playlist' || displayMode === 'album' || displayMode === 'artist') && !currentDetail && totalCount > 0"
       :total-count="totalCount"
-      :page-size="pageSize"
+      :page-size="getPageSize()"
       v-model="currentPage"
     />
   </div>
@@ -264,9 +285,17 @@ const saveDetailCache = (type, data) => {
 // 缓存存储（歌单和专辑，从 localStorage 加载）
 const cache = ref(loadDetailCache())
 
-// 分页配置
+// 分页配置 - 单曲每页10条
 const currentPage = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(10)
+
+// 歌手分页配置 - 每页4行，移动端每行2个(8个)，大屏每行4个(16个)
+const artistPageSize = ref(8)
+const artistPageSizeLarge = ref(16)
+
+// 歌单/专辑分页配置 - 每页3行
+const playlistPageSize = ref(6)           // 移动端：3行 × 2列 = 6个
+const playlistPageSizeLarge = ref(12)     // 大屏：3行 × 4列 = 12个
 
 // 监听模式变化，切换时重置分页和详情状态
 watch(() => props.currentMode, () => {
@@ -275,6 +304,24 @@ watch(() => props.currentMode, () => {
   currentDetail.value = null
   detailTracks.value = []
 })
+
+// 监听单曲搜索结果变化，当单曲数据从空变为有数据时，自动切换回单曲tab
+watch(
+  () => props.songs.length,
+  (newLength, oldLength) => {
+    // 只有当单曲数据从空变为有数据时，才自动切换回单曲tab
+    if (oldLength === 0 && newLength > 0) {
+      // 切换回单曲tab
+      currentSearchType.value = 'search'
+      // 重置到第一页
+      currentPage.value = 1
+      // 清除详情状态
+      currentDetail.value = null
+      detailTracks.value = []
+      currentDetailPage.value = 1
+    }
+  }
+)
 
 // 获取各Tab的数据数量
 const getTabCount = (tabKey) => {
@@ -289,6 +336,21 @@ const getTabCount = (tabKey) => {
       return props.albums.length
     default:
       return 0
+  }
+}
+
+// 根据displayMode获取对应的pageSize
+const getPageSize = () => {
+  switch (displayMode.value) {
+    case 'artist':
+      // 歌手列表：每页4行，移动端每行2个(8个)，大屏每行4个(16个)
+      return window.innerWidth >= 768 ? artistPageSizeLarge.value : artistPageSize.value
+    case 'playlist':
+    case 'album':
+      // 歌单/专辑列表：每页3行，移动端每行2个(6个)，大屏每行4个(12个)
+      return window.innerWidth >= 1280 ? playlistPageSizeLarge.value : playlistPageSize.value
+    default:
+      return pageSize.value
   }
 }
 
@@ -317,13 +379,14 @@ const totalCount = computed(() => {
 
 // 分页计算
 const totalPages = computed(() => {
-  return Math.ceil(totalCount.value / pageSize.value)
+  return Math.ceil(totalCount.value / getPageSize())
 })
 
 // 当前页的数据
 const currentPageData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
+  const currentPageSize = getPageSize()
+  const start = (currentPage.value - 1) * currentPageSize
+  const end = start + currentPageSize
   
   switch (currentSearchType.value) {
     case 'playlist':
@@ -423,6 +486,12 @@ const nextDetailPage = () => {
   }
 }
 
+const getDetailType = () => {
+  if (currentDetail.value?.isAlbum) return 'album'
+  if (currentDetail.value?.isArtist) return 'artist'
+  return 'playlist'
+}
+
 const resetDetailPagination = () => {
   currentDetailPage.value = 1
 }
@@ -457,6 +526,30 @@ const hasResults = computed(() => {
 
 const handleSelect = (item) => {
   emit('select', item)
+}
+
+const handleImageError = (event) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholder = target.parentElement.querySelector('.playlist-cover-placeholder, .album-cover-placeholder')
+  if (placeholder) {
+    placeholder.style.display = 'flex'
+  }
+}
+
+const handleArtistImageError = (event) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholder = target.parentElement.querySelector('.artist-cover-placeholder')
+  if (placeholder) {
+    placeholder.style.display = 'flex'
+  } else {
+    const wrapper = target.parentElement
+    const svgPlaceholder = document.createElement('div')
+    svgPlaceholder.className = 'artist-cover-placeholder'
+    svgPlaceholder.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`
+    wrapper.appendChild(svgPlaceholder)
+  }
 }
 
 // 处理播放事件
@@ -661,7 +754,8 @@ const handleParse = async (item, type) => {
           coverImgUrl: artist.avatarUrl,
           artist: artist.name,
           trackCount: artist.songs?.length || artist.musicCount || 0,
-          loading: false
+          loading: false,
+          isArtist: true
         }
         detailTracks.value = artist.songs || []
         
@@ -784,6 +878,11 @@ const getTrackCover = (track) => {
     currentDetail.value?.coverImgUrl ||
     ''
   )
+}
+
+const getProxyUrl = (url) => {
+  if (!url) return ''
+  return `/stream?url=${encodeURIComponent(url)}`
 }
 
 const getArtist = (track) => {
@@ -946,6 +1045,16 @@ const getAlbum = (track) => {
   transition: transform 0.3s ease;
 }
 
+.playlist-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-muted);
+}
+
 .playlist-card:hover .playlist-cover {
   transform: scale(1.05);
 }
@@ -1049,6 +1158,16 @@ const getAlbum = (track) => {
   transition: transform 0.3s ease;
 }
 
+.album-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-muted);
+}
+
 .album-card:hover .album-cover {
   transform: scale(1.05);
 }
@@ -1119,7 +1238,6 @@ const getAlbum = (track) => {
 
 .song-table td {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .col-index {
@@ -1165,11 +1283,10 @@ const getAlbum = (track) => {
 
 .song-table td.col-action {
   width: 100px;
-  border-bottom: none !important;
 }
 
 .song-row:hover {
-  background: var(--color-surface-container-low);
+  background: var(--color-primary-light);
 }
 
 /* 详情页面样式 */
@@ -1242,9 +1359,17 @@ const getAlbum = (track) => {
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
   padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 @media (min-width: 640px) {
+  .artist-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
   .artist-grid {
     grid-template-columns: repeat(4, 1fr);
   }
@@ -1252,13 +1377,7 @@ const getAlbum = (track) => {
 
 @media (min-width: 1024px) {
   .artist-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
-}
-
-@media (min-width: 1280px) {
-  .artist-grid {
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -1290,6 +1409,23 @@ const getAlbum = (track) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.artist-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-muted);
+}
+
+.artist-cover-placeholder.fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
 }
 
 .artist-info {
@@ -1327,7 +1463,6 @@ const getAlbum = (track) => {
   display: flex;
   gap: 0.5rem;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--color-border-subtle);
   margin-bottom: 0;
 }
 

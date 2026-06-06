@@ -22,10 +22,10 @@ from flask import Flask, request, send_file, render_template, Response
 
 try:
     from api.music_api import (
-        NeteaseAPI, APIException, QualityLevel,
-        url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album, search_artist,
-        playlist_detail, album_detail
-    )
+    NeteaseAPI, APIException, QualityLevel,
+    url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album, search_artist,
+    playlist_detail, album_detail, get_artist_top_songs, get_artist_detail
+)
     from api.cookie_manager import CookieManager, CookieException
     from api.music_downloader import MusicDownloader, EnhancedMusicDownloader
 except ImportError as e:
@@ -656,63 +656,60 @@ def get_artist():
         
         cookies = api_service._get_cookies()
         
-        # 调用网易云音乐API获取歌手热门歌曲
-        import requests as req
-        response = req.post(
-            'https://music.163.com/weapi/v1/artist/detail',
-            data={'id': artist_id},
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
-                'Referer': 'https://music.163.com/',
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            cookies=cookies,
-            timeout=10
-        )
+        # 将artist_id转换为整数
+        try:
+            artist_id_int = int(artist_id)
+        except ValueError:
+            return APIResponse.error("歌手ID必须是数字")
         
-        result = response.json()
-        
-        if result.get('code') != 200:
-            return APIResponse.error(f"获取歌手详情失败: {result.get('message', '未知错误')}")
-        
-        # 获取歌手热门歌曲
-        hot_songs_response = req.post(
-            'https://music.163.com/weapi/artist/top/song',
-            data={'id': artist_id, 'limit': 50, 'offset': 0},
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154',
-                'Referer': 'https://music.163.com/',
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            cookies=cookies,
-            timeout=10
-        )
-        
-        hot_songs_result = hot_songs_response.json()
+        # 使用新的API获取歌手详情
+        result = get_artist_detail(artist_id_int, cookies)
         
         # 构建响应数据
-        artist_data = result.get('data', {}).get('artist', {})
-        songs = hot_songs_result.get('songs', [])
+        artist_info = result.get('artist', {})
+        songs = result.get('songs', [])
         
-        # 格式化歌曲列表
-        formatted_songs = []
-        for song in songs:
-            formatted_songs.append({
-                'id': song['id'],
-                'name': song['name'],
-                'artist': '/'.join(ar['name'] for ar in song.get('ar', [])),
-                'album': song.get('al', {}).get('name', ''),
-                'picUrl': song.get('al', {}).get('picUrl', ''),
-                'duration': song.get('dt', 0)
-            })
+        # 如果没有获取到歌手信息，尝试用搜索方式
+        if not artist_info:
+            api_service.logger.info(f"未获取到歌手信息，尝试搜索方式...")
+            search_result = search_artist(str(artist_id), cookies, 10)
+            
+            if search_result:
+                # 尝试匹配相同ID的歌手，否则取第一个
+                matched = None
+                for a in search_result:
+                    if str(a['id']) == str(artist_id):
+                        matched = a
+                        break
+                if not matched:
+                    matched = search_result[0]
+                
+                artist_info = matched
+                
+                # 搜索该歌手的歌曲
+                songs_result = search_music(artist_info['name'], cookies, 50)
+                
+                # 格式化歌曲列表
+                songs = []
+                for song in songs_result:
+                    songs.append({
+                        'id': song['id'],
+                        'name': song['name'],
+                        'artist': song.get('artists', ''),
+                        'album': song.get('album', ''),
+                        'picUrl': song.get('picUrl', ''),
+                        'duration': 0
+                    })
+            else:
+                return APIResponse.error(f"未找到歌手: {artist_id}", 404)
         
         response_data = {
             'artist': {
-                'id': artist_data.get('id'),
-                'name': artist_data.get('name'),
-                'avatarUrl': artist_data.get('picUrl', artist_data.get('cover', '')),
-                'musicCount': artist_data.get('musicSize', len(songs)),
-                'songs': formatted_songs
+                'id': artist_info.get('id', int(artist_id)),
+                'name': artist_info.get('name', '歌手'),
+                'avatarUrl': artist_info.get('avatarUrl', ''),
+                'musicCount': artist_info.get('musicCount', len(songs)),
+                'songs': songs
             }
         }
         

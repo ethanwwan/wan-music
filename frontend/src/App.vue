@@ -189,8 +189,8 @@ const handleParse = async ({ url }) => {
   }
 }
 
-const handleExampleClick = (link) => {
-  setExampleUrl(link.url, 'search')
+const handleExampleClick = () => {
+  // 示例tag点击只填充输入框，不自动解析
 }
 
 const handlePageChange = (page) => {

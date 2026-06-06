@@ -5,14 +5,18 @@
     @click="handleCardClick"
   >
     <div class="card-cover">
-      <img 
-        v-if="track.picUrl || track.cover" 
-        :src="track.picUrl || track.cover" 
-        :alt="track.name"
-        loading="lazy"
-        :class="{ 'grayscale': track.unavailable }"
-      />
+    <img 
+      v-if="track.picUrl || track.cover" 
+      :src="getProxyUrl(track.picUrl || track.cover)" 
+      :alt="track.name"
+      loading="lazy"
+      :class="{ 'grayscale': track.unavailable }"
+      @error="handleImageError"
+    />
       <div v-else class="cover-placeholder">
+        <AudioOutlined :size="40" />
+      </div>
+      <div class="cover-placeholder fallback" v-show="imageError">
         <AudioOutlined :size="40" />
       </div>
       <div class="card-overlay">
@@ -57,9 +61,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { DownloadOutlined, AudioOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+
+const imageError = ref(false)
 
 const props = defineProps({
   track: {
@@ -115,6 +121,17 @@ const handleDownload = () => {
   }
   emit('download', props.track)
 }
+
+const handleImageError = (event) => {
+  imageError.value = true
+  const target = event.target
+  target.style.display = 'none'
+}
+
+const getProxyUrl = (url) => {
+  if (!url) return ''
+  return `/stream?url=${encodeURIComponent(url)}`
+}
 </script>
 
 <style scoped>
@@ -158,6 +175,13 @@ const handleDownload = () => {
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
+}
+
+.cover-placeholder.fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--color-surface-container-low);
 }
 
 .card-overlay {

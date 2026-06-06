@@ -47,7 +47,7 @@
             v-for="link in exampleLinks"
             :key="link.name"
             class="example-tag"
-            @click="handleExampleClick(link)"
+            @click="handleTagClick(link, 'example-click')"
           >
             {{ link.name }}
           </a-tag>
@@ -65,7 +65,7 @@
             v-for="record in historyRecords"
             :key="record.name"
             class="history-tag"
-            @click="handleHistoryClick(record)"
+            @click="handleTagClick(record, 'history-click')"
           >
             {{ record.name }}
           </a-tag>
@@ -188,9 +188,9 @@ const addHistoryRecord = (songName) => {
   }
 }
 
-const handleHistoryClick = (record) => {
-  inputValue.value = record.name
-  emit('history-click', record)
+const handleTagClick = (item, eventName) => {
+  inputValue.value = item.name
+  emit(eventName, item)
 }
 
 const handleParse = () => {
@@ -203,11 +203,6 @@ const handleParse = () => {
     url: value,
     quality: selectedQuality.value
   })
-}
-
-const handleExampleClick = (link) => {
-  inputValue.value = link.name
-  emit('example-click', link)
 }
 
 const handleChartChange = () => {

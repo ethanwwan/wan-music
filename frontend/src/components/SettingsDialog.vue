@@ -334,15 +334,12 @@ const handleThemeColorChange = (colorValue) => {
   selectedThemeColor.value = color.hex
   localStorage.setItem('themeColor', colorValue)
   
-  document.documentElement.style.setProperty('--color-primary', color.hex)
-  
   if (themeMode.value === 'dark') {
     setTheme('dark')
   } else {
     setTheme('light')
   }
   
-  // 通知父组件主题色变化
   emit('theme-color-change', color.hex)
   
   message.success(`已切换到${color.name}`)

@@ -614,7 +614,7 @@ export const searchMusic = async (keyword) => {
     // 检查缓存
     const cached = getCachedSearchResult('music', keyword)
     if (cached) {
-      return { success: true, data: cached }
+      return { success: true, data: cached, fromCache: true }
     }
 
     const response = await fetch('/search', {
@@ -666,7 +666,7 @@ export const searchPlaylist = async (keyword) => {
     // 检查缓存
     const cached = getCachedSearchResult('playlist', keyword)
     if (cached) {
-      return { success: true, data: cached }
+      return { success: true, data: cached, fromCache: true }
     }
 
     const response = await fetch('/search/playlist', {
@@ -715,7 +715,7 @@ export const searchAlbum = async (keyword) => {
     // 检查缓存
     const cached = getCachedSearchResult('album', keyword)
     if (cached) {
-      return { success: true, data: cached }
+      return { success: true, data: cached, fromCache: true }
     }
 
     const response = await fetch('/search/album', {
@@ -764,7 +764,7 @@ export const searchArtist = async (keyword) => {
     // 检查缓存
     const cached = getCachedSearchResult('artist', keyword)
     if (cached) {
-      return { success: true, data: cached }
+      return { success: true, data: cached, fromCache: true }
     }
 
     const response = await fetch('/search/artist', {
@@ -949,7 +949,6 @@ export const batchDownloadMusic = async (musicList, playlistName = '', settings 
               lyrics: musicInfo.lrc,
               cover: musicInfo.cover
             }
-            const { embedMetadata } = await import('./metadataWriter.js')
             audioBuffer = await embedMetadata(audioBuffer, metadata, extension)
           } catch (metaError) {
             console.warn(`元数据写入失败: ${musicInfo.name}`, metaError)

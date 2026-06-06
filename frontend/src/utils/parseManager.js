@@ -117,8 +117,8 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
 
       if (searchResults.value.length > 0) {
         notification.open({
-          title: '搜索成功',
-          message: `找到 ${searchResults.value.length} 首歌曲`,
+          title: songResult.fromCache ? '读取缓存成功' : '搜索成功',
+          message: `找到 ${searchResults.value.length} 首歌曲${songResult.fromCache ? '（来自缓存）' : ''}`,
           type: 'success'
         })
       } else {
@@ -157,8 +157,8 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       if (result.success && result.data) {
         playlistSearchResults.value = result.data
         notification.open({
-          title: '搜索成功',
-          message: `找到 ${result.data.length || 0} 个歌单`,
+          title: result.fromCache ? '读取缓存成功' : '搜索成功',
+          message: `找到 ${result.data.length || 0} 个歌单${result.fromCache ? '（来自缓存）' : ''}`,
           type: 'success'
         })
       } else {
@@ -195,8 +195,8 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       if (result.success && result.data) {
         albumSearchResults.value = result.data
         notification.open({
-          title: '搜索成功',
-          message: `找到 ${result.data.length || 0} 张专辑`,
+          title: result.fromCache ? '读取缓存成功' : '搜索成功',
+          message: `找到 ${result.data.length || 0} 张专辑${result.fromCache ? '（来自缓存）' : ''}`,
           type: 'success'
         })
       } else {
@@ -220,8 +220,8 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       if (result.success && result.data) {
         artistSearchResults.value = result.data
         notification.open({
-          title: '搜索成功',
-          message: `找到 ${result.data.length || 0} 位歌手`,
+          title: result.fromCache ? '读取缓存成功' : '搜索成功',
+          message: `找到 ${result.data.length || 0} 位歌手${result.fromCache ? '（来自缓存）' : ''}`,
           type: 'success'
         })
       } else {
@@ -231,36 +231,6 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     } catch (error) {
       artistSearchResults.value = []
       message.error('搜索失败，请稍后重试')
-    } finally {
-      loading.value = false
-    }
-    return
-  }
-
-  // 榜单模式 - 获取榜单歌曲列表
-  if (mode === 'rank') {
-    loading.value = true
-    try {
-      // 使用输入的内容作为榜单ID，或者使用默认榜单
-      const rankId = musicUrl.value.trim() || '19723756' // 默认飙升榜
-      const result = await musicApi.getPlaylistDetail(`https://music.163.com/discover/toplist?id=${rankId}`)
-      
-      if (result.success && result.data) {
-        // 将榜单歌曲作为搜索结果展示
-        searchResults.value = result.data.tracks || []
-        playlistInfo.value = result.data
-        notification.open({
-          title: '榜单获取成功',
-          message: `成功获取榜单：${result.data.name || '未知榜单'}，共 ${searchResults.value.length} 首歌曲`,
-          type: 'success'
-        })
-      } else {
-        searchResults.value = []
-        message.warning(result.error || '获取榜单失败')
-      }
-    } catch (error) {
-      searchResults.value = []
-      message.error('获取榜单失败，请稍后重试')
     } finally {
       loading.value = false
     }

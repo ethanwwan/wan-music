@@ -1,6 +1,5 @@
 <template>
-  <aside class="floating-actions">
-    <!-- 切换主题 -->
+  <aside class="floating-actions" :style="{ bottom: bottomOffset + 'px' }">
     <button 
       class="action-btn" 
       @click="handleToggleTheme" 
@@ -8,7 +7,6 @@
     >
       <component :is="isDark ? StarFilled : CloudFilled" class="action-icon" />
     </button>
-    <!-- 回到顶部 -->
     <button 
       v-show="showScrollTop" 
       class="action-btn" 
@@ -17,7 +15,6 @@
     >
       <ArrowUpOutlined class="action-icon" />
     </button>
-    <!-- 设置 -->
     <button 
       class="action-btn" 
       @click="handleOpenSettings" 
@@ -36,6 +33,11 @@ import { isDark, toggleTheme } from '../utils/themeManager.js'
 const emit = defineEmits(['open-settings'])
 
 const showScrollTop = ref(false)
+const playerHeight = ref(0)
+
+const bottomOffset = computed(() => {
+  return playerHeight.value + 32
+})
 
 const handleScroll = () => {
   showScrollTop.value = window.scrollY > 200
@@ -56,13 +58,49 @@ const handleOpenSettings = () => {
   emit('open-settings')
 }
 
+const updatePlayerHeight = () => {
+  const player = document.querySelector('.bottom-player')
+  if (player) {
+    const rect = player.getBoundingClientRect()
+    playerHeight.value = rect.height
+  } else {
+    playerHeight.value = 0
+  }
+}
+
+let observer = null
+let checkInterval = null
+
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
+  window.addEventListener('resize', updatePlayerHeight)
   handleScroll()
+  updatePlayerHeight()
+
+  const player = document.querySelector('.bottom-player')
+  if (player) {
+    observer = new MutationObserver((mutations) => {
+      updatePlayerHeight()
+    })
+    observer.observe(player, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+      subtree: true
+    })
+  }
+
+  checkInterval = setInterval(updatePlayerHeight, 100)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('resize', updatePlayerHeight)
+  if (observer) {
+    observer.disconnect()
+  }
+  if (checkInterval) {
+    clearInterval(checkInterval)
+  }
 })
 </script>
 
@@ -70,11 +108,12 @@ onUnmounted(() => {
 .floating-actions {
   position: fixed;
   right: 1.5rem;
-  bottom: 2rem;
+  bottom: 32px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   z-index: 40;
+  transition: bottom 0.3s ease;
 }
 
 .action-btn {

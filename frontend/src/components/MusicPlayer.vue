@@ -16,6 +16,7 @@
               :alt="currentTrack.name" 
               class="cover"
               :class="{ 'playing': isPlaying }"
+              @error="handleCoverError"
             />
             <div v-else class="cover-placeholder">
               <span class="music-icon">♪</span>
@@ -268,6 +269,15 @@ const handleError = () => {
   isPlaying.value = false
   if (hasNext.value) {
     playTrack(currentIndex.value + 1)
+  }
+}
+
+const handleCoverError = (event) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholder = target.parentElement.querySelector('.cover-placeholder')
+  if (placeholder) {
+    placeholder.style.display = 'flex'
   }
 }
 

@@ -54,6 +54,7 @@ class APIConstants:
     ALBUM_DETAIL_API = 'https://music.163.com/api/v1/album/'
     QR_UNIKEY_API = 'https://interface3.music.163.com/eapi/login/qrcode/unikey'
     QR_LOGIN_API = 'https://interface3.music.163.com/eapi/login/qrcode/client/login'
+    ARTIST_TOP_SONG_API = 'https://music.163.com/api/artist/top/song'
     
     # 默认配置
     DEFAULT_CONFIG = {
@@ -534,6 +535,119 @@ class NeteaseAPI:
         except (json.JSONDecodeError, KeyError) as e:
             raise APIException(f"解析搜索响应失败: {e}")
     
+    def get_artist_detail(self, artist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+        """获取歌手详情（包含歌手信息和热门歌曲）
+        
+        Args:
+            artist_id: 歌手ID
+            cookies: 用户cookies
+            
+        Returns:
+            包含歌手信息和歌曲列表的字典
+            
+        Raises:
+            APIException: API调用失败时抛出
+        """
+        try:
+            # 使用网易云音乐官方API获取歌手热门歌曲
+            headers = {
+                'User-Agent': APIConstants.USER_AGENT,
+                'Referer': APIConstants.REFERER
+            }
+            
+            url = f"{APIConstants.ARTIST_TOP_SONG_API}?id={artist_id}"
+            response = HTTPClient.get_with_retry(url, cookies=cookies)
+            
+            result = response.json()
+            if result.get('code') != 200:
+                raise APIException(f"获取歌手详情失败: {result.get('message', '未知错误')}")
+            
+            # 解析歌手信息
+            songs = result.get('songs', [])
+            artist_info = {}
+            
+            if songs:
+                # 从第一首歌中提取歌手信息
+                first_song = songs[0]
+                artists = first_song.get('ar', [])
+                if artists:
+                    artist_info['id'] = artists[0].get('id')
+                    artist_info['name'] = artists[0].get('name')
+                    artist_info['avatarUrl'] = artists[0].get('picUrl', '')
+                    artist_info['musicCount'] = len(songs)
+            
+            # 格式化歌曲列表
+            formatted_songs = []
+            for item in songs:
+                album = item.get('al', {})
+                song_artists = item.get('ar', [])
+                
+                formatted_songs.append({
+                    'id': item['id'],
+                    'name': item['name'],
+                    'artist': '/'.join(a.get('name', '') for a in song_artists),
+                    'album': album.get('name', ''),
+                    'picUrl': album.get('picUrl', ''),
+                    'duration': item.get('dt', 0)
+                })
+            
+            return {
+                'artist': artist_info,
+                'songs': formatted_songs
+            }
+        except APIException:
+            raise
+        except Exception as e:
+            raise APIException(f"获取歌手详情失败: {e}")
+    
+    def get_artist_top_songs(self, artist_id: int, cookies: Dict[str, str], limit: int = 50) -> List[Dict[str, Any]]:
+        """获取歌手热门歌曲
+        
+        Args:
+            artist_id: 歌手ID
+            cookies: 用户cookies
+            limit: 返回数量限制
+            
+        Returns:
+            歌手热门歌曲列表
+            
+        Raises:
+            APIException: API调用失败时抛出
+        """
+        try:
+            # 使用网易云音乐官方API获取歌手热门歌曲
+            headers = {
+                'User-Agent': APIConstants.USER_AGENT,
+                'Referer': APIConstants.REFERER
+            }
+            
+            url = f"{APIConstants.ARTIST_TOP_SONG_API}?id={artist_id}"
+            response = HTTPClient.get_with_retry(url, cookies=cookies)
+            
+            result = response.json()
+            if result.get('code') != 200:
+                raise APIException(f"获取歌手热门歌曲失败: {result.get('message', '未知错误')}")
+            
+            songs = []
+            for item in result.get('songs', [])[:limit]:
+                album = item.get('al', {})
+                artists = item.get('ar', [])
+                
+                song_info = {
+                    'id': item['id'],
+                    'name': item['name'],
+                    'artists': '/'.join(artist.get('name', '') for artist in artists),
+                    'album': album.get('name', ''),
+                    'picUrl': album.get('picUrl', '')
+                }
+                songs.append(song_info)
+            
+            return songs
+        except APIException:
+            raise
+        except Exception as e:
+            raise APIException(f"获取歌手热门歌曲失败: {e}")
+    
     def get_playlist_detail(self, playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
         """获取歌单详情
         
@@ -867,6 +981,18 @@ def search_artist(keywords: str, cookies: Dict[str, str], limit: int = 10) -> Li
     """搜索歌手（向后兼容）"""
     api = NeteaseAPI()
     return api.search_artist(keywords, cookies, limit)
+
+
+def get_artist_detail(artist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
+    """获取歌手详情（包含歌手信息和热门歌曲）"""
+    api = NeteaseAPI()
+    return api.get_artist_detail(artist_id, cookies)
+
+
+def get_artist_top_songs(artist_id: int, cookies: Dict[str, str], limit: int = 50) -> List[Dict[str, Any]]:
+    """获取歌手热门歌曲"""
+    api = NeteaseAPI()
+    return api.get_artist_top_songs(artist_id, cookies, limit)
 
 
 def playlist_detail(playlist_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
