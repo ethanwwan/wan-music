@@ -123,18 +123,32 @@ const props = defineProps({
   playlist: {
     type: Array,
     default: () => []
+  },
+  currentIndex: {
+    type: Number,
+    default: 0
+  },
+  autoplay: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error'])
+const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error', 'update:currentIndex'])
 
 const audioRef = ref(null)
-const currentIndex = ref(0)
+const internalIndex = ref(0)
 const isPlaying = ref(false)
 const showPlaylistModal = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const showIcon = ref(false)
+
+// 使用 prop 或内部索引
+const currentIndex = computed({
+  get: () => props.currentIndex ?? internalIndex.value,
+  set: (val) => { internalIndex.value = val }
+})
 
 // 圆形进度条参数
 const circumference = 2 * Math.PI * 28 // 2πr
@@ -181,7 +195,8 @@ const playTrack = (index) => {
     message.warning('该歌曲无版权')
     return
   }
-  currentIndex.value = index
+  internalIndex.value = index
+  emit('update:currentIndex', index)
   showPlaylistModal.value = false
   initAudio()
   audioRef.value.play()
@@ -272,6 +287,29 @@ const handleContextMenu = (event) => {
 watch(() => props.playlist, (newPlaylist) => {
   if (newPlaylist.length === 0) {
     isPlaying.value = false
+  }
+}, { deep: true })
+
+// 监听 currentIndex prop 变化，自动切换歌曲
+watch(() => props.currentIndex, (newIndex, oldIndex) => {
+  if (newIndex !== oldIndex && newIndex >= 0 && newIndex < props.playlist.length) {
+    // 切换到新歌曲
+    if (audioRef.value) {
+      initAudio()
+      if (props.autoplay || isPlaying.value) {
+        audioRef.value.play()
+        isPlaying.value = true
+      }
+    }
+  }
+})
+
+// 监听 playlist 变化，自动播放第一首
+watch(() => props.playlist, (newPlaylist, oldPlaylist) => {
+  if (newPlaylist.length > 0 && oldPlaylist?.length === 0 && props.autoplay) {
+    initAudio()
+    audioRef.value?.play()
+    isPlaying.value = true
   }
 }, { deep: true })
 

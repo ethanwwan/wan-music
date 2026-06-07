@@ -106,7 +106,7 @@
       </a-drawer>
 
       <!-- 底部播放器 -->
-      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" @play-error="handlePlayError" />
+      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" v-model:current-index="currentPlayIndex" @play-error="handlePlayError" />
     </a-layout>
   </a-config-provider>
 </template>
