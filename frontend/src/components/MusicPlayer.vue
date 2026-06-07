@@ -1,104 +1,67 @@
 <template>
   <div class="player-container">
+    <!-- Mini 悬浮播放按钮 -->
     <div 
-      v-if="!isVisible && playlist.length > 0" 
-      class="player-trigger-area"
-      @mouseenter="handleMouseEnter"
-    ></div>
-    
-    <div v-show="isVisible && playlist.length > 0" class="bottom-player" :class="{ 'expanded': showLyrics }">
-      <div class="player-main">
-        <div class="player-left">
-          <div class="cover-wrapper" @click="toggleLyrics">
-            <img 
-              v-if="currentTrack?.cover" 
-              :src="currentTrack.cover" 
-              :alt="currentTrack.name" 
-              class="cover"
-              :class="{ 'playing': isPlaying }"
-              @error="handleCoverError"
-            />
-            <div v-else class="cover-placeholder">
-              <span class="music-icon">♪</span>
-            </div>
-          </div>
-          
-          <div class="song-info">
-            <div class="song-name">{{ currentTrack?.name || '未播放' }}</div>
-            <div class="artist-name">{{ currentTrack?.artist || '未知艺术家' }}</div>
-          </div>
-        </div>
-        
-        <div class="player-center">
-          <div class="controls">
-            <button class="control-btn" @click="playPrev" :disabled="!hasPrev">
-              <span class="icon">❮❮</span>
-            </button>
-            <button class="play-btn" @click="togglePlay">
-              <span class="icon">{{ isPlaying ? '❚❚' : '▶' }}</span>
-            </button>
-            <button class="control-btn" @click="playNext" :disabled="!hasNext">
-              <span class="icon">❯❯</span>
-            </button>
-          </div>
-          
-          <div class="progress-area">
-            <span class="time">{{ formatTime(currentTime) }}</span>
-            <div class="progress-bar" @click="seekTo">
-              <div class="progress-track" ref="progressTrack">
-                <div class="progress-played" :style="{ width: progressPercent + '%' }"></div>
-                <div class="progress-dot" :style="{ left: progressPercent + '%' }"></div>
-              </div>
-            </div>
-            <span class="time">{{ formatTime(duration) }}</span>
-          </div>
-        </div>
-        
-        <div class="player-right">
-          <div class="action-buttons">
-            <a-button 
-              type="text" 
-              :loading="isDownloading"
-              @click="downloadCurrent"
-            >
-              <template #icon><ArrowDownOutlined /></template>
-            </a-button>
-            <button class="control-btn" @click="togglePlaylist">
-              <span class="icon">☰</span>
-            </button>
-          </div>
+      v-if="playlist.length > 0" 
+      class="mini-player"
+      :class="{ 'playing': isPlaying }"
+      @click="togglePlay"
+    >
+      <!-- 圆形进度条边框 -->
+      <svg class="progress-ring" viewBox="0 0 60 60">
+        <!-- 背景圆 -->
+        <circle
+          class="progress-ring-bg"
+          cx="30"
+          cy="30"
+          r="28"
+          fill="none"
+          stroke-width="3"
+        />
+        <!-- 进度圆 -->
+        <circle
+          class="progress-ring-bar"
+          cx="30"
+          cy="30"
+          r="28"
+          fill="none"
+          stroke-width="3"
+          :stroke-dasharray="circumference"
+          :stroke-dashoffset="progressOffset"
+        />
+      </svg>
+      
+      <!-- 封面/图标 -->
+      <div class="mini-player-content">
+        <img 
+          v-if="currentTrack?.cover && !showIcon" 
+          :src="currentTrack.cover" 
+          :alt="currentTrack.name"
+          class="mini-cover"
+          :class="{ 'rotating': isPlaying }"
+          @error="handleCoverError"
+        />
+        <div v-else class="mini-icon">
+          <PlayCircleOutlined v-if="!isPlaying" />
+          <PauseCircleOutlined v-else />
         </div>
       </div>
       
-      <div v-show="showLyrics" class="lyrics-panel">
-        <div class="lyrics-header">
-          <span class="lyrics-title">歌词</span>
-          <button class="close-btn" @click="toggleLyrics">
-            <span class="icon">✕</span>
-          </button>
-        </div>
-        <div class="lyrics-content" ref="lyricsContainer">
-          <div 
-            v-for="(line, index) in parsedLyrics" 
-            :key="index"
-            :class="{ 'current': index === currentLyricIndex }"
-            class="lyric-line"
-          >
-            {{ line.text }}
-          </div>
-          <div v-if="parsedLyrics.length === 0" class="no-lyrics">
-            暂无歌词
-          </div>
-        </div>
+      <!-- 悬停提示 -->
+      <div class="mini-player-tooltip">
+        <div class="tooltip-title">{{ currentTrack?.name || '未播放' }}</div>
+        <div class="tooltip-artist">{{ currentTrack?.artist || '未知艺术家' }}</div>
+        <div class="tooltip-time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</div>
       </div>
     </div>
-  
+    
+    <!-- 播放列表弹窗 -->
     <div v-if="showPlaylistModal" class="playlist-modal-mask" @click="togglePlaylist">
       <div class="playlist-modal" @click.stop>
         <div class="modal-header">
-          <span class="modal-title">播放列表</span>
+          <span class="modal-title">播放列表 ({{ playlist.length }})</span>
           <button class="close-btn" @click="togglePlaylist">
-            <span class="icon">✕</span>
+            <CloseOutlined />
           </button>
         </div>
         <div class="playlist-content">
@@ -123,7 +86,20 @@
           </div>
         </div>
         <div class="modal-footer">
-          <a-button type="text" @click="clearPlaylist">清空列表</a-button>
+          <a-space>
+            <a-button type="text" size="small" @click="playPrev" :disabled="!hasPrev">
+              <template #icon><SkipBackOutlined /></template>
+              上一首
+            </a-button>
+            <a-button type="text" size="small" @click="playNext" :disabled="!hasNext">
+              下一首
+              <template #icon><SkipForwardOutlined /></template>
+            </a-button>
+            <a-button type="text" size="small" danger @click="clearPlaylist">
+              <template #icon><DeleteOutlined /></template>
+              清空
+            </a-button>
+          </a-space>
         </div>
       </div>
     </div>
@@ -133,7 +109,14 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { ArrowDownOutlined } from '@ant-design/icons-vue'
+import { 
+  PlayCircleOutlined, 
+  PauseCircleOutlined,
+  CloseOutlined,
+  SkipBackOutlined,
+  SkipForwardOutlined,
+  DeleteOutlined
+} from '@ant-design/icons-vue'
 
 const props = defineProps({
   playlist: {
@@ -147,14 +130,13 @@ const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error'])
 const audioRef = ref(null)
 const currentIndex = ref(0)
 const isPlaying = ref(false)
-const isVisible = ref(true)
-const showLyrics = ref(false)
 const showPlaylistModal = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
-const isDownloading = ref(false)
-const lyricsContainer = ref(null)
-const progressTrack = ref(null)
+const showIcon = ref(false)
+
+// 圆形进度条参数
+const circumference = 2 * Math.PI * 28 // 2πr
 
 const currentTrack = computed(() => props.playlist[currentIndex.value])
 
@@ -167,32 +149,9 @@ const progressPercent = computed(() => {
   return (currentTime.value / duration.value) * 100
 })
 
-const parsedLyrics = computed(() => {
-  if (!currentTrack.value?.lyrics) return []
-  const lines = currentTrack.value.lyrics.split('\n')
-  return lines.map(line => {
-    const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)$/)
-    if (match) {
-      const minutes = parseInt(match[1])
-      const seconds = parseInt(match[2])
-      const milliseconds = parseInt(match[3])
-      return {
-        time: minutes * 60 + seconds + milliseconds / 1000,
-        text: match[4] || ''
-      }
-    }
-    return { time: 0, text: line }
-  })
-})
-
-const currentLyricIndex = computed(() => {
-  const current = currentTime.value
-  for (let i = parsedLyrics.value.length - 1; i >= 0; i--) {
-    if (current >= parsedLyrics.value[i].time) {
-      return i
-    }
-  }
-  return -1
+// 计算进度条的偏移量
+const progressOffset = computed(() => {
+  return circumference - (progressPercent.value / 100) * circumference
 })
 
 const formatTime = (time) => {
@@ -241,13 +200,6 @@ const playNext = () => {
   }
 }
 
-const seekTo = (event) => {
-  if (!audioRef.value || !progressTrack.value) return
-  const rect = progressTrack.value.getBoundingClientRect()
-  const percent = (event.clientX - rect.left) / rect.width
-  audioRef.value.currentTime = percent * duration.value
-}
-
 const handleTimeUpdate = () => {
   if (audioRef.value) {
     currentTime.value = audioRef.value.currentTime
@@ -273,7 +225,6 @@ const handleError = () => {
   isPlaying.value = false
   const current = props.playlist[currentIndex.value]
   
-  // 通知父组件该歌曲播放失败（可能是无版权）
   if (current) {
     emit('play-error', current)
   }
@@ -283,13 +234,8 @@ const handleError = () => {
   }
 }
 
-const handleCoverError = (event) => {
-  const target = event.target
-  target.style.display = 'none'
-  const placeholder = target.parentElement.querySelector('.cover-placeholder')
-  if (placeholder) {
-    placeholder.style.display = 'flex'
-  }
+const handleCoverError = () => {
+  showIcon.value = true
 }
 
 const initAudio = () => {
@@ -303,33 +249,6 @@ const initAudio = () => {
   audioRef.value.src = currentTrack.value?.url || ''
 }
 
-const downloadCurrent = async () => {
-  if (!currentTrack.value || isDownloading.value) return
-  isDownloading.value = true
-  try {
-    const response = await fetch(currentTrack.value.url)
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${currentTrack.value.name}.mp3`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-    message.success('下载成功')
-    emit('download', currentTrack.value)
-  } catch (error) {
-    message.error('下载失败')
-  } finally {
-    isDownloading.value = false
-  }
-}
-
-const toggleLyrics = () => {
-  showLyrics.value = !showLyrics.value
-}
-
 const togglePlaylist = () => {
   showPlaylistModal.value = !showPlaylistModal.value
 }
@@ -340,27 +259,18 @@ const clearPlaylist = () => {
   isPlaying.value = false
   currentTime.value = 0
   duration.value = 0
-  showLyrics.value = false
   showPlaylistModal.value = false
 }
 
-const handleMouseEnter = () => {
-  isVisible.value = true
+// 右键点击显示播放列表
+const handleContextMenu = (event) => {
+  event.preventDefault()
+  togglePlaylist()
 }
-
-watch(currentLyricIndex, (newIndex) => {
-  if (newIndex >= 0 && lyricsContainer.value) {
-    const lyricLine = lyricsContainer.value.children[newIndex]
-    if (lyricLine) {
-      lyricLine.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
-  }
-})
 
 watch(() => props.playlist, (newPlaylist) => {
   if (newPlaylist.length === 0) {
-    isVisible.value = false
-    showLyrics.value = false
+    isPlaying.value = false
   }
 }, { deep: true })
 
@@ -382,76 +292,82 @@ onUnmounted(() => {
 <style scoped>
 .player-container {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  left: 24px;
+  bottom: 24px;
   z-index: 9999;
 }
 
-.player-trigger-area {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
+/* Mini 悬浮播放器 */
+.mini-player {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
   cursor: pointer;
-  z-index: 9998;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.bottom-player {
-  position: fixed;
-  bottom: 0;
+.mini-player:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.mini-player:active {
+  transform: scale(1.05);
+}
+
+.mini-player.playing {
+  box-shadow: 0 4px 16px rgba(var(--color-primary-rgb, 0, 87, 194), 0.4);
+}
+
+/* 圆形进度条 */
+.progress-ring {
+  position: absolute;
+  top: 0;
   left: 0;
-  right: 0;
-  height: 80px;
-  background: var(--color-surface-container);
-  border-top: 1px solid var(--color-outline);
-  display: flex;
-  flex-direction: column;
-  padding: 0 24px;
-  z-index: 9999;
-  transition: height 0.3s ease;
-}
-
-.bottom-player.expanded {
-  height: 320px;
-}
-
-.player-main {
-  display: flex;
-  align-items: center;
   width: 100%;
-  height: 80px;
+  height: 100%;
+  transform: rotate(-90deg);
 }
 
-.player-left {
+.progress-ring-bg {
+  stroke: var(--color-surface-container-high);
+}
+
+.progress-ring-bar {
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.1s linear;
+}
+
+/* 内容区域 */
+.mini-player-content {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  border-radius: 50%;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 16px;
-  width: 280px;
-  flex-shrink: 0;
+  justify-content: center;
+  background: var(--color-surface-container);
 }
 
-.cover-wrapper {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.cover {
+.mini-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
-.cover.playing {
-  animation: spin 8s linear infinite;
+.mini-cover.rotating {
+  animation: rotate 8s linear infinite;
 }
 
-@keyframes spin {
+@keyframes rotate {
   from {
     transform: rotate(0deg);
   }
@@ -460,251 +376,62 @@ onUnmounted(() => {
   }
 }
 
-.cover-placeholder {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.music-icon {
+.mini-icon {
   font-size: 24px;
-  color: var(--color-text-muted);
-}
-
-.song-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.song-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artist-name {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.player-center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 0 24px;
-}
-
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.control-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.control-btn:hover:not(:disabled) {
-  background: var(--color-surface-container-high);
-  color: var(--color-text-primary);
-}
-
-.control-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.control-btn .icon {
-  font-size: 18px;
-}
-
-.play-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: none;
-  background: var(--color-primary);
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s;
-}
-
-.play-btn:hover {
-  transform: scale(1.05);
-}
-
-.play-btn .icon {
-  font-size: 20px;
-  margin-left: 2px;
-}
-
-.progress-area {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  max-width: 600px;
-}
-
-.time {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  min-width: 40px;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--color-surface-container-high);
-  border-radius: 2px;
-  cursor: pointer;
-  position: relative;
-}
-
-.progress-track {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.progress-played {
-  height: 100%;
-  background: var(--color-primary);
-  border-radius: 2px;
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
-.progress-dot {
-  width: 12px;
-  height: 12px;
-  background: var(--color-primary);
-  border-radius: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.progress-bar:hover .progress-dot {
-  opacity: 1;
-}
-
-.player-right {
-  width: 120px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 16px;
-}
-
-.action-buttons :deep(.ant-btn) {
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--color-text-muted);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.lyrics-panel {
-  flex: 1;
-  background: var(--color-surface-container);
-  border-top: 1px solid var(--color-outline);
-  display: flex;
-  flex-direction: column;
-}
-
-.lyrics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--color-outline);
-}
-
-.lyrics-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.close-btn:hover {
-  background: var(--color-surface-container-high);
-  color: var(--color-text-primary);
-}
-
-.lyrics-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.lyric-line {
-  font-size: 14px;
-  color: var(--color-text-muted);
-  transition: all 0.3s;
-}
-
-.lyric-line.current {
-  font-size: 16px;
-  font-weight: 500;
   color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.no-lyrics {
-  color: var(--color-text-muted);
+/* 悬停提示 */
+.mini-player-tooltip {
+  position: absolute;
+  left: 70px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--color-surface-white);
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  min-width: 180px;
+}
+
+.mini-player:hover .mini-player-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tooltip-title {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
+.tooltip-artist {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.tooltip-time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 6px;
+}
+
+/* 播放列表弹窗 */
 .playlist-modal-mask {
   position: fixed;
   top: 0;
@@ -713,6 +440,7 @@ onUnmounted(() => {
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 10000;
+  backdrop-filter: blur(4px);
 }
 
 .playlist-modal {
@@ -723,23 +451,40 @@ onUnmounted(() => {
   width: 480px;
   max-height: 600px;
   background: var(--color-surface-white);
-  border-radius: 12px;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--color-outline);
 }
 
 .modal-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--color-on-surface);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
 }
 
 .playlist-content {
@@ -752,10 +497,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .playlist-item:hover:not(.unavailable) {
@@ -763,7 +508,7 @@ onUnmounted(() => {
 }
 
 .playlist-item.active {
-  background: var(--color-primary-container);
+  background: var(--color-primary-light);
 }
 
 .playlist-item.unavailable {
@@ -772,9 +517,9 @@ onUnmounted(() => {
 }
 
 .track-index {
-  width: 24px;
+  width: 28px;
   font-size: 14px;
-  color: var(--color-text-muted);
+  color: var(--color-on-surface-variant);
   text-align: center;
 }
 
@@ -785,7 +530,8 @@ onUnmounted(() => {
 
 .track-name {
   font-size: 14px;
-  color: var(--color-text-primary);
+  font-weight: 500;
+  color: var(--color-on-surface);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -804,10 +550,11 @@ onUnmounted(() => {
 
 .track-artist {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--color-on-surface-variant);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 2px;
 }
 
 .playing-indicator {
@@ -833,14 +580,31 @@ onUnmounted(() => {
 .empty-playlist {
   text-align: center;
   padding: 48px;
-  color: var(--color-text-muted);
+  color: var(--color-on-surface-variant);
   font-size: 14px;
 }
 
 .modal-footer {
-  padding: 12px 24px;
+  padding: 16px 24px;
   border-top: 1px solid var(--color-outline);
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+/* 深色模式 */
+.dark .mini-player {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dark .mini-player-content {
+  background: var(--color-surface-container);
+}
+
+.dark .mini-player-tooltip {
+  background: var(--color-surface-container);
+}
+
+.dark .playlist-modal {
+  background: var(--color-surface);
 }
 </style>
