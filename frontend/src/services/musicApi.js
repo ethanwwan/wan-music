@@ -761,6 +761,63 @@ export const searchAlbum = async (keyword) => {
 // 搜索歌手
 export const searchArtist = async (keyword) => {
   try {
+    // 如果是歌曲链接，提取歌曲ID并获取歌手信息
+    const songIdMatch = keyword.match(/id=(\d+)/)
+    if (songIdMatch) {
+      const songId = songIdMatch[1]
+      try {
+        // 获取歌曲详情
+        const songDetailResponse = await fetch('/api/v3/song/detail', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ songIds: [songId] })
+        })
+        const songDetailResult = await songDetailResponse.json()
+        
+        if (songDetailResult.songs && songDetailResult.songs.length > 0) {
+          const song = songDetailResult.songs[0]
+          // 从歌曲详情中提取歌手信息
+          const artists = song.artists || song.ar || []
+          if (artists.length > 0) {
+            // 使用歌手名称搜索
+            const artistName = artists[0].name
+            // 检查缓存
+            const cached = getCachedSearchResult('artist', artistName)
+            if (cached) {
+              return { success: true, data: cached, fromCache: true }
+            }
+            
+            const artistResponse = await fetch('/search/artist', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ keyword: artistName })
+            })
+            const artistResult = await artistResponse.json()
+            
+            if (artistResult.success && artistResult.data && artistResult.data.length > 0) {
+              const searchData = artistResult.data.map(artist => ({
+                id: artist.id,
+                name: artist.name,
+                avatarUrl: artist.avatarUrl || artist.picUrl || '',
+                musicCount: artist.musicCount || artist.songCount || 0,
+                albumCount: artist.albumCount || 0,
+                fansCount: artist.fansCount || 0
+              }))
+              // 缓存结果
+              setCachedSearchResult('artist', artistName, searchData)
+              return { success: true, data: searchData }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('从歌曲链接获取歌手失败:', e)
+      }
+    }
+
     // 检查缓存
     const cached = getCachedSearchResult('artist', keyword)
     if (cached) {

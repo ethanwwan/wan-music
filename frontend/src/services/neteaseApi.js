@@ -128,35 +128,46 @@ export class NeteaseAPI {
   /**
    * 获取歌词
    */
-  async getLyric(songId, cookies = {}) {
-    try {
-      const data = {
-        id: songId,
-        cp: 'false',
-        tv: '0',
-        lv: '0',
-        rv: '0',
-        kv: '0',
-        yv: '0',
-        ytv: '0',
-        yrv: '0'
+  async getLyric(songId, cookies = {}, retryCount = 3) {
+    let lastError = null
+    
+    for (let i = 0; i < retryCount; i++) {
+      try {
+        const data = {
+          id: songId,
+          cp: 'false',
+          tv: '0',
+          lv: '0',
+          rv: '0',
+          kv: '0',
+          yv: '0',
+          ytv: '0',
+          yrv: '0'
+        }
+
+        const result = await this.postRequest(
+          APIConstants.LYRIC_API,
+          data,
+          cookies
+        )
+
+        if (result.code !== 200) {
+          throw new APIException(result.message || '获取歌词失败')
+        }
+
+        return result
+      } catch (error) {
+        lastError = error
+        console.warn(`getLyric attempt ${i + 1} failed:`, error.message)
+        
+        if (i < retryCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000))
+        }
       }
-
-      const result = await this.postRequest(
-        APIConstants.LYRIC_API,
-        data,
-        cookies
-      )
-
-      if (result.code !== 200) {
-        throw new APIException(result.message || '获取歌词失败')
-      }
-
-      return result
-    } catch (error) {
-      console.error('getLyric error:', error)
-      throw error
     }
+    
+    console.error('getLyric error after retries:', lastError)
+    throw lastError
   }
 
   /**
