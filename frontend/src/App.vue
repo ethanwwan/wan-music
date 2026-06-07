@@ -89,7 +89,7 @@
       <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
 
       <!-- 底部播放器 -->
-      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" />
+      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" @play-error="handlePlayError" />
     </a-layout>
   </a-config-provider>
 </template>
@@ -320,6 +320,21 @@ const handleTrackParsed = async (data) => {
 
 const handleTrackSelected = (track) => {
   console.log('Track selected:', track)
+}
+
+// 处理歌曲播放失败（无版权）
+const handlePlayError = (track) => {
+  // 标记歌曲为不可用
+  track.unavailable = true
+  
+  // 吐司提示
+  message.warning(`《${track.name}》因版权问题暂时无法播放`)
+  
+  // 更新播放列表中的歌曲状态
+  const index = playerPlaylist.value.findIndex(p => p.id === track.id)
+  if (index !== -1) {
+    playerPlaylist.value[index].unavailable = true
+  }
 }
 
 // 生命周期

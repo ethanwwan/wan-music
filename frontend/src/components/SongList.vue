@@ -73,8 +73,7 @@
               @click="handleTrackClick(track)"
             >
               <td class="col-index">
-                <span v-if="isTrackUnavailable(track)" class="unavailable-icon" title="无法播放">🚫</span>
-                <span v-else>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+                <span>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
               </td>
               <td class="col-cover">
                 <div class="track-cover-wrapper">
@@ -96,26 +95,24 @@
               </td>
               <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</td>
               <td class="col-action">
-                <button 
-                  @click.stop="playTrack(track)"
+                <a-button 
+                  type="text"
                   :disabled="parsingTrackId === track.id && parsingType === 'play' || isTrackUnavailable(track)"
-                  class="action-btn play-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': isTrackUnavailable(track) }"
+                  :loading="parsingTrackId === track.id && parsingType === 'play'"
                   :title="isTrackUnavailable(track) ? '该歌曲无版权' : '播放'"
+                  @click.stop="playTrack(track)"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
-                  <span v-else class="btn-icon">▶</span>
-                </button>
-                <button 
-                  @click.stop="downloadSingle(track)"
+                  <template #icon><PlayCircleOutlined /></template>
+                </a-button>
+                <a-button 
+                  type="text"
                   :disabled="parsingTrackId === track.id && parsingType === 'download' || isTrackUnavailable(track)"
-                  class="action-btn download-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': isTrackUnavailable(track) }"
+                  :loading="parsingTrackId === track.id && parsingType === 'download'"
                   :title="isTrackUnavailable(track) ? '该歌曲无版权' : '下载'"
+                  @click.stop="downloadSingle(track)"
                 >
-                  <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
-                  <span v-else class="btn-icon">⬇</span>
-                </button>
+                  <template #icon><ArrowDownOutlined /></template>
+                </a-button>
               </td>
             </tr>
           </tbody>
@@ -207,6 +204,7 @@
 <script setup>
 import { ref, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
+import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
@@ -250,7 +248,8 @@ const emit = defineEmits([
   'track-play',
   'page-change',
   'item-click',
-  'select'
+  'select',
+  'track-unavailable'
 ])
 
 // 计算列表类型
@@ -271,18 +270,9 @@ const creatorLabel = computed(() => {
   return '创建者'
 })
 
-// 排序后的歌曲列表（可用歌曲在前，不可用在后）
+// 歌曲列表（保持原顺序，不排序）
 const sortedTracks = computed(() => {
-  return [...props.items].sort((a, b) => {
-    // 检查歌曲是否不可用（包括原始数据和动态检测的）
-    const aUnavailable = a.unavailable || unavailableTrackIds.value.has(a.id)
-    const bUnavailable = b.unavailable || unavailableTrackIds.value.has(b.id)
-    
-    // unavailable 为 true 的排在后面
-    if (aUnavailable && !bUnavailable) return 1
-    if (!aUnavailable && bUnavailable) return -1
-    return 0
-  })
+  return [...props.items]
 })
 
 // 分页后的歌曲列表
@@ -305,9 +295,16 @@ const unavailableTrackIds = shallowRef(new Set())
 
 // 标记歌曲为不可用（无版权）
 const markTrackUnavailable = (track) => {
+  // 添加到不可用集合
   const newSet = new Set(unavailableTrackIds.value)
   newSet.add(track.id)
   unavailableTrackIds.value = newSet
+  
+  // 直接设置歌曲的 unavailable 属性
+  track.unavailable = true
+  
+  // 通知父组件更新歌曲数据
+  emit('track-unavailable', track)
 }
 
 // 判断歌曲是否不可用
@@ -626,78 +623,6 @@ const handleItemClick = (item, action) => {
 </script>
 
 <style>
-/* 操作按钮样式 */
-.action-btn {
-  width: 36px;
-  height: 36px;
-  background: var(--color-surface-container-low);
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.action-btn:hover {
-  background: var(--color-primary) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
-}
-
-.action-btn:active {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-primary) 30%, transparent);
-}
-
-.action-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  background: var(--color-surface-container-low) !important;
-}
-
-.action-btn.is-loading:disabled {
-  opacity: 1;
-  cursor: wait;
-}
-
-.play-btn,
-.download-btn {
-  color: var(--color-text-muted);
-}
-
-.play-btn:hover,
-.download-btn:hover {
-  color: white !important;
-}
-
-.action-btn:hover .btn-icon {
-  color: white;
-}
-
-.btn-icon {
-  font-size: 16px;
-  line-height: 1;
-  transition: color 0.25s ease;
-  font-weight: 600;
-}
-
-/* Loading 旋转动画 */
-.loading-spinner {
-  width: 18px;
-  height: 18px;
-  border: 3px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: btn-spin 0.8s linear infinite;
-}
-
-@keyframes btn-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 </style>
 
 <style scoped>
@@ -900,12 +825,29 @@ const handleItemClick = (item, action) => {
   vertical-align: middle;
 }
 
-.tracks-table td.col-action .action-btn {
+.tracks-table td.col-action :deep(.ant-btn) {
+  margin: 0 4px;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin: 0 6px;
-  vertical-align: middle;
+}
+
+.tracks-table td.col-action :deep(.anticon) {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-on-surface);
+}
+
+.tracks-table td.col-action :deep(.ant-btn-loading .anticon) {
+  color: var(--color-on-surface);
+}
+
+.tracks-table td.col-action :deep(.ant-btn[disabled] .anticon) {
+  color: var(--color-text-muted);
 }
 
 .track-row:hover {
@@ -939,7 +881,7 @@ const handleItemClick = (item, action) => {
 
 .unavailable-icon {
   color: #ff4d4f;
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .unavailable-reason {
@@ -951,15 +893,6 @@ const handleItemClick = (item, action) => {
   background: #fff1f0;
   border-radius: 3px;
   vertical-align: middle;
-}
-
-.action-btn.disabled {
-  opacity: 0.4;
-  cursor: not-allowed !important;
-}
-
-.action-btn.disabled:hover {
-  background: transparent !important;
 }
 
 /* 暗色模式 */

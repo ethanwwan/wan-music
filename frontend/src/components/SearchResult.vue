@@ -49,6 +49,7 @@
       :total-tracks="detailTracks.length"
       @track-parsed="handleTrackParse"
       @track-play="handleTrackPlay"
+      @track-unavailable="handleTrackUnavailable"
       @page-change="goToDetailPage"
     />
 
@@ -62,6 +63,7 @@
       :total-tracks="songs.length"
       @track-parsed="handleTrackParse"
       @track-play="handleTrackPlay"
+      @track-unavailable="handleTrackUnavailable"
       @page-change="goToPage"
     />
 
@@ -335,6 +337,23 @@ const handleTrackPlay = (track, playlist) => {
   emit('track-play', track, playlist)
 }
 
+// 处理歌曲无版权事件
+const handleTrackUnavailable = (track) => {
+  // 标记歌曲为不可用（props.songs 是数组引用，直接修改会影响原始数据）
+  const songIndex = props.songs.findIndex(s => s.id === track.id)
+  if (songIndex !== -1) {
+    props.songs[songIndex].unavailable = true
+  }
+  
+  // 更新详情列表中的歌曲状态
+  const detailIndex = detailTracks.value.findIndex(t => t.id === track.id)
+  if (detailIndex !== -1) {
+    detailTracks.value[detailIndex].unavailable = true
+  }
+  
+  // 吐司提示已在 SongList 中处理
+}
+
 // 处理解析事件
 const handleTrackParse = (data) => {
   if (data?.track) {
@@ -596,8 +615,7 @@ const handleParseArtist = async (item) => {
 const goBack = () => {
   currentDetail.value = null
   detailTracks.value = []
-  // 返回后切换到单曲tab，确保显示搜索结果
-  currentSearchType.value = 'search'
+  currentDetailPage.value = 1
 }
 </script>
 

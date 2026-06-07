@@ -546,10 +546,6 @@ body {
   color: var(--color-on-surface);
 }
 
-.dark * {
-  color: var(--color-on-surface) !important;
-}
-
 .dark .ant-layout-footer {
   background-color: transparent;
   color: var(--color-text-muted);

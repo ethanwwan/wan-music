@@ -56,10 +56,13 @@
         
         <div class="player-right">
           <div class="action-buttons">
-            <button class="control-btn" @click="downloadCurrent" :disabled="isDownloading">
-              <span v-if="isDownloading" class="loading-spinner"></span>
-              <span v-else class="icon">⬇</span>
-            </button>
+            <a-button 
+              type="text" 
+              :loading="isDownloading"
+              @click="downloadCurrent"
+            >
+              <template #icon><ArrowDownOutlined /></template>
+            </a-button>
             <button class="control-btn" @click="togglePlaylist">
               <span class="icon">☰</span>
             </button>
@@ -130,6 +133,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { ArrowDownOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps({
   playlist: {
@@ -138,7 +142,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['play', 'pause', 'end', 'download'])
+const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error'])
 
 const audioRef = ref(null)
 const currentIndex = ref(0)
@@ -267,6 +271,13 @@ const handleEnded = () => {
 
 const handleError = () => {
   isPlaying.value = false
+  const current = props.playlist[currentIndex.value]
+  
+  // 通知父组件该歌曲播放失败（可能是无版权）
+  if (current) {
+    emit('play-error', current)
+  }
+  
   if (hasNext.value) {
     playTrack(currentIndex.value + 1)
   }
@@ -610,6 +621,16 @@ onUnmounted(() => {
 .action-buttons {
   display: flex;
   gap: 16px;
+}
+
+.action-buttons :deep(.ant-btn) {
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .loading-spinner {
