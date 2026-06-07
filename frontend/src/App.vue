@@ -32,6 +32,7 @@
 
         <!-- 搜索结果面板组件 -->
         <SearchResult 
+          :key="searchResultKey"
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :albums="albumSearchResults"
@@ -94,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, reactive, watch } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 
 // 导入组件
@@ -124,6 +125,7 @@ import { getExampleLinks, getExampleTitle } from './utils/exampleData.js'
 const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
+const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
 
 // 播放列表
@@ -180,6 +182,8 @@ const handleNoticeClose = () => {
 }
 
 const handleParse = async ({ url }) => {
+  // 重新挂载 SearchResult 组件，重置所有状态
+  searchResultKey.value++
   musicUrl.value = url
   const quality = settings.selectedQuality || 'lossless'
   await parseMusic(quality, 'search')

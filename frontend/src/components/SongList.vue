@@ -1,24 +1,24 @@
 <template>
-  <div :class="type !== 'search' ? 'detail-view' : 'song-list-panel'">
-    <!-- 歌曲列表 -->
-    <div v-if="totalTracks > 0" :class="type !== 'search' ? '' : 'tracks-section'">
-      <!-- 歌单/专辑标题区域（只有在有详情数据时显示） -->
-      <div v-if="playlistData" :class="type !== 'search' ? 'detail-header' : 'playlist-header'">
+  <div :class="listContainerClass">
+    <!-- 单曲列表样式 -->
+    <template v-if="listType === 'song'">
+      <!-- 详情头部（歌单/专辑/歌手信息） -->
+      <div v-if="detailInfo" class="detail-header">
         <div class="header-left">
-          <div :class="type !== 'search' ? 'detail-cover-wrapper' : 'playlist-cover-wrapper'">
+          <div class="detail-cover-wrapper">
             <img 
-              v-if="playlistData.coverImgUrl"
-              :src="playlistData.coverImgUrl" 
-              :alt="playlistData.name" 
-              :class="type !== 'search' ? 'detail-cover' : 'playlist-cover'" 
+              v-if="detailInfo.coverImgUrl"
+              :src="detailInfo.coverImgUrl" 
+              :alt="detailInfo.name" 
+              class="detail-cover"
               @error="handleCoverError($event)"
             />
             <div v-else class="cover-placeholder"></div>
           </div>
-          <div :class="type !== 'search' ? 'detail-info' : 'playlist-info'">
-            <h1 :class="type !== 'search' ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
-            <div :class="type !== 'search' ? 'detail-meta' : 'playlist-meta'">
-              <span class="meta-item">{{ creatorLabel }}：{{ playlistData.creator }}</span>
+          <div class="detail-info">
+            <h1 class="detail-name">{{ detailInfo.name }}</h1>
+            <div class="detail-meta">
+              <span class="meta-item">{{ creatorLabel }}：{{ detailInfo.creator }}</span>
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
             </div>
@@ -49,8 +49,8 @@
         </div>
       </div>
 
-      <!-- 表格形式的歌曲列表 -->
-      <div class="tracks-table-wrapper">
+      <!-- 歌曲表格 -->
+      <div v-if="paginatedTracks.length > 0" class="tracks-table-wrapper">
         <table class="tracks-table">
           <thead>
             <tr>
@@ -63,17 +63,17 @@
           </thead>
           <tbody>
             <tr 
-              v-for="(track, index) in currentPageTracks" 
+              v-for="(track, index) in paginatedTracks" 
               :key="track.id"
               class="track-row"
               :class="{ 
                 'selected': selectedTrack && selectedTrack.id === track.id,
-                'unavailable': track.unavailable
+                'unavailable': isTrackUnavailable(track)
               }"
               @click="handleTrackClick(track)"
             >
               <td class="col-index">
-                <span v-if="track.unavailable" class="unavailable-icon" title="无法播放">🚫</span>
+                <span v-if="isTrackUnavailable(track)" class="unavailable-icon" title="无法播放">🚫</span>
                 <span v-else>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
               </td>
               <td class="col-cover">
@@ -83,7 +83,7 @@
                     :src="getCover(track)"
                     :alt="track.name"
                     class="track-cover"
-                    :class="{ 'grayscale': track.unavailable }"
+                    :class="{ 'grayscale': isTrackUnavailable(track) }"
                     loading="lazy"
                     @error="handleTrackCoverError($event)"
                   />
@@ -91,27 +91,27 @@
                 </div>
               </td>
               <td class="col-name">
-                <span class="track-name" :class="{ 'unavailable-text': track.unavailable }">{{ track.name }}</span>
-                <span v-if="track.unavailable" class="unavailable-reason">无版权</span>
+                <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ track.name }}</span>
+                <span v-if="isTrackUnavailable(track)" class="unavailable-reason">无版权</span>
               </td>
-              <td class="col-artist" :class="{ 'unavailable-text': track.unavailable }">{{ getArtist(track) }}</td>
+              <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</td>
               <td class="col-action">
                 <button 
                   @click.stop="playTrack(track)"
-                  :disabled="parsingTrackId === track.id && parsingType === 'play' || track.unavailable"
+                  :disabled="parsingTrackId === track.id && parsingType === 'play' || isTrackUnavailable(track)"
                   class="action-btn play-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': track.unavailable }"
-                  :title="track.unavailable ? '该歌曲无版权' : '播放'"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'play', 'disabled': isTrackUnavailable(track) }"
+                  :title="isTrackUnavailable(track) ? '该歌曲无版权' : '播放'"
                 >
                   <span v-if="parsingTrackId === track.id && parsingType === 'play'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">▶</span>
                 </button>
                 <button 
                   @click.stop="downloadSingle(track)"
-                  :disabled="parsingTrackId === track.id && parsingType === 'download' || track.unavailable"
+                  :disabled="parsingTrackId === track.id && parsingType === 'download' || isTrackUnavailable(track)"
                   class="action-btn download-btn"
-                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': track.unavailable }"
-                  :title="track.unavailable ? '该歌曲无版权' : '下载'"
+                  :class="{ 'is-loading': parsingTrackId === track.id && parsingType === 'download', 'disabled': isTrackUnavailable(track) }"
+                  :title="isTrackUnavailable(track) ? '该歌曲无版权' : '下载'"
                 >
                   <span v-if="parsingTrackId === track.id && parsingType === 'download'" class="loading-spinner"></span>
                   <span v-else class="btn-icon">⬇</span>
@@ -121,36 +121,91 @@
           </tbody>
         </table>
       </div>
-      
+
+      <!-- 分页 -->
       <Pagination 
-        :total-count="totalTracks"
+        v-if="sortedTracks.length > pageSize"
+        :total-count="sortedTracks.length"
         :page-size="pageSize"
         :model-value="currentPage"
         @update:model-value="handlePageChange"
       />
-    </div>
+    </template>
 
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <div class="loading-content">
-        <a-spin size="large" tip="正在加载歌单信息..." />
+    <!-- 歌手列表样式 -->
+    <template v-else-if="listType === 'artist'">
+      <div class="artist-grid">
+        <div 
+          v-for="artist in items" 
+          :key="artist.id" 
+          class="artist-card"
+        >
+          <div class="artist-cover-wrapper">
+            <img 
+              v-if="artist.avatarUrl"
+              :src="getProxyUrl(artist.avatarUrl)" 
+              :alt="artist.name" 
+              class="artist-cover"
+              loading="lazy"
+              @error="handleImageError($event, 'artist')"
+            />
+            <div v-else class="artist-cover-placeholder"></div>
+          </div>
+          <div class="artist-info">
+            <h4 class="artist-name">{{ artist.name }}</h4>
+            <p class="artist-music-count">{{ artist.musicCount }} 首歌曲</p>
+          </div>
+          <div class="artist-action">
+            <a-button size="middle" type="primary" @click.stop="handleItemClick(artist, 'artist')">
+              解析歌手
+            </a-button>
+          </div>
+        </div>
       </div>
-    </div>
+    </template>
 
-    <!-- 错误状态 -->
-    <div v-if="error" class="error-container">
-      <a-alert
-        :message="error"
-        type="error"
-        show-icon
-        :closable="false"
-      />
-    </div>
+    <!-- 歌单/专辑列表样式 -->
+    <template v-else-if="listType === 'playlist' || listType === 'album'">
+      <div :class="listType === 'playlist' ? 'playlist-grid' : 'album-grid'">
+        <div 
+          v-for="item in items" 
+          :key="item.id" 
+          :class="listType === 'playlist' ? 'playlist-card' : 'album-card'"
+          @click="handleItemClick(item, 'select')"
+        >
+          <div :class="listType === 'playlist' ? 'playlist-cover-wrapper' : 'album-cover-wrapper'">
+            <img 
+              v-if="item.coverImgUrl"
+              :src="getProxyUrl(item.coverImgUrl)" 
+              :alt="item.name" 
+              :class="listType === 'playlist' ? 'playlist-cover' : 'album-cover'"
+              loading="lazy"
+              @error="handleImageError($event, listType)"
+            />
+            <div v-else :class="listType === 'playlist' ? 'playlist-cover-placeholder' : 'album-cover-placeholder'"></div>
+            <div :class="listType === 'playlist' ? 'playlist-overlay' : 'album-overlay'">
+              <span class="track-count">{{ item.trackCount }} 首</span>
+            </div>
+          </div>
+          <div :class="listType === 'playlist' ? 'playlist-info' : 'album-info'">
+            <h4 :class="listType === 'playlist' ? 'playlist-name' : 'album-name'">{{ item.name }}</h4>
+            <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
+              {{ listType === 'playlist' ? item.creator : item.artist }}
+            </p>
+          </div>
+          <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
+            <a-button size="middle" type="primary" @click.stop="handleItemClick(item, listType)">
+              解析{{ listType === 'playlist' ? '歌单' : '专辑' }}
+            </a-button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
@@ -159,14 +214,21 @@ import { embedMetadata } from '../services/metadataWriter.js'
 import Pagination from './Pagination.vue'
 
 const props = defineProps({
-  playlistInfo: {
-    type: Object,
-    required: false,
-    default: null
+  // 列表类型：song / artist / playlist / album
+  type: {
+    type: String,
+    default: 'song',
+    validator: (value) => ['song', 'artist', 'playlist', 'album'].includes(value)
   },
-  displayTracks: {
+  // 列表数据
+  items: {
     type: Array,
     default: () => []
+  },
+  // 单曲列表相关
+  detailInfo: {
+    type: Object,
+    default: null
   },
   currentPage: {
     type: Number,
@@ -179,35 +241,79 @@ const props = defineProps({
   totalTracks: {
     type: Number,
     default: 0
-  },
-  settings: {
-    type: Object,
-    default: () => ({})
-  },
-  type: {
-    type: String,
-    default: 'search',
-    validator: (value) => ['search', 'playlist', 'album'].includes(value)
   }
 })
 
-const emit = defineEmits(['track-selected', 'track-parsed', 'track-play', 'page-change'])
+const emit = defineEmits([
+  'track-selected',
+  'track-parsed',
+  'track-play',
+  'page-change',
+  'item-click',
+  'select'
+])
 
-const playlistData = computed(() => props.playlistInfo)
-const creatorLabel = computed(() => (props.playlistInfo?.isAlbum ? '作者' : '创建者'))
+// 计算列表类型
+const listType = computed(() => props.type)
 
-// 计算当前页应该显示的歌曲（分页处理）
-const currentPageTracks = computed(() => {
-  const start = (props.currentPage - 1) * props.pageSize
-  const end = start + props.pageSize
-  return props.displayTracks.slice(start, end)
+// 计算容器类名
+const listContainerClass = computed(() => {
+  if (props.type === 'song' && props.detailInfo) {
+    return 'detail-view'
+  }
+  return 'song-list-panel'
 })
 
-const loading = ref(false)
-const error = ref('')
+// 创建者标签
+const creatorLabel = computed(() => {
+  if (props.detailInfo?.isAlbum) return '作者'
+  if (props.detailInfo?.isArtist) return '歌手'
+  return '创建者'
+})
+
+// 排序后的歌曲列表（可用歌曲在前，不可用在后）
+const sortedTracks = computed(() => {
+  return [...props.items].sort((a, b) => {
+    // 检查歌曲是否不可用（包括原始数据和动态检测的）
+    const aUnavailable = a.unavailable || unavailableTrackIds.value.has(a.id)
+    const bUnavailable = b.unavailable || unavailableTrackIds.value.has(b.id)
+    
+    // unavailable 为 true 的排在后面
+    if (aUnavailable && !bUnavailable) return 1
+    if (!aUnavailable && bUnavailable) return -1
+    return 0
+  })
+})
+
+// 分页后的歌曲列表
+const paginatedTracks = computed(() => {
+  if (props.totalTracks > 0) {
+    const start = (props.currentPage - 1) * props.pageSize
+    const end = start + props.pageSize
+    return sortedTracks.value.slice(start, end)
+  }
+  return sortedTracks.value
+})
+
+// 状态
 const selectedTrack = ref(null)
 const parsingTrackId = ref(null)
 const parsingType = ref(null)
+
+// 不可用歌曲ID集合（用于跟踪无版权歌曲）
+const unavailableTrackIds = shallowRef(new Set())
+
+// 标记歌曲为不可用（无版权）
+const markTrackUnavailable = (track) => {
+  const newSet = new Set(unavailableTrackIds.value)
+  newSet.add(track.id)
+  unavailableTrackIds.value = newSet
+}
+
+// 判断歌曲是否不可用
+const isTrackUnavailable = (track) => {
+  return track.unavailable || unavailableTrackIds.value.has(track.id)
+}
 
 // 下载进度状态
 const downloadProgress = ref({
@@ -220,26 +326,34 @@ const downloadProgress = ref({
   failed: 0
 })
 
-// 处理歌曲行点击
-const handleTrackClick = (track) => {
-  if (track.unavailable) {
-    message.warning(`《${track.name}》因版权问题暂时无法播放`)
-    return
-  }
-  selectTrack(track)
+// 工具方法
+const getProxyUrl = (url) => {
+  if (!url) return ''
+  return `/stream?url=${encodeURIComponent(url)}`
 }
 
-// 获取封面地址（兼容多种字段）
 const getCover = (track) => {
-  const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || playlistData.value?.picUrl || ''
+  const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || props.detailInfo?.coverImgUrl || ''
   if (!coverUrl) return ''
-  return `/stream?url=${encodeURIComponent(coverUrl)}`
+  return getProxyUrl(coverUrl)
 }
 
-const onCoverError = (e) => {
-  e.target.style.visibility = 'hidden'
+const getArtist = (track) => {
+  return (
+    track?.artist ||
+    track?.singer ||
+    (typeof track?.artists === 'string' ? track.artists : null) ||
+    (Array.isArray(track?.artists) && track.artists[0]?.name) ||
+    (Array.isArray(track?.ar) && track.ar[0]?.name) ||
+    ''
+  )
 }
 
+const getAlbum = (track) => {
+  return track?.album || track?.al?.name || ''
+}
+
+// 图片错误处理
 const handleCoverError = (event) => {
   const target = event.target
   target.style.display = 'none'
@@ -258,36 +372,29 @@ const handleTrackCoverError = (event) => {
   }
 }
 
-// 获取歌手名称（兼容多种字段结构）
-const getArtist = (track) => {
-  return (
-    track?.artist ||
-    track?.singer ||
-    (typeof track?.artists === 'string' ? track.artists : null) ||
-    (Array.isArray(track?.artists) && track.artists[0]?.name) ||
-    (Array.isArray(track?.ar) && track.ar[0]?.name) ||
-    ''
-  )
+const handleImageError = (event, type) => {
+  const target = event.target
+  target.style.display = 'none'
+  const placeholderClass = type === 'artist' ? '.artist-cover-placeholder' : 
+                           type === 'playlist' ? '.playlist-cover-placeholder' : '.album-cover-placeholder'
+  const placeholder = target.parentElement.querySelector(placeholderClass)
+  if (placeholder) {
+    placeholder.style.display = 'flex'
+  }
 }
 
-// 获取专辑名称（兼容多种字段结构）
-const getAlbum = (track) => {
-  return (
-    track?.album ||
-    track?.al?.name ||
-    ''
-  )
-}
-
-// 选择歌曲
-const selectTrack = (track) => {
+// 歌曲操作
+const handleTrackClick = (track) => {
+  if (isTrackUnavailable(track)) {
+    message.warning(`《${track.name}》因版权问题暂时无法播放`)
+    return
+  }
   selectedTrack.value = track
   emit('track-selected', track)
 }
 
-// 播放歌曲（先解析再播放）
 const playTrack = async (track) => {
-  if (track.unavailable) {
+  if (isTrackUnavailable(track)) {
     message.warning(`《${track.name}》因版权问题暂时无法播放`)
     return
   }
@@ -296,29 +403,37 @@ const playTrack = async (track) => {
   parsingType.value = 'play'
   
   try {
-    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
+    const qualityValue = settings.selectedQuality || 'lossless'
     const songUrl = `https://music.163.com/song?id=${track.id}`
     
     const musicInfo = await parseMusicInfo(songUrl, qualityValue)
     
     if (!musicInfo?.url) {
-      throw new Error('获取播放链接失败')
+      // 标记为不可用
+      markTrackUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法播放`)
+      return
     }
     
     emit('track-parsed', { track, quality: qualityValue })
-    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.displayTracks)
+    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.items)
     message.success(`开始播放：${track.name}`)
   } catch (error) {
-    message.error(`播放失败：${error.message}`)
+    // 如果是版权相关错误，标记为不可用
+    if (error.message?.includes('已下架') || error.message?.includes('无法获取')) {
+      markTrackUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法播放`)
+    } else {
+      message.error(`播放失败：${error.message}`)
+    }
   } finally {
     parsingTrackId.value = null
     parsingType.value = null
   }
 }
 
-// 下载单曲
 const downloadSingle = async (track) => {
-  if (track.unavailable) {
+  if (isTrackUnavailable(track)) {
     message.warning(`《${track.name}》因版权问题暂时无法下载`)
     return
   }
@@ -327,15 +442,18 @@ const downloadSingle = async (track) => {
   parsingType.value = 'download'
   
   try {
-    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
-    const writeMetadata = props.settings?.writeMetadata !== false
-    const filenameFormat = props.settings?.filenameFormat || 'song-artist'
+    const qualityValue = settings.selectedQuality || 'lossless'
+    const writeMetadata = settings.writeMetadata !== false
+    const filenameFormat = settings.filenameFormat || 'song-artist'
     const songUrl = `https://music.163.com/song?id=${track.id}`
     
     const musicInfo = await parseMusicInfo(songUrl, qualityValue)
     
     if (!musicInfo?.url) {
-      throw new Error('获取下载链接失败')
+      // 标记为不可用
+      markTrackUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法下载`)
+      return
     }
     
     const extension = musicInfo.fileExtension || '.mp3'
@@ -358,8 +476,7 @@ const downloadSingle = async (track) => {
       }
       try {
         finalBuffer = await embedMetadata(audioBuffer, metadata, extension)
-      } catch {
-      }
+      } catch {}
     }
     
     const artist = getArtist(track)
@@ -385,7 +502,13 @@ const downloadSingle = async (track) => {
     
     message.success(`已下载：${track.name}`)
   } catch (error) {
-    message.error(`下载失败：${error.message}`)
+    // 如果是版权相关错误，标记为不可用
+    if (error.message?.includes('已下架') || error.message?.includes('无法获取')) {
+      markTrackUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法下载`)
+    } else {
+      message.error(`下载失败：${error.message}`)
+    }
   } finally {
     parsingTrackId.value = null
     parsingType.value = null
@@ -394,14 +517,14 @@ const downloadSingle = async (track) => {
 
 // 批量下载
 const handleBatchDownload = async () => {
-  if (!props.displayTracks || props.displayTracks.length === 0) {
+  if (!props.items || props.items.length === 0) {
     message.warning('没有可下载的歌曲')
     return
   }
 
   try {
-    const availableTracks = props.displayTracks.filter(track => !track.unavailable)
-    const unavailableCount = props.displayTracks.length - availableTracks.length
+    const availableTracks = props.items.filter(track => !track.unavailable)
+    const unavailableCount = props.items.length - availableTracks.length
     
     if (availableTracks.length === 0) {
       message.warning('所有歌曲都因版权问题无法下载')
@@ -429,7 +552,7 @@ const handleBatchDownload = async () => {
       try {
         const songUrl = `https://music.163.com/song?id=${track.id}`
         
-        const quality = props.settings?.selectedQuality || 'lossless'
+        const quality = settings.selectedQuality || 'lossless'
         const musicInfo = await parseMusicInfo(songUrl, quality)
         if (musicInfo && musicInfo.url) {
           musicList.push({
@@ -454,12 +577,12 @@ const handleBatchDownload = async () => {
 
     const result = await batchDownloadMusic(
       musicList,
-      playlistData.value?.name || '',
+      props.detailInfo?.name || '',
       {
-        filenameFormat: props.settings?.filenameFormat || 'artist-song',
-        writeMetadata: props.settings?.writeMetadata !== false,
-        downloadLrcFile: props.settings?.downloadLrcFile !== false,
-        selectedQuality: props.settings?.selectedQuality || 'lossless'
+        filenameFormat: settings.filenameFormat || 'artist-song',
+        writeMetadata: settings.writeMetadata !== false,
+        downloadLrcFile: settings.downloadLrcFile !== false,
+        selectedQuality: settings.selectedQuality || 'lossless'
       },
       (progress) => {
         downloadProgress.value.percentage = progress.percentage
@@ -487,36 +610,18 @@ const handleBatchDownload = async () => {
   }
 }
 
-// 解析歌曲
-const parseTrack = async (track) => {
-  parsingTrackId.value = track.id
-  
-  try {
-    const qualityValue = typeof props.settings?.selectedQuality === 'string' ? props.settings.selectedQuality : 'lossless'
-    
-    emit('track-parsed', { track, quality: qualityValue })
-    message.success(`开始解析：${track.name}`)
-  } catch {
-    message.error('解析失败，请重试')
-  } finally {
-    parsingTrackId.value = null
-  }
-}
-
-// 处理分页变化
+// 分页变化
 const handlePageChange = (page) => {
-  console.log('SearchResultList: handlePageChange called with page:', page)
   emit('page-change', page)
 }
 
-// 格式化播放量
-const formatPlayCount = (count) => {
-  if (count >= 100000000) {
-    return Math.floor(count / 100000000) + '亿'
-  } else if (count >= 10000) {
-    return Math.floor(count / 10000) + '万'
+// 列表项点击
+const handleItemClick = (item, action) => {
+  if (action === 'select') {
+    emit('select', item)
+  } else {
+    emit('item-click', { item, action })
   }
-  return count.toString()
 }
 </script>
 
@@ -593,61 +698,6 @@ const formatPlayCount = (count) => {
     transform: rotate(360deg);
   }
 }
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* 全局深色模式样式 */
-.dark .tracks-section {
-  background: var(--color-surface-white) !important;
-  color: var(--color-on-surface) !important;
-}
-
-.dark .section-header h2 {
-  color: var(--color-on-surface) !important;
-}
-
-.dark .track-total {
-  color: var(--color-text-muted) !important;
-}
-
-.dark .track-item {
-  background: var(--color-surface-container-low) !important;
-  color: var(--color-on-surface) !important;
-  border-color: var(--color-border-subtle) !important;
-}
-
-.dark .track-item:hover {
-  background: var(--color-primary-light) !important;
-}
-
-.dark .track-item.selected {
-  background: var(--color-primary-light) !important;
-  border-color: var(--color-primary) !important;
-}
-
-.dark .playlist-info-bar {
-  background-color: var(--color-surface-container) !important;
-  color: var(--color-on-surface) !important;
-}
-
-.dark .info-item {
-  color: var(--color-secondary) !important;
-}
-
-.dark .info-separator {
-  color: var(--color-outline) !important;
-}
-
-.dark .section-header {
-  border-bottom-color: var(--color-border-subtle) !important;
-}
-
-.dark .section-header h2 {
-  color: var(--color-on-surface) !important;
-}
 </style>
 
 <style scoped>
@@ -658,57 +708,7 @@ const formatPlayCount = (count) => {
   padding-top: 0 !important;
 }
 
-.tracks-section {
-  background: var(--color-surface-white);
-  padding: 0;
-  margin-top: 0;
-}
-
-.playlist-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-white) 100%);
-}
-
-.playlist-cover-wrapper {
-  flex-shrink: 0;
-}
-
-.playlist-cover {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-md);
-  object-fit: cover;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.playlist-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.playlist-name {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--color-on-surface);
-  margin: 0 0 0.5rem 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.playlist-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 14px;
-  color: var(--color-text-muted);
-}
-
-/* 二级页面模式 */
+/* 详情页面模式 */
 .detail-view {
   padding: 0;
 }
@@ -732,6 +732,16 @@ const formatPlayCount = (count) => {
   border-radius: var(--radius-md);
   object-fit: cover;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cover-placeholder {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
+  border-radius: var(--radius-md);
 }
 
 .detail-info {
@@ -861,17 +871,6 @@ const formatPlayCount = (count) => {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
-  color: var(--color-text-muted);
-}
-
-.cover-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
-  color: var(--color-text-muted);
 }
 
 .col-name {
@@ -915,32 +914,6 @@ const formatPlayCount = (count) => {
 
 .track-row.selected {
   background: var(--color-primary-light);
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-4);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.section-header .header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.section-header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--color-on-surface);
-}
-
-.track-total {
-  color: var(--color-text-muted);
-  font-size: 14px;
 }
 
 /* 无版权歌曲样式 */
@@ -1013,101 +986,231 @@ const formatPlayCount = (count) => {
   background: #2a1a1a;
 }
 
-.tracks-list {
+/* ========== 歌手列表样式 ========== */
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .artist-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .artist-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .artist-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.artist-card {
   display: flex;
   flex-direction: column;
-}
-
-.track-item {
-  display: flex;
   align-items: center;
-  padding: var(--space-3) var(--space-2);
+  padding: 1rem;
   background: var(--color-surface-container-low);
   border-radius: var(--radius-md);
-  cursor: pointer;
   transition: all 0.3s ease;
-  margin-bottom: var(--space-2);
-  min-height: 60px;
-  box-sizing: border-box;
+  cursor: pointer;
 }
 
-.track-item:hover {
-  background: var(--color-primary-light);
-  transform: translateY(-1px);
+.artist-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.track-item.selected {
-  background: var(--color-primary-light);
-  border: 1px solid var(--color-primary);
+.artist-cover-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
 }
 
-.track-info {
-  flex: 1;
-  min-width: 0;
+.artist-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.track-title-line {
+.artist-cover-placeholder {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
 }
 
-.track-name, .track-artist {
+.artist-info {
+  text-align: center;
+}
+
+.artist-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.artist-music-count {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.artist-action {
+  padding: 0.75rem 1rem 0;
+  width: 100%;
+}
+
+.artist-action :deep(.ant-btn) {
+  width: 100%;
+}
+
+/* ========== 歌单列表样式 ========== */
+.playlist-grid,
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1.5rem;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .playlist-grid,
+  .album-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .playlist-grid,
+  .album-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .playlist-grid,
+  .album-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.playlist-card,
+.album-card {
+  background: var(--color-surface-container-low);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.playlist-card:hover,
+.album-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.playlist-cover-wrapper,
+.album-cover-wrapper {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.playlist-cover,
+.album-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.playlist-cover-placeholder,
+.album-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
+}
+
+.playlist-card:hover .playlist-cover,
+.album-card:hover .album-cover {
+  transform: scale(1.05);
+}
+
+.playlist-overlay,
+.album-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.5rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  display: flex;
+  justify-content: flex-end;
+}
+
+.track-count {
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.playlist-info,
+.album-info {
+  padding: 1rem;
+}
+
+.playlist-name,
+.album-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.track-name {
-  flex: 1 1 auto;
-  min-width: 0;
+.playlist-creator,
+.album-artist {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.track-artist {
-  color: var(--color-secondary);
-  flex: 0 0 auto;
-  max-width: 45%;
-  min-width: 0;
+.playlist-action,
+.album-action {
+  padding: 0 1rem 1rem;
 }
 
-.playlist-info-bar {
-  background-color: var(--color-surface-container);
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-3);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: 14px;
-}
-
-.info-item {
-  color: var(--color-secondary);
-}
-
-.info-separator {
-  color: var(--color-outline);
-}
-
-/* Loading状态 */
-.loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 300px;
-  padding: 2rem;
-}
-
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Error状态 */
-.error-container {
-  padding: 2rem;
+.playlist-action :deep(.ant-btn),
+.album-action :deep(.ant-btn) {
+  width: 100%;
 }
 </style>
