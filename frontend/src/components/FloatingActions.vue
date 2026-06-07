@@ -2,18 +2,10 @@
   <aside class="floating-actions" :style="{ bottom: bottomOffset + 'px' }">
     <button 
       class="action-btn" 
-      @click="handleToggleTheme" 
-      :title="isDark ? '切换亮色主题' : '切换深色主题'"
+      @click="handleOpenDownload" 
+      title="下载管理"
     >
-      <component :is="isDark ? StarFilled : CloudFilled" class="action-icon" />
-    </button>
-    <button 
-      v-show="showScrollTop" 
-      class="action-btn" 
-      @click="handleScrollTop" 
-      title="回到顶部"
-    >
-      <ArrowUpOutlined class="action-icon" />
+      <ArrowDownOutlined class="action-icon" />
     </button>
     <button 
       class="action-btn" 
@@ -27,31 +19,18 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { CloudFilled, StarFilled, SettingOutlined, ArrowUpOutlined } from '@ant-design/icons-vue'
-import { isDark, toggleTheme } from '../utils/themeManager.js'
+import { SettingOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 
-const emit = defineEmits(['open-settings'])
+const emit = defineEmits(['open-settings', 'open-download'])
 
-const showScrollTop = ref(false)
 const playerHeight = ref(0)
 
 const bottomOffset = computed(() => {
   return playerHeight.value + 32
 })
 
-const handleScroll = () => {
-  showScrollTop.value = window.scrollY > 200
-}
-
-const handleToggleTheme = () => {
-  toggleTheme()
-}
-
-const handleScrollTop = () => {
-  window.scrollTo({
-    top: 0,
-    behavior: 'smooth'
-  })
+const handleOpenDownload = () => {
+  emit('open-download')
 }
 
 const handleOpenSettings = () => {
@@ -72,14 +51,12 @@ let observer = null
 let checkInterval = null
 
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll)
   window.addEventListener('resize', updatePlayerHeight)
-  handleScroll()
   updatePlayerHeight()
 
   const player = document.querySelector('.bottom-player')
   if (player) {
-    observer = new MutationObserver((mutations) => {
+    observer = new MutationObserver(() => {
       updatePlayerHeight()
     })
     observer.observe(player, {
@@ -93,7 +70,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', updatePlayerHeight)
   if (observer) {
     observer.disconnect()

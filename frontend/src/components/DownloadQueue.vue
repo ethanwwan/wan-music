@@ -1,13 +1,9 @@
 <template>
   <div class="download-queue">
-    <div class="queue-header">
-      <h3>下载队列</h3>
-      <div class="queue-actions">
-        <span class="task-count">{{ tasks.length }} 个任务</span>
-      </div>
-    </div>
-    
     <div class="queue-content">
+      <div class="queue-info" v-if="tasks.length > 0">
+        <span class="info-text">共 {{ tasks.length }} 个任务</span>
+      </div>
       <div v-if="tasks.length === 0" class="empty-state">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -170,10 +166,9 @@ onUnmounted(() => {
 
 <style scoped>
 .download-queue {
-  background: var(--card-bg);
+  background: var(--color-surface);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .queue-header {
@@ -181,13 +176,13 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .queue-header h3 {
   margin: 0;
   font-size: 18px;
-  color: var(--text-primary);
+  color: var(--color-on-surface);
 }
 
 .queue-actions {
@@ -197,12 +192,21 @@ onUnmounted(() => {
 
 .task-count {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--color-text-muted);
 }
 
 .queue-content {
   max-height: 400px;
   overflow-y: auto;
+}
+
+.queue-content::-webkit-scrollbar {
+  display: none;
+}
+
+.queue-content {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .empty-state {
@@ -211,7 +215,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 48px;
-  color: var(--text-secondary);
+  color: var(--color-text-muted);
 }
 
 .empty-icon {
@@ -224,10 +228,21 @@ onUnmounted(() => {
 .empty-state p {
   margin: 0;
   font-size: 14px;
+  color: var(--color-text-muted);
 }
 
 .task-list {
   padding: 8px;
+}
+
+.queue-info {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.info-text {
+  font-size: 13px;
+  color: var(--color-text-muted);
 }
 
 .task-item {
@@ -236,12 +251,12 @@ onUnmounted(() => {
   padding: 12px;
   border-radius: 6px;
   margin-bottom: 4px;
-  background: var(--bg-secondary);
+  background: var(--color-surface-container-low);
   transition: background 0.2s;
 }
 
 .task-item:hover {
-  background: var(--bg-hover);
+  background: var(--color-surface-container-high);
 }
 
 .task-item.completed {
@@ -264,7 +279,7 @@ onUnmounted(() => {
 .task-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-on-surface);
   margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -276,12 +291,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--color-text-muted);
 }
 
 .task-progress-bar {
   height: 4px;
-  background: var(--border-color);
+  background: var(--color-border-subtle);
   border-radius: 2px;
   overflow: hidden;
   margin: 0 12px;
@@ -291,7 +306,7 @@ onUnmounted(() => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  background: var(--color-primary);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -316,7 +331,7 @@ onUnmounted(() => {
 }
 
 .action-btn:hover {
-  background: var(--bg-hover);
+  background: var(--color-surface-container-high);
 }
 
 .action-btn:disabled {
@@ -327,16 +342,16 @@ onUnmounted(() => {
 .action-btn svg {
   width: 16px;
   height: 16px;
-  color: var(--text-secondary);
+  color: var(--color-on-surface-variant);
 }
 
 .pause-btn:hover svg,
 .resume-btn:hover svg {
-  color: #3b82f6;
+  color: var(--color-primary);
 }
 
 .cancel-btn:hover svg {
-  color: #f59e0b;
+  color: var(--color-primary);
 }
 
 .remove-btn:hover svg {

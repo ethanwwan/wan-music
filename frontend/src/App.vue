@@ -83,10 +83,27 @@
       </a-layout-footer>
 
       <!-- 浮动操作按钮 -->
-      <FloatingActions @open-settings="showSettingsDialog = true" />
+      <FloatingActions @open-settings="showSettingsDialog = true" @open-download="showDownloadDialog = true" />
 
       <!-- 设置对话框 -->
       <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
+
+      <!-- 下载管理对话框 -->
+      <a-drawer
+        v-model:open="showDownloadDialog"
+        width="450px"
+        placement="right"
+        :closable="true"
+        :mask-closable="true"
+        :header-style="{ display: 'none' }"
+        class="settings-drawer"
+      >
+        <div class="custom-header">
+          <span class="header-title">下载管理</span>
+          <CloseOutlined class="close-icon" @click="showDownloadDialog = false" />
+        </div>
+        <DownloadQueue />
+      </a-drawer>
 
       <!-- 底部播放器 -->
       <MusicPlayer :playlist="playerPlaylist" :autoplay="true" :current-index="currentPlayIndex" @play-error="handlePlayError" />
@@ -97,6 +114,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, reactive, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
+import { CloseOutlined } from '@ant-design/icons-vue'
 
 // 导入组件
 import HeroHeader from './components/HeroHeader.vue'
@@ -108,10 +126,11 @@ import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
 import SongList from './components/SongList.vue'
+import DownloadQueue from './components/DownloadQueue.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'
-import { isDark, toggleTheme, initThemeFromLocalStorage } from './utils/themeManager.js'
+import { isDark, toggleTheme, initThemeFromLocalStorage, applyTheme } from './utils/themeManager.js'
 import { settings, loadSettings, saveSettings } from './utils/settingsManager.js'
 import {
     musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults,
@@ -125,6 +144,7 @@ import { getExampleLinks, getExampleTitle } from './utils/exampleData.js'
 const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
+const showDownloadDialog = ref(false)
 const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
 
@@ -175,6 +195,7 @@ const handleStorageChange = (e) => {
 // 处理主题色变化（从设置对话框）
 const handleThemeColorChange = (color) => {
   themeToken.colorPrimary = color
+  applyTheme()
 }
 
 const handleNoticeClose = () => {
@@ -381,5 +402,41 @@ onUnmounted(() => {
 
 .view-container {
   margin-top: var(--spacing-2xl);
+}
+
+.custom-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.custom-drawer-title .anticon {
+  font-size: 18px;
+}
+
+.custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.close-icon {
+  font-size: 20px;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close-icon:hover {
+  color: var(--color-on-surface);
 }
 </style>

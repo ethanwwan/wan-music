@@ -17,67 +17,26 @@
     <div class="settings-content">
       <!-- 主题设置 -->
       <div class="setting-section">
-        <div class="section-title">
-          <BgColorsOutlined />
-          <span>主题设置</span>
-        </div>
+        <div class="section-title">主题设置</div>
         
-        <!-- 主题模式 -->
-        <div class="theme-mode-section">
-          <div class="subsection-title">主题模式</div>
-          <div class="theme-mode-options">
-            <div 
-              class="theme-mode-option"
-              :class="{ active: themeMode === 'light' }"
-              @click="handleThemeModeChange('light')"
-            >
-              <StarFilled class="mode-icon" />
-              <span class="mode-name">亮色</span>
-            </div>
-            <div 
-              class="theme-mode-option"
-              :class="{ active: themeMode === 'dark' }"
-              @click="handleThemeModeChange('dark')"
-            >
-              <CloudFilled class="mode-icon" />
-              <span class="mode-name">深色</span>
-            </div>
-            <div 
-              class="theme-mode-option"
-              :class="{ active: themeMode === 'auto' }"
-              @click="handleThemeModeChange('auto')"
-            >
-              <MonitorOutlined class="mode-icon" />
-              <span class="mode-name">跟随系统</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 主题色 -->
-        <div class="theme-color-section">
-          <div class="subsection-title">主题色</div>
-          <div class="theme-color-options">
-            <div 
-              v-for="color in themeColors" 
-              :key="color.value"
-              class="theme-color-option"
-              :class="{ active: selectedThemeColor === color.value }"
-              @click="handleThemeColorChange(color.value)"
-              :style="{ '--theme-color': color.hex }"
-            >
-              <div class="color-preview" :style="{ background: color.hex }"></div>
-              <span class="color-name">{{ color.name }}</span>
-            </div>
+        <div class="theme-color-options">
+          <div 
+            v-for="color in themeColors" 
+            :key="color.value"
+            class="theme-color-option"
+            :class="{ active: selectedThemeColor === color.value }"
+            @click="handleThemeColorChange(color.value)"
+            :style="{ '--theme-color': color.hex }"
+          >
+            <div class="color-preview" :style="{ background: color.hex }"></div>
+            <span class="color-name">{{ color.name }}</span>
           </div>
         </div>
       </div>
 
       <!-- 音质设置 -->
       <div class="setting-section">
-        <div class="section-title">
-          <AudioOutlined />
-          <span>音质设置</span>
-        </div>
+        <div class="section-title">音质设置</div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
           <a-form-item label="默认音质">
             <a-select
@@ -102,10 +61,7 @@
 
       <!-- 下载设置 -->
       <div class="setting-section">
-        <div class="section-title">
-          <DownloadOutlined />
-          <span>下载配置</span>
-        </div>
+        <div class="section-title">下载配置</div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
           <a-form-item label="文件命名格式">
             <a-select
@@ -148,10 +104,7 @@
 
       <!-- 解析设置 -->
       <div class="setting-section">
-        <div class="section-title">
-          <LinkOutlined />
-          <span>解析配置</span>
-        </div>
+        <div class="section-title">解析配置</div>
         <a-form :model="settings" layout="horizontal" class="settings-form">
           <a-form-item label="启用缓存">
             <a-switch
@@ -189,19 +142,9 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { 
-  CloseOutlined, 
-  BgColorsOutlined, 
-  StarFilled, 
-  CloudFilled, 
-  MonitorOutlined, 
-  AudioOutlined, 
-  DownloadOutlined, 
-  LinkOutlined 
-} from '@ant-design/icons-vue'
+import { CloseOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
-import { isDark, toggleTheme, setTheme, initThemeFromLocalStorage } from '../utils/themeManager.js'
 
 const emit = defineEmits(['theme-color-change', 'update:open'])
 
@@ -274,7 +217,6 @@ const drawerVisible = computed({
   set: (value) => emit('update:open', value)
 })
 
-const themeMode = ref('light')
 const selectedThemeColor = ref('#0057c2')
 
 const themeColors = [
@@ -287,12 +229,7 @@ const themeColors = [
 ]
 
 const initThemeSettings = () => {
-  const savedThemeMode = localStorage.getItem('themeMode')
   const savedThemeColor = localStorage.getItem('themeColor')
-  
-  if (savedThemeMode) {
-    themeMode.value = savedThemeMode
-  }
   
   if (savedThemeColor) {
     const color = themeColors.find(c => c.value === savedThemeColor)
@@ -304,35 +241,12 @@ const initThemeSettings = () => {
 
 initThemeSettings()
 
-const handleThemeModeChange = (mode) => {
-  themeMode.value = mode
-  localStorage.setItem('themeMode', mode)
-  
-  if (mode === 'auto') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    setTheme(prefersDark ? 'dark' : 'light')
-    message.success('已设置为跟随系统')
-  } else if (mode === 'dark') {
-    setTheme('dark')
-    message.success('已切换到深色主题')
-  } else {
-    setTheme('light')
-    message.success('已切换到亮色主题')
-  }
-}
-
-const handleThemeColorChange = (colorValue) => {
+const handleThemeColorChange = async (colorValue) => {
   const color = themeColors.find(c => c.value === colorValue)
   if (!color) return
   
   selectedThemeColor.value = color.hex
   localStorage.setItem('themeColor', colorValue)
-  
-  if (themeMode.value === 'dark') {
-    setTheme('dark')
-  } else {
-    setTheme('light')
-  }
   
   emit('theme-color-change', color.hex)
   
@@ -355,7 +269,7 @@ const handleClose = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding-bottom: 16px;
 }
 
 .header-title {
@@ -401,28 +315,31 @@ const handleClose = () => {
 .section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
   font-size: 16px;
   font-weight: 600;
   color: var(--color-on-surface);
   margin-bottom: 16px;
 }
 
-.section-title svg {
-  font-size: 18px;
-  color: var(--color-primary);
-}
-
 .settings-form {
-  padding: 0 8px;
+  padding: 0;
 }
 
 .settings-form :deep(.ant-form-item) {
   margin-bottom: 16px;
+  padding-left: 0 !important;
 }
 
 .settings-form :deep(.ant-form-item:last-child) {
   margin-bottom: 0;
+}
+
+.settings-form :deep(.ant-col) {
+  padding-left: 0 !important;
+}
+
+.settings-form :deep(.ant-form-item-label) {
+  padding-left: 0 !important;
 }
 
 .form-item-hint {
@@ -454,54 +371,6 @@ const handleClose = () => {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   padding: 0 8px;
-}
-
-.theme-mode-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 12px;
-  border-radius: 8px;
-  border: 2px solid var(--color-border-subtle);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--color-surface-white);
-}
-
-.theme-mode-option:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.theme-mode-option.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light, rgba(0, 87, 194, 0.08));
-}
-
-.mode-icon {
-  font-size: 24px;
-  color: var(--color-on-surface-variant);
-}
-
-.theme-mode-option.active .mode-icon {
-  color: var(--color-primary);
-}
-
-.mode-name {
-  font-size: 13px;
-  color: var(--color-on-surface-variant);
-  font-weight: 500;
-}
-
-.theme-mode-option.active .mode-name {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.theme-color-section {
-  margin-top: 20px;
 }
 
 .theme-color-options {
@@ -568,8 +437,30 @@ const handleClose = () => {
 }
 
 .clear-cache-btn {
-  font-size: 14px;
-  padding: 4px 16px;
-  height: 32px;
+  font-size: 14px !important;
+  padding: 4px 16px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease;
+}
+
+.clear-cache-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.clear-cache-btn:active {
+  transform: translateY(0);
+}
+
+.dark .clear-cache-btn {
+  background-color: rgba(239, 68, 68, 0.9) !important;
+  border-color: rgba(239, 68, 68, 0.9) !important;
+}
+
+.dark .clear-cache-btn:hover {
+  background-color: rgba(239, 68, 68, 1) !important;
+  border-color: rgba(239, 68, 68, 1) !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
 }
 </style>

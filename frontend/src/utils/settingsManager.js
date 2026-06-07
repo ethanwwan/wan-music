@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 
 // 默认设置
 export const defaultSettings = {
@@ -18,6 +18,15 @@ export const defaultSettings = {
 
 // 当前设置
 export const settings = reactive({ ...defaultSettings })
+
+// 监听设置变化，自动保存到 localStorage
+watch(
+  settings,
+  () => {
+    saveSettings()
+  },
+  { deep: true }
+)
 
 /**
  * 加载设置
