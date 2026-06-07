@@ -1,6 +1,6 @@
 /* 全局主题变量与基础样式 - 基于 wyapi.toubiec.cn 设计 */
 
-@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* 移除 Google Fonts 引用，使用系统字体 */
 
 /* ========================
    主题变量定义
@@ -40,7 +40,7 @@
   --color-notice-border: #d1e9ff;
 
   /* Typography */
-  --font-family: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   /* Font Sizes */
   --font-size-headline-lg: 36px;
