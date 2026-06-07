@@ -43,9 +43,6 @@ export {
   QUALITY_LEVELS
 } from './services/musicApi.js'
 
-// 下载管理
-export { default as downloadManager, DownloadManager } from './services/downloadManager.js'
-
 // 元数据写入
 export { embedMetadata } from './services/metadataWriter.js'
 

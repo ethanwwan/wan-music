@@ -2,13 +2,6 @@
   <aside class="floating-actions" :style="{ bottom: bottomOffset + 'px' }">
     <button 
       class="action-btn" 
-      @click="handleOpenDownload" 
-      title="下载管理"
-    >
-      <ArrowDownOutlined class="action-icon" />
-    </button>
-    <button 
-      class="action-btn" 
       @click="handleOpenSettings" 
       title="设置"
     >
@@ -19,19 +12,15 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { SettingOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
+import { SettingOutlined } from '@ant-design/icons-vue'
 
-const emit = defineEmits(['open-settings', 'open-download'])
+const emit = defineEmits(['open-settings'])
 
 const playerHeight = ref(0)
 
 const bottomOffset = computed(() => {
   return playerHeight.value + 32
 })
-
-const handleOpenDownload = () => {
-  emit('open-download')
-}
 
 const handleOpenSettings = () => {
   emit('open-settings')

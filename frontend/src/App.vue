@@ -83,27 +83,10 @@
       </a-layout-footer>
 
       <!-- 浮动操作按钮 -->
-      <FloatingActions @open-settings="showSettingsDialog = true" @open-download="showDownloadDialog = true" />
+      <FloatingActions @open-settings="showSettingsDialog = true" />
 
       <!-- 设置对话框 -->
       <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
-
-      <!-- 下载管理对话框 -->
-      <a-drawer
-        v-model:open="showDownloadDialog"
-        width="450px"
-        placement="right"
-        :closable="true"
-        :mask-closable="true"
-        :header-style="{ display: 'none' }"
-        class="settings-drawer"
-      >
-        <div class="custom-header">
-          <span class="header-title">下载管理</span>
-          <CloseOutlined class="close-icon" @click="showDownloadDialog = false" />
-        </div>
-        <DownloadQueue />
-      </a-drawer>
 
       <!-- 底部播放器 -->
       <MusicPlayer :playlist="playerPlaylist" :autoplay="true" v-model:current-index="currentPlayIndex" @play-error="handlePlayError" />
@@ -114,7 +97,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, reactive, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import { CloseOutlined } from '@ant-design/icons-vue'
 
 // 导入组件
 import HeroHeader from './components/HeroHeader.vue'
@@ -126,7 +108,6 @@ import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
 import SongList from './components/SongList.vue'
-import DownloadQueue from './components/DownloadQueue.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'
@@ -144,7 +125,6 @@ import { getExampleLinks, getExampleTitle } from './utils/exampleData.js'
 const currentView = ref('search')
 const showNotice = ref(true)
 const showSettingsDialog = ref(false)
-const showDownloadDialog = ref(false)
 const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
 
