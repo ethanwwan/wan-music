@@ -6,6 +6,7 @@
       class="mini-player"
       :class="{ 'playing': isPlaying }"
       @click="togglePlay"
+      @contextmenu="handleContextMenu"
     >
       <!-- 圆形进度条边框 -->
       <svg class="progress-ring" viewBox="0 0 60 60">
@@ -43,7 +44,7 @@
         />
         <div v-else class="mini-icon">
           <PlayCircleOutlined v-if="!isPlaying" />
-          <PauseCircleOutlined v-else />
+          <PauseOutlined v-else />
         </div>
       </div>
       
@@ -88,12 +89,12 @@
         <div class="modal-footer">
           <a-space>
             <a-button type="text" size="small" @click="playPrev" :disabled="!hasPrev">
-              <template #icon><SkipBackOutlined /></template>
+              <template #icon><CaretLeftOutlined /></template>
               上一首
             </a-button>
             <a-button type="text" size="small" @click="playNext" :disabled="!hasNext">
               下一首
-              <template #icon><SkipForwardOutlined /></template>
+              <template #icon><CaretRightOutlined /></template>
             </a-button>
             <a-button type="text" size="small" danger @click="clearPlaylist">
               <template #icon><DeleteOutlined /></template>
@@ -111,10 +112,10 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { 
   PlayCircleOutlined, 
-  PauseCircleOutlined,
+  PauseOutlined,
   CloseOutlined,
-  SkipBackOutlined,
-  SkipForwardOutlined,
+  CaretLeftOutlined,
+  CaretRightOutlined,
   DeleteOutlined
 } from '@ant-design/icons-vue'
 
@@ -346,8 +347,8 @@ onUnmounted(() => {
   position: absolute;
   top: 6px;
   left: 6px;
-  right: 6px;
-  bottom: 6px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   overflow: hidden;
   display: flex;
@@ -357,8 +358,10 @@ onUnmounted(() => {
 }
 
 .mini-cover {
-  width: 100%;
-  height: 100%;
+  width: 48px;
+  height: 48px;
+  max-width: 48px;
+  max-height: 48px;
   object-fit: cover;
   border-radius: 50%;
 }
