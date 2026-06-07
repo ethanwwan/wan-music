@@ -237,7 +237,14 @@ const handleEnded = () => {
   }
 }
 
-const handleError = () => {
+const handleError = (event) => {
+  // ERR_ABORTED (错误代码 1) 是正常的中止错误，通常发生在快速切换歌曲时
+  // 这种情况下不需要处理，因为新歌曲会自动开始播放
+  if (event.target.error?.code === 1) {
+    console.log('音频加载被中止（可能是快速切换歌曲）')
+    return
+  }
+  
   isPlaying.value = false
   const current = props.playlist[currentIndex.value]
   
