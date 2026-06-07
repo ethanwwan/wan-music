@@ -1088,6 +1088,9 @@ def stream_audio(audio_path=None):
         flask_response.headers['Access-Control-Allow-Origin'] = config.cors_origins
         flask_response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
         flask_response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+
+        # 添加缓存控制头 - 图片缓存1小时
+        flask_response.headers['Cache-Control'] = 'public, max-age=3600'
         
         api_service.logger.info(f"音频流代理成功: {audio_url[:50]}...")
         return flask_response

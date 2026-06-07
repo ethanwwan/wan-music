@@ -94,7 +94,7 @@
               <a-select-option value="jymaster">母带 (FLAC 24bit/96kHz)</a-select-option>
             </a-select>
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>解析和下载时使用的默认音质（默认：无损）</a-tag>
+              <a-tag color="blue" bordered>解析和下载时使用的默认音质</a-tag>
             </div>
           </a-form-item>
         </a-form>
@@ -130,7 +130,7 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>写入歌曲名、歌手、专辑、封面、歌词等信息（默认开启）</a-tag>
+              <a-tag color="blue" bordered>写入歌曲名、歌手、专辑、封面、歌词等信息</a-tag>
             </div>
           </a-form-item>
 
@@ -140,7 +140,7 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>批量下载时同时生成独立的LRC歌词文件（默认开启）</a-tag>
+              <a-tag color="blue" bordered>批量下载时同时生成独立的LRC歌词文件</a-tag>
             </div>
           </a-form-item>
         </a-form>
@@ -159,25 +159,21 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>减少重复搜索和解析，提升相同内容再次访问速度（默认开启）</a-tag>
+              <a-tag color="blue" bordered>减少重复搜索和解析，提升相同内容再次访问速度</a-tag>
             </div>
           </a-form-item>
 
           <a-form-item label="缓存大小">
             <div class="cache-info">
-              <div class="cache-size">
-                <FolderOpenOutlined class="cache-icon" />
-                <span class="size-text">{{ cacheSize }}</span>
-              </div>
+              <span class="size-text">{{ cacheSize }}</span>
               <a-button 
                 type="danger" 
-                size="small" 
+                size="middle" 
                 @click="handleClearCache"
                 :loading="clearingCache"
                 class="clear-cache-btn"
               >
-                <DeleteOutlined />
-                <span>清除缓存</span>
+                清除缓存
               </a-button>
             </div>
             <div class="form-item-hint">
@@ -201,9 +197,7 @@ import {
   MonitorOutlined, 
   AudioOutlined, 
   DownloadOutlined, 
-  LinkOutlined, 
-  FolderOpenOutlined, 
-  DeleteOutlined 
+  LinkOutlined 
 } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
@@ -437,6 +431,10 @@ const handleClose = () => {
 
 .form-item-hint :deep(.ant-tag) {
   font-size: 12px;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  color: var(--color-on-surface-variant);
 }
 
 .subsection-title {
@@ -562,31 +560,16 @@ const handleClose = () => {
   gap: 12px;
 }
 
-.cache-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--color-surface-container-low);
-  border-radius: 8px;
-}
-
-.cache-icon {
-  font-size: 16px;
-  color: var(--color-primary);
-}
-
 .size-text {
   font-size: 14px;
   font-weight: 500;
   color: var(--color-on-surface);
+  line-height: 32px;
 }
 
 .clear-cache-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
+  font-size: 14px;
+  padding: 4px 16px;
+  height: 32px;
 }
 </style>

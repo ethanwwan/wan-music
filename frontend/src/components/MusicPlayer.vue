@@ -452,7 +452,7 @@ onUnmounted(() => {
 .cover-placeholder {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, var(--color-surface-container-high) 0%, var(--color-surface-container) 50%, var(--color-surface-container-high) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   display: flex;
   align-items: center;
   justify-content: center;

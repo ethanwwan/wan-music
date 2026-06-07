@@ -24,6 +24,7 @@
       <a-button
         v-for="tab in searchTabs"
         :key="tab.key"
+        type="text"
         :class="['search-tab', { active: currentSearchType === tab.key }]"
         @click="handleSearchTabClick(tab.key)"
       >
@@ -33,13 +34,12 @@
 
     <!-- loading 状态 -->
     <div v-if="currentDetail && currentDetail.loading" class="loading-view">
-      <div class="loading-content">
-        <a-spin size="large" tip="正在加载..." />
-      </div>
+      <div class="loading-spinner"></div>
+      <span class="loading-text">正在加载中...</span>
     </div>
 
-    <!-- 歌单/专辑/歌手详情页面 - 使用 SearchResultList 组件 -->
-    <SearchResultList 
+    <!-- 歌单/专辑/歌手详情页面 - 使用 SongList 组件 -->
+    <SongList 
       v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
       :playlist-info="currentDetail"
       :display-tracks="detailTracks"
@@ -54,7 +54,7 @@
     />
 
     <!-- 歌单卡片展示 -->
-    <div v-if="displayMode === 'playlist' && !currentDetail" class="playlist-grid">
+    <div v-show="displayMode === 'playlist' && !currentDetail" class="playlist-grid">
       <!-- loading 状态 -->
       <div v-if="props.loading" class="loading-container">
         <a-spin size="large" tip="正在搜索..." />
@@ -75,11 +75,7 @@
             loading="lazy"
             @error="handleImageError($event)"
           />
-          <div v-else class="playlist-cover-placeholder">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-            </svg>
-          </div>
+          <div v-else class="playlist-cover-placeholder"></div>
           <div class="playlist-overlay">
             <span class="track-count">{{ playlist.trackCount }} 首</span>
           </div>
@@ -97,7 +93,7 @@
     </div>
 
     <!-- 专辑卡片展示 -->
-    <div v-if="displayMode === 'album' && !currentDetail" class="album-grid">
+    <div v-show="displayMode === 'album' && !currentDetail" class="album-grid">
       <!-- loading 状态 -->
       <div v-if="props.loading" class="loading-container">
         <a-spin size="large" tip="正在搜索..." />
@@ -118,11 +114,7 @@
             loading="lazy"
             @error="handleImageError($event)"
           />
-          <div v-else class="album-cover-placeholder">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-            </svg>
-          </div>
+          <div v-else class="album-cover-placeholder"></div>
           <div class="album-overlay">
             <span class="track-count">{{ album.trackCount }} 首</span>
           </div>
@@ -139,9 +131,9 @@
       </div>
     </div>
 
-    <!-- 歌曲列表展示（使用 SearchResultList 组件） -->
-    <SearchResultList 
-      v-if="displayMode === 'search' && !currentDetail && songs.length > 0"
+    <!-- 歌曲列表展示（使用 SongList 组件） -->
+    <SongList
+      v-show="displayMode === 'search' && !currentDetail && songs.length > 0"
       :display-tracks="songs"
       :current-page="currentPage"
       :page-size="pageSize"
@@ -154,7 +146,7 @@
     />
 
     <!-- 歌手卡片展示 -->
-    <div v-if="displayMode === 'artist' && !currentDetail" class="artist-grid">
+    <div v-show="displayMode === 'artist' && !currentDetail" class="artist-grid">
       <!-- loading 状态 -->
       <div v-if="props.loading" class="loading-container">
         <a-spin size="large" tip="正在搜索..." />
@@ -174,11 +166,7 @@
             loading="lazy"
             @error="handleArtistImageError($event)"
           />
-          <div v-else class="artist-cover-placeholder">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-            </svg>
-          </div>
+          <div v-else class="artist-cover-placeholder"></div>
         </div>
         <div class="artist-info">
           <h4 class="artist-name">{{ artist.name }}</h4>
@@ -207,7 +195,7 @@ import { ref, computed, watch } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
-import SearchResultList from './SearchResultList.vue'
+import SongList from './SongList.vue'
 import Pagination from './Pagination.vue'
 
 const props = defineProps({
@@ -545,10 +533,9 @@ const handleArtistImageError = (event) => {
     placeholder.style.display = 'flex'
   } else {
     const wrapper = target.parentElement
-    const svgPlaceholder = document.createElement('div')
-    svgPlaceholder.className = 'artist-cover-placeholder'
-    svgPlaceholder.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`
-    wrapper.appendChild(svgPlaceholder)
+    const divPlaceholder = document.createElement('div')
+    divPlaceholder.className = 'artist-cover-placeholder'
+    wrapper.appendChild(divPlaceholder)
   }
 }
 
@@ -575,8 +562,8 @@ const handleParse = async (item, type) => {
   } else if (type === 'playlist') {
     resetDetailPagination()
     currentDetail.value = { ...item, loading: true }
-    
-    if (cache.value.playlist[item.id]) {
+
+    if (settings.enableCache && cache.value.playlist[item.id]) {
       const cached = cache.value.playlist[item.id]
       currentDetail.value = {
         id: cached.id,
@@ -645,8 +632,8 @@ const handleParse = async (item, type) => {
   } else if (type === 'album') {
     resetDetailPagination()
     currentDetail.value = { ...item, loading: true }
-    
-    if (cache.value.album[item.id]) {
+
+    if (settings.enableCache && cache.value.album[item.id]) {
       const cached = cache.value.album[item.id]
       currentDetail.value = {
         id: cached.id,
@@ -714,12 +701,12 @@ const handleParse = async (item, type) => {
     }
   } else if (type === 'artist') {
     resetDetailPagination()
-    
+
     // 直接使用卡片中的歌手信息，避免API返回错误的歌手信息
     currentDetail.value = {
       id: item.id,
       name: item.name,
-      coverImgUrl: item.coverImgUrl,
+      coverImgUrl: item.avatarUrl || item.coverImgUrl,
       artist: item.name,
       creator: item.name,
       trackCount: 0,
@@ -727,7 +714,7 @@ const handleParse = async (item, type) => {
       isArtist: true
     }
     
-    if (cache.value.artist[item.id]) {
+    if (settings.enableCache && cache.value.artist[item.id]) {
       const cached = cache.value.artist[item.id]
       currentDetail.value = {
         id: cached.id,
@@ -766,7 +753,7 @@ const handleParse = async (item, type) => {
         currentDetail.value = {
           id: item.id,
           name: item.name,
-          coverImgUrl: item.coverImgUrl,
+          coverImgUrl: item.avatarUrl || item.coverImgUrl,
           artist: item.name,
           creator: item.name,
           trackCount: artistData.songs?.length || artistData.musicCount || 0,
@@ -927,31 +914,38 @@ const getAlbum = (track) => {
   background: var(--color-surface-white);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
 /* loading 状态 */
 .loading-view {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 12px;
   min-height: 300px;
   padding: 2rem;
 }
 
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-surface-container);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
   font-size: 14px;
   color: var(--color-text-muted);
-  margin: 0;
-  white-space: nowrap;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* 返回按钮栏 */
@@ -1014,7 +1008,7 @@ const getAlbum = (track) => {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
   gap: 1.5rem;
-  padding: 1.5rem;
+  padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
 @media (min-width: 640px) {
@@ -1067,7 +1061,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   color: var(--color-text-muted);
 }
 
@@ -1127,7 +1121,7 @@ const getAlbum = (track) => {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
   gap: 1.5rem;
-  padding: 1.5rem;
+  padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
 @media (min-width: 640px) {
@@ -1180,7 +1174,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   color: var(--color-text-muted);
 }
 
@@ -1217,6 +1211,9 @@ const getAlbum = (track) => {
   font-size: 12px;
   color: var(--color-text-muted);
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .album-action {
@@ -1374,7 +1371,7 @@ const getAlbum = (track) => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
-  padding: 1.5rem;
+  padding: 0 1.5rem 1.5rem 1.5rem;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -1433,7 +1430,7 @@ const getAlbum = (track) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   color: var(--color-text-muted);
 }
 
@@ -1477,8 +1474,9 @@ const getAlbum = (track) => {
 /* 搜索Tab */
 .search-tabs {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.5rem;
+  padding: 1rem 1.5rem 1rem 1.5rem;
   margin-bottom: 0;
 }
 
@@ -1488,22 +1486,44 @@ const getAlbum = (track) => {
   gap: 0.25rem;
   padding: 0.5rem 1rem;
   font-size: 14px;
-  color: var(--color-text-muted);
+  color: var(--color-on-surface);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s;
+  font-weight: 600;
+}
+
+.search-tab:deep(.ant-btn) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
+  color: var(--color-on-surface);
+  font-weight: 600;
 }
 
 .search-tab:hover {
   background: var(--color-surface-container-low);
-  color: var(--color-on-surface);
+  color: var(--color-primary);
+}
+
+.search-tab:hover:deep(.ant-btn) {
+  background: transparent;
+  color: var(--color-primary);
 }
 
 .search-tab.active {
   background: var(--color-primary);
   color: #fff;
+}
+
+.search-tab.active:deep(.ant-btn) {
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
 }
 
 /* 下载进度弹窗 */

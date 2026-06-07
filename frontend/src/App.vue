@@ -56,7 +56,7 @@
 
         <!-- 歌单解析视图 -->
         <div class="view-container" v-show="currentView === 'playlist' && playlistInfo && displayTracks.length > 0">
-          <SearchResultList
+          <SongList
             :playlist-info="playlistInfo"
             :display-tracks="playlistInfo?.tracks || displayTracks"
             :current-page="currentPage"
@@ -106,7 +106,7 @@ import Footer from './components/Footer.vue'
 import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
-import SearchResultList from './components/SearchResultList.vue'
+import SongList from './components/SongList.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'

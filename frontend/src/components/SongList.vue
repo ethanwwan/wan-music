@@ -1,5 +1,5 @@
 <template>
-  <div :class="type !== 'search' ? 'detail-view' : 'search-result-panel'">
+  <div :class="type !== 'search' ? 'detail-view' : 'song-list-panel'">
     <!-- 歌曲列表 -->
     <div v-if="totalTracks > 0" :class="type !== 'search' ? '' : 'tracks-section'">
       <!-- 歌单/专辑标题区域（只有在有详情数据时显示） -->
@@ -13,11 +13,7 @@
               :class="type !== 'search' ? 'detail-cover' : 'playlist-cover'" 
               @error="handleCoverError($event)"
             />
-            <div v-else class="cover-placeholder">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-              </svg>
-            </div>
+            <div v-else class="cover-placeholder"></div>
           </div>
           <div :class="type !== 'search' ? 'detail-info' : 'playlist-info'">
             <h1 :class="type !== 'search' ? 'detail-name' : 'playlist-name'">{{ playlistData.name }}</h1>
@@ -91,11 +87,7 @@
                     loading="lazy"
                     @error="handleTrackCoverError($event)"
                   />
-                  <div v-else class="track-cover-placeholder">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                    </svg>
-                  </div>
+                  <div v-else class="track-cover-placeholder"></div>
                 </div>
               </td>
               <td class="col-name">
@@ -659,10 +651,11 @@ const formatPlayCount = (count) => {
 </style>
 
 <style scoped>
-/* 搜索结果面板 */
-.search-result-panel {
+/* 歌曲列表面板 */
+.song-list-panel {
   width: 100%;
-  margin-top: 0;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .tracks-section {
@@ -867,7 +860,7 @@ const formatPlayCount = (count) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   color: var(--color-text-muted);
 }
 
@@ -877,7 +870,7 @@ const formatPlayCount = (count) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-surface-container-low) 0%, var(--color-surface-container) 50%, var(--color-surface-container-low) 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   color: var(--color-text-muted);
 }
 

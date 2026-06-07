@@ -43,14 +43,14 @@
       <div class="example-section">
         <span class="example-label">{{ exampleTitle }}</span>
         <div class="example-tags">
-          <a-tag
+          <span
             v-for="link in exampleLinks"
             :key="link.name"
             class="example-tag"
             @click="handleTagClick(link, 'example-click')"
           >
             {{ link.name }}
-          </a-tag>
+          </span>
         </div>
       </div>
 
@@ -61,14 +61,14 @@
           <span class="history-clear" @click="handleClearHistory">清除历史</span>
         </div>
         <div class="history-tags">
-          <a-tag
+          <span
             v-for="record in historyRecords"
             :key="record.name"
             class="history-tag"
             @click="handleTagClick(record, 'history-click')"
           >
             {{ record.name }}
-          </a-tag>
+          </span>
         </div>
       </div>
     </div>
