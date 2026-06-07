@@ -119,25 +119,17 @@
           <a-form-item label="缓存大小">
             <div class="cache-info">
               <span class="size-text">{{ cacheSize }}</span>
-              <a-popconfirm
-                title="确认清除缓存？"
-                description="清除后所有缓存数据将被删除，下次访问需要重新加载"
-                ok-text="确认清除"
-                cancel-text="取消"
-                ok-button-props={{ danger: true }}
-                @confirm="handleClearCache"
+              <a-button 
+                type="primary" 
+                danger
+                size="small" 
+                :loading="clearingCache"
+                class="clear-cache-btn"
+                @click="handleClearCache"
               >
-                <a-button 
-                  type="primary" 
-                  danger
-                  size="small" 
-                  :loading="clearingCache"
-                  class="clear-cache-btn"
-                >
-                  <template #icon><DeleteOutlined /></template>
-                  清除缓存
-                </a-button>
-              </a-popconfirm>
+                <template #icon><DeleteOutlined /></template>
+                清除缓存
+              </a-button>
             </div>
             <div class="form-item-hint">
               <a-tag color="blue" bordered>缓存包括搜索结果、歌曲信息等，清除后下次访问会重新获取</a-tag>
@@ -189,18 +181,27 @@ const refreshCacheSize = () => {
 }
 
 const handleClearCache = async () => {
-  clearingCache.value = true
-  
-  try {
-    localStorage.clear()
-    sessionStorage.clear()
-    refreshCacheSize()
-    message.success('缓存已清除')
-  } catch (e) {
-    message.error('清除缓存失败')
-  } finally {
-    clearingCache.value = false
-  }
+  Modal.confirm({
+    title: '确认清除缓存？',
+    content: '清除后所有缓存数据将被删除，下次访问需要重新加载',
+    okText: '确认清除',
+    cancelText: '取消',
+    okType: 'danger',
+    onOk: async () => {
+      clearingCache.value = true
+      
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+        refreshCacheSize()
+        message.success('缓存已清除')
+      } catch (e) {
+        message.error('清除缓存失败')
+      } finally {
+        clearingCache.value = false
+      }
+    }
+  })
 }
 
 onMounted(() => {
