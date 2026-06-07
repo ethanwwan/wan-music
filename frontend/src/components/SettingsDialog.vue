@@ -119,15 +119,25 @@
           <a-form-item label="缓存大小">
             <div class="cache-info">
               <span class="size-text">{{ cacheSize }}</span>
-              <a-button 
-                type="danger" 
-                size="middle" 
-                @click="handleClearCache"
-                :loading="clearingCache"
-                class="clear-cache-btn"
+              <a-popconfirm
+                title="确认清除缓存？"
+                description="清除后所有缓存数据将被删除，下次访问需要重新加载"
+                ok-text="确认清除"
+                cancel-text="取消"
+                ok-button-props={{ danger: true }}
+                @confirm="handleClearCache"
               >
-                清除缓存
-              </a-button>
+                <a-button 
+                  type="primary" 
+                  danger
+                  size="small" 
+                  :loading="clearingCache"
+                  class="clear-cache-btn"
+                >
+                  <template #icon><DeleteOutlined /></template>
+                  清除缓存
+                </a-button>
+              </a-popconfirm>
             </div>
             <div class="form-item-hint">
               <a-tag color="blue" bordered>缓存包括搜索结果、歌曲信息等，清除后下次访问会重新获取</a-tag>
@@ -142,7 +152,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { CloseOutlined } from '@ant-design/icons-vue'
+import { CloseOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
 
@@ -179,26 +189,18 @@ const refreshCacheSize = () => {
 }
 
 const handleClearCache = async () => {
-  Modal.confirm({
-    title: '确认清除缓存？',
-    content: '清除后所有缓存数据将被删除，下次访问需要重新加载',
-    okText: '确认清除',
-    cancelText: '取消',
-    onOk: async () => {
-      clearingCache.value = true
-      
-      try {
-        localStorage.clear()
-        sessionStorage.clear()
-        refreshCacheSize()
-        message.success('缓存已清除')
-      } catch (e) {
-        message.error('清除缓存失败')
-      } finally {
-        clearingCache.value = false
-      }
-    }
-  })
+  clearingCache.value = true
+  
+  try {
+    localStorage.clear()
+    sessionStorage.clear()
+    refreshCacheSize()
+    message.success('缓存已清除')
+  } catch (e) {
+    message.error('清除缓存失败')
+  } finally {
+    clearingCache.value = false
+  }
 }
 
 onMounted(() => {
@@ -437,30 +439,10 @@ const handleClose = () => {
 }
 
 .clear-cache-btn {
-  font-size: 14px !important;
-  padding: 4px 16px !important;
-  height: 32px !important;
-  border-radius: 6px !important;
-  transition: all 0.2s ease;
+  margin-left: auto;
 }
 
-.clear-cache-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-}
-
-.clear-cache-btn:active {
-  transform: translateY(0);
-}
-
-.dark .clear-cache-btn {
-  background-color: rgba(239, 68, 68, 0.9) !important;
-  border-color: rgba(239, 68, 68, 0.9) !important;
-}
-
-.dark .clear-cache-btn:hover {
-  background-color: rgba(239, 68, 68, 1) !important;
-  border-color: rgba(239, 68, 68, 1) !important;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+.clear-cache-btn :deep(.ant-btn-icon) {
+  font-size: 14px;
 }
 </style>
