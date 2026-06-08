@@ -90,21 +90,48 @@ class QualityLevel:
 class MusicDLAPI:
     """基于musicdl的音乐API封装"""
     
-    def __init__(self):
-        self._client = None
-        # musicdl支持的音乐源
-        self._target_srcs = ['NeteaseMusicClient', 'QQMusicClient', 'KugouMusicClient', 'KuwoMusicClient', 'MiguMusicClient']
+    # 支持的音乐源列表
+    MUSIC_SOURCES = {
+        'netease': ['NeteaseMusicClient'],
+        'qqmusic': ['QQMusicClient'],
+        'kugou': ['KugouMusicClient'],
+        'kuwo': ['KuwoMusicClient'],
+        'migu': ['MiguMusicClient'],
+        'all': ['NeteaseMusicClient', 'QQMusicClient', 'KugouMusicClient', 'KuwoMusicClient', 'MiguMusicClient']
+    }
     
-    @property
-    def client(self):
-        """懒加载musicdl客户端"""
-        if self._client is None and MUSICDL_AVAILABLE:
+    def __init__(self):
+        self._clients = {}  # 为每个平台维护单独的客户端
+    
+    def _get_client(self, source):
+        """获取指定音乐源的客户端"""
+        if source not in self._clients:
+            if not MUSICDL_AVAILABLE:
+                raise APIException("musicdl不可用")
+            
             try:
-                self._client = MusicClient(music_sources=self._target_srcs)
+                sources = self.MUSIC_SOURCES.get(source, self.MUSIC_SOURCES['netease'])
+                # 配置初始化参数，减少线程数，加快搜索速度
+                init_config = {
+                    source: {
+                        'clients_threadings': 2,  # 减少线程数
+                        'search_size_per_source': 5,  # 限制搜索结果数量
+                    }
+                }
+                self._clients[source] = MusicClient(
+                    music_sources=sources,
+                    init_music_clients_cfg=init_config
+                )
             except Exception as e:
                 logger.error(f"musicdl客户端初始化失败: {e}")
                 raise APIException(f"音乐服务初始化失败: {e}")
-        return self._client
+        
+        return self._clients[source]
+    
+    @property
+    def client(self):
+        """获取默认客户端（网易云）"""
+        return self._get_client('netease')
     
     def _get_source_name(self, source: str) -> str:
         """将简短源名称转换为musicdl的源名称"""
@@ -123,21 +150,17 @@ class MusicDLAPI:
             raise APIException("musicdl不可用")
         
         try:
-            source_name = self._get_source_name(source)
-            results = self.client.search(keyword=keyword)
+            # 使用指定平台的客户端
+            client = self._get_client(source)
+            results = client.search(keyword=keyword)
             
             # search返回dict，键是源名称，值是歌曲列表
-            if source_name in results:
-                songs = results[source_name]
-            else:
-                # 如果指定源没有结果，返回所有结果
-                all_songs = []
-                for src, song_list in results.items():
-                    all_songs.extend(song_list)
-                songs = all_songs
+            all_songs = []
+            for src, song_list in results.items():
+                all_songs.extend(song_list)
             
             # 转换为字典格式并限制数量
-            return [self._song_info_to_dict(song) for song in songs[:limit]]
+            return [self._song_info_to_dict(song) for song in all_songs[:limit]]
         except Exception as e:
             logger.error(f"搜索失败: {e}")
             raise APIException(f"搜索失败: {e}")
@@ -148,12 +171,17 @@ class MusicDLAPI:
             raise APIException("musicdl不可用")
         
         try:
-            results = self.client.search(keyword=keyword)
-            
-            # 收集所有平台的结果
             all_songs = []
-            for src, song_list in results.items():
-                all_songs.extend(song_list)
+            # 只搜索主要平台，避免超时
+            for source in ['netease', 'qqmusic', 'kugou']:
+                try:
+                    client = self._get_client(source)
+                    results = client.search(keyword=keyword)
+                    for src, song_list in results.items():
+                        all_songs.extend(song_list)
+                except Exception as e:
+                    logger.warning(f"{source} 搜索失败: {e}")
+                    continue
             
             # 转换为字典格式并限制数量
             return [self._song_info_to_dict(song) for song in all_songs[:limit]]
@@ -285,7 +313,9 @@ def lyric_v1(song_id: int, cookies: Dict[str, str]) -> Dict[str, Any]:
 def search_music(keywords: str, cookies: Dict[str, str], limit: int = 10) -> List[Dict[str, Any]]:
     """搜索音乐（向后兼容）"""
     try:
-        results = musicdl_api.search_multi_source(keywords, limit=limit)
+        # 只搜索网易云音乐，显著加快搜索速度
+        # 如果需要多平台搜索，可以使用 search_multi_source 函数
+        results = musicdl_api.search(keywords, source='netease', limit=limit)
         songs = []
         for item in results:
             songs.append({
