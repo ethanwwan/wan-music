@@ -283,12 +283,13 @@ export const getMusicUrl = async (musicId, quality = 'lossless', options = {}) =
 
   try {
     // 使用后端 /song 接口而不是直接调用 EAPI
+    const dataSource = settings?.dataSource || 'official'
     const response = await fetch('/song', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `ids=${musicId}&level=${quality}&type=url`
+      body: `ids=${musicId}&level=${quality}&type=url&source=${dataSource}`
     })
     
     const result = await response.json()
@@ -770,11 +771,17 @@ export const searchArtist = async (keyword) => {
         const songDetailResponse = await fetch('/api/v3/song/detail', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/x-www-form-urlencoded'
           },
-          body: JSON.stringify({ songIds: [songId] })
+          body: `ids=[${songId}]`
         })
-        const songDetailResult = await songDetailResponse.json()
+        const text = await songDetailResponse.text()
+        // 处理可能的重复响应
+        const match = text.match(/^\{.*\}$/)
+        const songDetailResult = match ? JSON.parse(match[0]) : {}
+        if (!songDetailResult.songs) {
+          return null
+        }
         
         if (songDetailResult.songs && songDetailResult.songs.length > 0) {
           const song = songDetailResult.songs[0]
@@ -796,7 +803,10 @@ export const searchArtist = async (keyword) => {
               },
               body: JSON.stringify({ keyword: artistName })
             })
-            const artistResult = await artistResponse.json()
+            const artistText = await artistResponse.text()
+            // 处理可能的重复响应
+            const artistMatch = artistText.match(/^\{.*\}$/)
+            const artistResult = artistMatch ? JSON.parse(artistMatch[0]) : {}
             
             if (artistResult.success && artistResult.data && artistResult.data.length > 0) {
               const searchData = artistResult.data.map(artist => ({

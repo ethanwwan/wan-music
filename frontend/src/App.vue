@@ -72,8 +72,26 @@
         </div>
 
         <!-- 专辑解析视图 -->
-        <div class="view-container" v-show="currentView === 'album'">
-          <!-- 专辑详情组件 -->
+        <div class="view-container" v-show="currentView === 'album' && albumInfo">
+          <SongList
+            type="song"
+            :items="albumInfo?.tracks || []"
+            :detail-info="{
+              ...albumInfo,
+              coverImgUrl: albumInfo?.coverImgUrl || albumInfo?.picUrl,
+              name: albumInfo?.name,
+              creator: albumInfo?.artistName || albumInfo?.artist?.name,
+              isAlbum: true
+            }"
+            :current-page="currentPage"
+            :page-size="20"
+            :total-tracks="totalTracks"
+            :settings="settings"
+            @track-selected="handleTrackSelected"
+            @track-parsed="handleTrackParsed"
+            @track-play="(track) => handlePlaySong(track)"
+            @page-change="handlePageChange"
+          />
         </div>
       </a-layout-content>
 
@@ -89,7 +107,7 @@
       <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
 
       <!-- 底部播放器 -->
-      <MusicPlayer :playlist="playerPlaylist" :autoplay="true" v-model:current-index="currentPlayIndex" @play-error="handlePlayError" />
+      <MusicPlayer :current-song="currentSong" :autoplay="true" @play-error="handlePlayError" />
     </a-layout>
   </a-config-provider>
 </template>
@@ -128,8 +146,14 @@ const showSettingsDialog = ref(false)
 const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
 
-// 播放列表
+// 播放列表（保留用于向后兼容）
 const playerPlaylist = ref([])
+
+// 当前播放的歌曲
+const currentSong = ref(null)
+
+// 当前播放索引（保留用于向后兼容）
+const currentPlayIndex = ref(0)
 
 // 搜索配置
 const searchConfig = {
@@ -220,69 +244,24 @@ const handleParseSong = (song) => {
   parseMusic(quality, 'music')
 }
 
-// 当前播放索引
-const currentPlayIndex = ref(0)
-
 // 保存当前播放列表的完整数据（用于点击播放时）
 const currentFullPlaylist = ref([])
 
-// 处理歌曲播放
-const handlePlaySong = async (track, playlistData = null) => {
-  console.log('Original track data:', track)
+// 处理歌曲播放 - 只播放当前点击的歌曲
+const handlePlaySong = async (track) => {
+  console.log('Playing single track:', track.name)
   
-  let tracks = []
-  
-  if (playlistData && playlistData.length > 0) {
-    tracks = playlistData
-    console.log('Using provided playlist data:', playlistData.length, 'tracks')
+  // 直接设置当前播放的歌曲，不使用播放列表
+  currentSong.value = {
+    id: track.id,
+    name: track.name,
+    artist: track.artist || track.ar?.[0]?.name || (Array.isArray(track.artists) ? track.artists[0]?.name : track.artists) || '未知艺术家',
+    album: track.album || track.al?.name || '未知专辑',
+    cover: getCoverUrl(track),
+    lrc: track.lrc || '',
+    url: track.url || '',
+    unavailable: track.unavailable || false
   }
-  else if (playlistInfo.value?.tracks?.length > 0) {
-    tracks = playlistInfo.value.tracks
-  }
-  else if (displayTracks.value.length > 0) {
-    tracks = displayTracks.value
-  }
-  else {
-    tracks = [track]
-  }
-  
-  const newPlaylist = tracks.map(t => ({
-    id: t.id,
-    name: t.name,
-    artist: t.artist || t.ar?.[0]?.name || (Array.isArray(t.artists) ? t.artists[0]?.name : t.artists) || '未知艺术家',
-    album: t.album || t.al?.name || '未知专辑',
-    cover: getCoverUrl(t),
-    lrc: t.lrc || '',
-    url: t.url || '',
-    unavailable: t.unavailable || false
-  }))
-  
-  console.log('Converted playlist (first 3):', newPlaylist.slice(0, 3))
-  
-  const index = newPlaylist.findIndex(p => p.id === track.id)
-  if (index >= 0) {
-    if (track.url) {
-      newPlaylist[index].url = track.url
-    }
-    if (track.lrc) {
-      newPlaylist[index].lrc = track.lrc
-    }
-    currentPlayIndex.value = index
-  } else {
-    newPlaylist.unshift({
-      id: track.id,
-      name: track.name,
-      artist: track.artist || track.ar?.[0]?.name || (Array.isArray(track.artists) ? track.artists[0]?.name : track.artists) || '未知艺术家',
-      album: track.album || t.al?.name || '未知专辑',
-      cover: getCoverUrl(track),
-      lrc: track.lrc || '',
-      url: track.url || '',
-      unavailable: track.unavailable || false
-    })
-    currentPlayIndex.value = 0
-  }
-  
-  playerPlaylist.value = [...newPlaylist]
 }
 
 // 获取封面URL

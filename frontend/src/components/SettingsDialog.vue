@@ -34,6 +34,27 @@
         </div>
       </div>
 
+      <!-- 数据源设置 -->
+      <div class="setting-section">
+        <div class="section-title">数据源设置</div>
+        <a-form :model="settings" layout="horizontal" class="settings-form">
+          <a-form-item label="数据源">
+            <a-select
+              v-model:value="settings.dataSource"
+              @change="handleSave"
+              :style="{ width: '180px' }"
+            >
+              <a-select-option value="official">官方API</a-select-option>
+              <a-select-option value="xuanluoge">xuanluoge</a-select-option>
+              <a-select-option value="haitangw">haitangw</a-select-option>
+            </a-select>
+            <div class="form-item-hint">
+              <a-tag color="blue" bordered>选择解析音乐链接的数据源，优先使用官方API</a-tag>
+            </div>
+          </a-form-item>
+        </a-form>
+      </div>
+
       <!-- 音质设置 -->
       <div class="setting-section">
         <div class="section-title">音质设置</div>

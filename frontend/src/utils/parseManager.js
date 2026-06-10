@@ -144,6 +144,24 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       loading.value = true
       try {
         await parsePlaylist()
+      } catch (error) {
+        // 如果解析失败，尝试搜索歌单名称
+        console.warn('歌单解析失败，尝试搜索:', error.message)
+        // 清空之前的搜索结果
+        playlistSearchResults.value = []
+        // 尝试搜索（使用输入的内容作为关键词）
+        const result = await musicApi.searchPlaylist(musicUrl.value)
+        if (result.success && result.data) {
+          playlistSearchResults.value = result.data
+          notification.open({
+            title: '搜索成功',
+            message: `找到 ${result.data.length || 0} 个歌单`,
+            type: 'success'
+          })
+        } else {
+          playlistSearchResults.value = []
+          message.warning(result.error || '搜索结果为空')
+        }
       } finally {
         loading.value = false
       }
@@ -310,7 +328,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
   loading.value = true
   try {
     const result = await musicApi.searchMusic(musicUrl.value)
-    if (result.success && result.data.songs && result.data.songs.length > 0) {
+    if (result.success && result.data && result.data.songs && result.data.songs.length > 0) {
       searchResults.value = result.data.songs
       notification.open({
         title: '搜索成功',
@@ -319,7 +337,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
       })
     } else {
       searchResults.value = []
-      message.warning(result.error || '搜索结果为空')
+      message.warning(result?.error || '搜索结果为空')
     }
   } catch (error) {
     searchResults.value = []
@@ -406,6 +424,11 @@ export const parsePlaylist = async () => {
   } catch (error) {
     // 根据错误类型显示不同的提示信息
     let errorMessage = '歌单解析失败，请检查链接是否正确'
+    
+    // 清空歌单信息，避免显示旧数据或URL
+    playlistInfo.value = null
+    allTracks.value = []
+    totalTracks.value = 0
     
     if (error.message && error.message.includes('API服务器暂时不可用')) {
       errorMessage = 'API服务器暂时不可用，请稍后重试。这可能是由于服务器维护或网络问题导致的。'

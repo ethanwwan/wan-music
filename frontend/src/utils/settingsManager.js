@@ -13,6 +13,8 @@ export const defaultSettings = {
   cacheTTLMinutes: 15, // 缓存时间（分钟） 
   // 音质设置
   selectedQuality: 'lossless', // 默认音质：无损
+  // 数据源设置
+  dataSource: 'official', // 数据源：official, xuanluoge, haitangw
   // 极验验证码设置已移除
 }
 
@@ -54,15 +56,8 @@ export const loadSettings = () => {
         hasChanges = true
       }
       
-      // enableCache 必须默认为 true
-      if (settings.enableCache !== defaultSettings.enableCache) {
-        console.log(`[Settings] 迁移: enableCache 从 ${settings.enableCache} 改为 ${defaultSettings.enableCache}`)
-        settings.enableCache = defaultSettings.enableCache
-        hasChanges = true
-      }
-      
-      // selectedQuality 必须有值且有效
-      if (!settings.selectedQuality || settings.selectedQuality !== defaultSettings.selectedQuality) {
+      // selectedQuality 必须有值且有效（只在未设置时使用默认值）
+      if (!settings.selectedQuality) {
         console.log(`[Settings] 迁移: selectedQuality 从 ${settings.selectedQuality} 改为 ${defaultSettings.selectedQuality}`)
         settings.selectedQuality = defaultSettings.selectedQuality
         hasChanges = true

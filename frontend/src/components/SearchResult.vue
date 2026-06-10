@@ -199,8 +199,8 @@ watch(() => props.currentMode, () => {
 watch(
   () => props.songs.length,
   (newLength, oldLength) => {
-    // 只要有搜索结果，就重置所有状态
-    if (newLength > 0) {
+    // 只有当从无数据变为有数据时（初始搜索），才切换回单曲tab
+    if (newLength > 0 && oldLength === 0) {
       // 切换回单曲tab
       currentSearchType.value = 'search'
       // 重置到第一页

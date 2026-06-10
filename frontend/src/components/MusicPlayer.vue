@@ -2,7 +2,7 @@
   <div class="player-container">
     <!-- Mini 悬浮播放按钮 -->
     <div 
-      v-if="playlist.length > 0" 
+      v-if="currentSong" 
       class="mini-player"
       :class="{ 'playing': isPlaying }"
       @click="togglePlay"
@@ -34,9 +34,9 @@
       <!-- 封面/图标 -->
       <div class="mini-player-content">
         <img 
-          v-if="currentTrack?.cover && !showIcon" 
-          :src="currentTrack.cover" 
-          :alt="currentTrack.name"
+          v-if="currentSong?.cover && !showIcon" 
+          :src="currentSong.cover" 
+          :alt="currentSong.name"
           class="mini-cover"
           :class="{ 'rotating': isPlaying }"
           @error="handleCoverError"
@@ -49,8 +49,8 @@
       
       <!-- 悬停提示 -->
       <div class="mini-player-tooltip">
-        <div class="tooltip-title">{{ currentTrack?.name || '未播放' }}</div>
-        <div class="tooltip-artist">{{ currentTrack?.artist || '未知艺术家' }}</div>
+        <div class="tooltip-title">{{ currentSong?.name || '未播放' }}</div>
+        <div class="tooltip-artist">{{ currentSong?.artist || '未知艺术家' }}</div>
         <div class="tooltip-time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</div>
       </div>
     </div>
@@ -63,13 +63,10 @@ import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, PauseOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps({
-  playlist: {
-    type: Array,
-    default: () => []
-  },
-  currentIndex: {
-    type: Number,
-    default: 0
+  // 单个当前播放的歌曲
+  currentSong: {
+    type: Object,
+    default: null
   },
   autoplay: {
     type: Boolean,
@@ -77,25 +74,18 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error', 'update:currentIndex'])
+const emit = defineEmits(['play', 'pause', 'end', 'download', 'play-error'])
 
 const audioRef = ref(null)
-const internalIndex = ref(0)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const showIcon = ref(false)
-
-// 使用 prop 或内部索引
-const currentIndex = computed({
-  get: () => props.currentIndex ?? internalIndex.value,
-  set: (val) => { internalIndex.value = val }
-})
+const isLoading = ref(false)  // 标记是否正在加载新歌曲
+const pendingPlayPromise = ref(null)  // 保存正在进行的play() Promise
 
 // 圆形进度条参数
 const circumference = 2 * Math.PI * 28 // 2πr
-
-const currentTrack = computed(() => props.playlist[currentIndex.value])
 
 const progressPercent = computed(() => {
   if (duration.value === 0) return 0
@@ -113,7 +103,7 @@ const formatTime = (time) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
-const togglePlay = () => {
+const togglePlay = async () => {
   if (!audioRef.value) {
     initAudio()
   }
@@ -122,23 +112,21 @@ const togglePlay = () => {
     isPlaying.value = false
     emit('pause')
   } else {
-    audioRef.value.play()
-    isPlaying.value = true
-    emit('play')
+    try {
+      // 如果歌曲已经播放完毕，从头开始播放
+      if (currentTime.value >= duration.value && duration.value > 0) {
+        audioRef.value.currentTime = 0
+      }
+      await audioRef.value.play()
+      isPlaying.value = true
+      emit('play')
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('播放失败:', error)
+        isPlaying.value = false
+      }
+    }
   }
-}
-
-const playTrack = (index) => {
-  if (props.playlist[index]?.unavailable) {
-    message.warning('该歌曲无版权')
-    return
-  }
-  internalIndex.value = index
-  emit('update:currentIndex', index)
-  initAudio()
-  audioRef.value.play()
-  isPlaying.value = true
-  emit('play')
 }
 
 const handleTimeUpdate = () => {
@@ -155,12 +143,8 @@ const handleLoadedMetadata = () => {
 
 const handleEnded = () => {
   isPlaying.value = false
-  const hasNext = currentIndex.value < props.playlist.length - 1
-  if (hasNext) {
-    playTrack(currentIndex.value + 1)
-  } else {
-    emit('end')
-  }
+  // 播放完毕后暂停，不自动播放下一首
+  emit('end')
 }
 
 const handleError = (event) => {
@@ -170,15 +154,9 @@ const handleError = (event) => {
   }
   
   isPlaying.value = false
-  const current = props.playlist[currentIndex.value]
   
-  if (current) {
-    emit('play-error', current)
-  }
-  
-  const hasNext = currentIndex.value < props.playlist.length - 1
-  if (hasNext) {
-    playTrack(currentIndex.value + 1)
+  if (props.currentSong) {
+    emit('play-error', props.currentSong)
   }
 }
 
@@ -194,39 +172,43 @@ const initAudio = () => {
     audioRef.value.addEventListener('ended', handleEnded)
     audioRef.value.addEventListener('error', handleError)
   }
-  audioRef.value.src = currentTrack.value?.url || ''
+  audioRef.value.src = props.currentSong?.url || ''
 }
 
-watch(() => props.playlist, (newPlaylist) => {
-  if (newPlaylist.length === 0) {
-    isPlaying.value = false
-  }
-}, { deep: true })
-
-// 监听 currentIndex prop 变化，自动切换歌曲
-watch(() => props.currentIndex, (newIndex, oldIndex) => {
-  if (newIndex !== oldIndex && newIndex >= 0 && newIndex < props.playlist.length) {
+// 监听 currentSong 变化，自动更新音频
+watch(() => props.currentSong, async (newSong) => {
+  if (newSong) {
+    // 重置播放状态
+    currentTime.value = 0
+    duration.value = 0
+    
     if (audioRef.value) {
-      initAudio()
-      if (props.autoplay || isPlaying.value) {
-        audioRef.value.play()
+      audioRef.value.pause()
+    }
+    
+    initAudio()
+    
+    if (props.autoplay) {
+      try {
+        await audioRef.value.play()
         isPlaying.value = true
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('播放失败:', error)
+          isPlaying.value = false
+        }
       }
     }
-  }
-})
-
-// 监听 playlist 变化，自动播放第一首
-watch(() => props.playlist, (newPlaylist, oldPlaylist) => {
-  if (newPlaylist.length > 0 && oldPlaylist?.length === 0 && props.autoplay) {
-    initAudio()
-    audioRef.value?.play()
-    isPlaying.value = true
+  } else {
+    isPlaying.value = false
+    if (audioRef.value) {
+      audioRef.value.pause()
+    }
   }
 }, { deep: true })
 
 onMounted(() => {
-  if (props.playlist.length > 0) {
+  if (props.currentSong) {
     initAudio()
   }
 })

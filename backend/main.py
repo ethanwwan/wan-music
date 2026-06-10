@@ -22,12 +22,11 @@ from flask import Flask, request, send_file, render_template, Response
 
 try:
     from api.music_api import (
-    NeteaseAPI, APIException, QualityLevel,
-    url_v1, name_v1, lyric_v1, search_music, search_playlist, search_album, search_artist,
-    playlist_detail, album_detail, get_artist_top_songs, get_artist_detail
-)
-    from api.cookie_manager import CookieManager, CookieException
-    from api.music_downloader import MusicDownloader, EnhancedMusicDownloader
+        url_v1, name_v1, lyric_v1, search_music, 
+        playlist_detail_v1, album_detail_v1,
+        get_platforms, get_data_sources
+    )
+    from api.netease_api import NeteaseAPIClient, QualityLevel, CookieManager, CookieException, QRLoginManager, netease_client
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保所有依赖模块存在且可用")
@@ -90,45 +89,9 @@ class MusicAPIService:
         self.config = config
         self.logger = self._setup_logger()
         self.cookie_manager = CookieManager()
-        self.netease_api = NeteaseAPI()
-        self.downloader = MusicDownloader()
+        self.netease_api = NeteaseAPIClient()
         
-        # 创建下载目录
-        self.downloads_path = Path(config.downloads_dir)
-        self.downloads_path.mkdir(exist_ok=True)
-        
-        # 初始化增强版下载器
-        try:
-            self.enhanced_downloader = EnhancedMusicDownloader(
-                api=NeteaseAPI(),
-                download_dir=str(self.downloads_path),
-                max_concurrent=3
-            )
-            # 启动下载器工作协程
-            import asyncio
-            import threading
-            self.loop = asyncio.new_event_loop()
-            self.downloader_thread = threading.Thread(target=self._run_downloader_loop, daemon=True)
-            self.downloader_thread.start()
-            self.logger.info("增强版下载器初始化完成")
-        except Exception as e:
-            self.logger.warning(f"增强版下载器初始化失败: {e}")
-            self.enhanced_downloader = None
-        
-        self.logger.info(f"音乐API服务初始化完成，下载目录: {self.downloads_path.absolute()}")
-    
-    def _run_downloader_loop(self):
-        """在单独的线程中运行下载器事件循环"""
-        asyncio.set_event_loop(self.loop)
-        self.loop.create_task(self._initialize_downloader())
-        self.loop.run_forever()
-    
-    async def _initialize_downloader(self):
-        """初始化下载器"""
-        try:
-            await self.enhanced_downloader.__aenter__()
-        except Exception as e:
-            self.logger.error(f"下载器初始化失败: {e}")
+        self.logger.info("音乐API服务初始化完成")
     
     def _setup_logger(self) -> logging.Logger:
         """设置日志记录器"""
@@ -348,6 +311,40 @@ def health_check():
         return APIResponse.error(f"健康检查失败: {str(e)}", 500)
 
 
+@app.route('/api/data-sources', methods=['GET'])
+def get_data_sources():
+    """获取可用数据源列表API"""
+    try:
+        from api.music_api import get_data_sources as get_sources
+        sources = get_sources()
+        return APIResponse.success(sources, "获取数据源列表成功")
+    except Exception as e:
+        api_service.logger.error(f"获取数据源列表失败: {e}")
+        return APIResponse.error(f"获取数据源列表失败: {str(e)}", 500)
+
+
+@app.route('/api/data-sources', methods=['POST'])
+def set_data_source():
+    """设置数据源API"""
+    try:
+        from api.music_api import set_data_source as set_source
+        data = api_service._safe_get_request_data()
+        source = data.get('source')
+        
+        if not source:
+            return APIResponse.error("请提供数据源参数")
+        
+        valid_sources = ['official', 'xuanluoge', 'haitangw', 'auto']
+        if source not in valid_sources:
+            return APIResponse.error(f"无效的数据源，支持: {', '.join(valid_sources)}")
+        
+        set_source(source)
+        return APIResponse.success({'source': source}, f"数据源已设置为: {source}")
+    except Exception as e:
+        api_service.logger.error(f"设置数据源失败: {e}")
+        return APIResponse.error(f"设置数据源失败: {str(e)}", 500)
+
+
 @app.route('/song', methods=['GET', 'POST'])
 @app.route('/Song_V1', methods=['GET', 'POST'])  # 向后兼容
 def get_song_info():
@@ -359,6 +356,7 @@ def get_song_info():
         url = data.get('url')
         level = data.get('level', 'lossless')
         info_type = data.get('type', 'url')
+        data_source = data.get('source', data.get('data_source', 'official'))
         
         # 参数验证
         if not song_ids and not url:
@@ -377,26 +375,41 @@ def get_song_info():
         if info_type not in valid_types:
             return APIResponse.error(f"无效的类型参数，支持: {', '.join(valid_types)}")
         
+        # 验证数据源参数
+        valid_sources = ['official', 'xuanluoge', 'haitangw']
+        if data_source not in valid_sources:
+            return APIResponse.error(f"无效的数据源，支持: {', '.join(valid_sources)}")
+        
         cookies = api_service._get_cookies()
         
         # 根据类型获取不同信息
         if info_type == 'url':
-            result = url_v1(music_id, level, cookies)
-            if result and result.get('data') and len(result['data']) > 0:
-                song_data = result['data'][0]
-                response_data = {
-                    'id': song_data.get('id'),
-                    'url': song_data.get('url'),
-                    'level': song_data.get('level'),
-                    'quality_name': api_service._get_quality_display_name(song_data.get('level', level)),
-                    'size': song_data.get('size'),
-                    'size_formatted': api_service._format_file_size(song_data.get('size', 0)),
-                    'type': song_data.get('type'),
-                    'bitrate': song_data.get('br')
-                }
-                return APIResponse.success(response_data, "获取歌曲URL成功")
-            else:
-                return APIResponse.error("获取音乐URL失败，可能是版权限制或音质不支持", 404)
+            try:
+                result = url_v1(music_id, level, cookies, data_source)
+                if result and result.get('data') and len(result['data']) > 0:
+                    song_data = result['data'][0]
+                    # 检查URL是否有效
+                    if song_data.get('url'):
+                        response_data = {
+                            'id': song_data.get('id'),
+                            'url': song_data.get('url'),
+                            'level': song_data.get('level'),
+                            'quality_name': api_service._get_quality_display_name(song_data.get('level', level)),
+                            'size': song_data.get('size'),
+                            'size_formatted': api_service._format_file_size(song_data.get('size', 0)),
+                            'type': song_data.get('type'),
+                            'bitrate': song_data.get('br'),
+                            'source': song_data.get('source', data_source)
+                        }
+                        return APIResponse.success(response_data, "获取歌曲URL成功")
+                    else:
+                        return APIResponse.error("该歌曲因版权限制无法获取播放链接", 403)
+                else:
+                    return APIResponse.error("获取音乐URL失败，可能是版权限制或音质不支持", 404)
+            except Exception as e:
+                if "所有数据源均无法获取" in str(e):
+                    return APIResponse.error(f"该歌曲因版权限制无法获取播放链接", 403)
+                raise
         
         elif info_type == 'name':
             result = name_v1(music_id)
@@ -408,9 +421,16 @@ def get_song_info():
         
         elif info_type == 'json':
             # 获取完整的歌曲信息（用于前端解析）
-            song_info = name_v1(music_id)
-            url_info = url_v1(music_id, level, cookies)
-            lyric_info = lyric_v1(music_id, cookies)
+            try:
+                song_info = name_v1(music_id)
+                url_info = url_v1(music_id, level, cookies, data_source)
+                lyric_info = lyric_v1(music_id, cookies)
+            except Exception as e:
+                if "所有数据源均无法获取" in str(e):
+                    # 如果获取URL失败但能获取歌曲信息，仍然返回歌曲信息，只是URL为空
+                    song_info = name_v1(music_id)
+                    url_info = None
+                    lyric_info = lyric_v1(music_id, cookies)
             
             if not song_info or 'songs' not in song_info or not song_info['songs']:
                 return APIResponse.error("未找到歌曲信息", 404)
@@ -425,6 +445,7 @@ def get_song_info():
                 'al_name': song_data.get('al', {}).get('name', ''),
                 'pic': song_data.get('al', {}).get('picUrl', ''),
                 'level': level,
+                'source': data_source,
                 'lyric': lyric_info.get('lrc', {}).get('lyric', '') if lyric_info else '',
                 'tlyric': lyric_info.get('tlyric', {}).get('lyric', '') if lyric_info else ''
             }
@@ -435,7 +456,8 @@ def get_song_info():
                 response_data.update({
                     'url': url_data.get('url', ''),
                     'size': api_service._format_file_size(url_data.get('size', 0)),
-                    'level': url_data.get('level', level)
+                    'level': url_data.get('level', level),
+                    'source': url_data.get('source', data_source)
                 })
             else:
                 response_data.update({
@@ -445,9 +467,6 @@ def get_song_info():
             
             return APIResponse.success(response_data, "获取歌曲信息成功")
             
-    except APIException as e:
-        api_service.logger.error(f"API调用失败: {e}")
-        return APIResponse.error(f"API调用失败: {str(e)}", 500)
     except Exception as e:
         api_service.logger.error(f"获取歌曲信息异常: {e}\n{traceback.format_exc()}")
         return APIResponse.error(f"服务器错误: {str(e)}", 500)
@@ -510,8 +529,7 @@ def search_playlist_api():
         if limit > 100:
             limit = 100
         
-        cookies = api_service._get_cookies()
-        result = search_playlist(keyword, cookies, limit)
+        result = netease_client.search_playlist(keyword, limit)
         
         return APIResponse.success(result, "搜索完成")
         
@@ -537,8 +555,7 @@ def search_album_api():
         if limit > 100:
             limit = 100
         
-        cookies = api_service._get_cookies()
-        result = search_album(keyword, cookies, limit)
+        result = netease_client.search_album(keyword, limit)
         
         return APIResponse.success(result, "搜索完成")
         
@@ -564,8 +581,7 @@ def search_artist_api():
         if limit > 100:
             limit = 100
         
-        cookies = api_service._get_cookies()
-        result = search_artist(keyword, cookies, limit)
+        result = netease_client.search_artist(keyword, limit)
         
         return APIResponse.success(result, "搜索完成")
         
@@ -591,8 +607,11 @@ def get_playlist():
         if validation_error:
             return validation_error
         
-        cookies = api_service._get_cookies()
-        result = playlist_detail(playlist_id, cookies)
+        result = netease_client.get_playlist_detail(playlist_id)
+        
+        # 检查是否获取到有效数据
+        if not result or (isinstance(result, dict) and not result.get('tracks')):
+            return APIResponse.error(f"获取歌单失败：歌单不存在或无法访问", 404)
         
         # 适配前端期望的响应格式
         response_data = {
@@ -623,8 +642,7 @@ def get_album():
         if validation_error:
             return validation_error
         
-        cookies = api_service._get_cookies()
-        result = album_detail(album_id, cookies)
+        result = netease_client.get_album_detail(album_id)
         
         # 适配前端期望的响应格式
         response_data = {
@@ -663,7 +681,7 @@ def get_artist():
             return APIResponse.error("歌手ID必须是数字")
         
         # 使用新的API获取歌手详情
-        result = get_artist_detail(artist_id_int, cookies)
+        result = netease_client.get_artist_detail(artist_id_int)
         
         # 构建响应数据
         artist_info = result.get('artist', {})
@@ -672,7 +690,7 @@ def get_artist():
         # 如果没有获取到歌手信息，尝试用搜索方式
         if not artist_info:
             api_service.logger.info(f"未获取到歌手信息，尝试搜索方式...")
-            search_result = search_artist(str(artist_id), cookies, 10)
+            search_result = netease_client.search_artist(str(artist_id), 10)
             
             if search_result:
                 # 尝试匹配相同ID的歌手，否则取第一个
@@ -733,6 +751,7 @@ def download_music_api():
         music_id = data.get('id')
         quality = data.get('quality', 'lossless')
         return_format = data.get('format', 'file')  # file 或 json
+        data_source = data.get('source', data.get('data_source', 'official'))
         
         # 参数验证
         validation_error = api_service._validate_request_params({'music_id': music_id})
@@ -748,6 +767,11 @@ def download_music_api():
         if return_format not in ['file', 'json']:
             return APIResponse.error("返回格式只支持 'file' 或 'json'")
         
+        # 验证数据源参数
+        valid_sources = ['official', 'xuanluoge', 'haitangw']
+        if data_source not in valid_sources:
+            return APIResponse.error(f"无效的数据源，支持: {', '.join(valid_sources)}")
+        
         music_id = api_service._extract_music_id(music_id)
         cookies = api_service._get_cookies()
         
@@ -756,8 +780,8 @@ def download_music_api():
         if not song_info or 'songs' not in song_info or not song_info['songs']:
             return APIResponse.error("未找到音乐信息", 404)
         
-        # 获取音乐下载链接
-        url_info = url_v1(music_id, quality, cookies)
+        # 获取音乐下载链接（支持数据源选择）
+        url_info = url_v1(music_id, quality, cookies, data_source)
         if not url_info or 'data' not in url_info or not url_info['data'] or not url_info['data'][0].get('url'):
             return APIResponse.error("无法获取音乐下载链接，可能是版权限制或音质不支持", 404)
         
@@ -774,7 +798,8 @@ def download_music_api():
             'file_type': url_data['type'],
             'file_size': url_data['size'],
             'duration': song_data.get('dt', 0),
-            'download_url': url_data['url']
+            'download_url': url_data['url'],
+            'source': url_data.get('source', data_source)
         }
         
         # 生成安全文件名
@@ -800,7 +825,7 @@ def download_music_api():
                 file_path = Path(download_result.file_path)
                 api_service.logger.info(f"下载完成: {filename}")
                 
-            except DownloadException as e:
+            except Exception as e:
                 api_service.logger.error(f"下载异常: {e}")
                 return APIResponse.error(f"下载失败: {str(e)}", 500)
         
@@ -818,7 +843,8 @@ def download_music_api():
                 'file_size_formatted': api_service._format_file_size(music_info['file_size']),
                 'file_path': str(file_path.absolute()),
                 'filename': filename,
-                'duration': music_info['duration']
+                'duration': music_info['duration'],
+                'source': music_info['source']
             }
             return APIResponse.success(response_data, "下载完成")
         else:
@@ -1192,198 +1218,7 @@ def proxy_qr_login():
         return APIResponse.error(f"代理失败: {str(e)}", 500)
 
 
-# ========== 增强版下载管理 API ==========
 
-def _run_async(coro):
-    """在下载器的事件循环中运行协程"""
-    if not api_service.enhanced_downloader:
-        raise Exception("增强版下载器未初始化")
-    
-    import asyncio
-    future = asyncio.run_coroutine_threadsafe(coro, api_service.loop)
-    return future.result(timeout=60)
-
-
-@app.route('/api/download/queue', methods=['POST'])
-def add_to_download_queue():
-    """添加歌曲到下载队列"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        data = api_service._safe_get_request_data()
-        music_id = data.get('id')
-        quality = data.get('quality', 'lossless')
-        priority = data.get('priority', 0)
-        
-        if not music_id:
-            return APIResponse.error("缺少必需参数: id")
-        
-        music_id = api_service._extract_music_id(music_id)
-        
-        task_id = _run_async(
-            api_service.enhanced_downloader.download(
-                music_id=music_id,
-                quality=quality,
-                priority=priority
-            )
-        )
-        
-        api_service.logger.info(f"已添加下载任务: task_id={task_id}, music_id={music_id}")
-        return APIResponse.success({'task_id': task_id}, "任务已添加到队列")
-        
-    except Exception as e:
-        api_service.logger.error(f"添加下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"添加任务失败: {str(e)}", 500)
-
-
-@app.route('/api/download/queue/batch', methods=['POST'])
-def add_batch_to_queue():
-    """批量添加歌曲到下载队列"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        data = api_service._safe_get_request_data()
-        music_ids = data.get('ids', [])
-        quality = data.get('quality', 'lossless')
-        
-        if not music_ids:
-            return APIResponse.error("缺少必需参数: ids")
-        
-        # 提取音乐ID
-        processed_ids = []
-        for music_id in music_ids:
-            processed_ids.append(api_service._extract_music_id(music_id))
-        
-        task_ids = _run_async(
-            api_service.enhanced_downloader.batch_download(
-                music_ids=processed_ids,
-                quality=quality
-            )
-        )
-        
-        api_service.logger.info(f"已批量添加 {len(task_ids)} 个下载任务")
-        return APIResponse.success({'task_ids': task_ids}, "批量任务已添加")
-        
-    except Exception as e:
-        api_service.logger.error(f"批量添加下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"批量添加失败: {str(e)}", 500)
-
-
-@app.route('/api/download/queue', methods=['GET'])
-def get_download_queue():
-    """获取下载队列状态"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        tasks = _run_async(api_service.enhanced_downloader.get_all_tasks())
-        
-        return APIResponse.success({'tasks': tasks}, "获取队列成功")
-        
-    except Exception as e:
-        api_service.logger.error(f"获取下载队列失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"获取队列失败: {str(e)}", 500)
-
-
-@app.route('/api/download/task/<task_id>', methods=['GET'])
-def get_download_task(task_id):
-    """获取单个下载任务状态"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        task = _run_async(api_service.enhanced_downloader.get_task_status(task_id))
-        
-        if task:
-            return APIResponse.success(task, "获取任务状态成功")
-        else:
-            return APIResponse.error("任务不存在", 404)
-        
-    except Exception as e:
-        api_service.logger.error(f"获取下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"获取任务失败: {str(e)}", 500)
-
-
-@app.route('/api/download/task/<task_id>/pause', methods=['POST'])
-def pause_download_task(task_id):
-    """暂停下载任务"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        success = _run_async(api_service.enhanced_downloader.pause(task_id))
-        
-        if success:
-            api_service.logger.info(f"已暂停任务: {task_id}")
-            return APIResponse.success(None, "任务已暂停")
-        else:
-            return APIResponse.error("任务无法暂停（可能不存在或不是下载中状态）", 400)
-        
-    except Exception as e:
-        api_service.logger.error(f"暂停下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"暂停失败: {str(e)}", 500)
-
-
-@app.route('/api/download/task/<task_id>/resume', methods=['POST'])
-def resume_download_task(task_id):
-    """恢复下载任务"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        success = _run_async(api_service.enhanced_downloader.resume(task_id))
-        
-        if success:
-            api_service.logger.info(f"已恢复任务: {task_id}")
-            return APIResponse.success(None, "任务已恢复")
-        else:
-            return APIResponse.error("任务无法恢复（可能不存在或不是暂停状态）", 400)
-        
-    except Exception as e:
-        api_service.logger.error(f"恢复下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"恢复失败: {str(e)}", 500)
-
-
-@app.route('/api/download/task/<task_id>/cancel', methods=['POST'])
-def cancel_download_task(task_id):
-    """取消下载任务"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        success = _run_async(api_service.enhanced_downloader.cancel(task_id))
-        
-        if success:
-            api_service.logger.info(f"已取消任务: {task_id}")
-            return APIResponse.success(None, "任务已取消")
-        else:
-            return APIResponse.error("任务不存在", 404)
-        
-    except Exception as e:
-        api_service.logger.error(f"取消下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"取消失败: {str(e)}", 500)
-
-
-@app.route('/api/download/task/<task_id>', methods=['DELETE'])
-def remove_download_task(task_id):
-    """删除下载任务"""
-    try:
-        if not api_service.enhanced_downloader:
-            return APIResponse.error("增强版下载器不可用", 500)
-        
-        success = _run_async(api_service.enhanced_downloader.remove(task_id))
-        
-        if success:
-            api_service.logger.info(f"已删除任务: {task_id}")
-            return APIResponse.success(None, "任务已删除")
-        else:
-            return APIResponse.error("任务不存在", 404)
-        
-    except Exception as e:
-        api_service.logger.error(f"删除下载任务失败: {e}\n{traceback.format_exc()}")
-        return APIResponse.error(f"删除失败: {str(e)}", 500)
 
 
 def start_api_server():
@@ -1393,28 +1228,22 @@ def start_api_server():
         print("🚀 网易云音乐API服务启动中...")
         print("="*60)
         print(f"📡 服务地址: http://{config.host}:{config.port}")
-        print(f"📁 下载目录: {api_service.downloads_path.absolute()}")
         print(f"📋 日志级别: {config.log_level}")
         print("\n📚 API端点:")
         print(f"  ├─ GET  /health        - 健康检查")
+        print(f"  ├─ GET  /api/data-sources - 获取数据源列表")
+        print(f"  ├─ POST /api/data-sources - 设置数据源")
         print(f"  ├─ POST /song          - 获取歌曲信息")
         print(f"  ├─ POST /search        - 搜索音乐")
         print(f"  ├─ POST /playlist      - 获取歌单详情")
         print(f"  ├─ POST /album         - 获取专辑详情")
-        print(f"  ├─ POST /download      - 下载音乐")
         print(f"  ├─ GET  /api/info      - API信息")
-        print(f"  │")
-        print(f"  └─ 📦 增强版下载管理:")
-        print(f"     ├─ POST /api/download/queue        - 添加到下载队列")
-        print(f"     ├─ POST /api/download/queue/batch  - 批量添加到队列")
-        print(f"     ├─ GET  /api/download/queue        - 获取队列状态")
-        print(f"     ├─ GET  /api/download/task/<id>    - 获取任务状态")
-        print(f"     ├─ POST /api/download/task/<id>/pause   - 暂停任务")
-        print(f"     ├─ POST /api/download/task/<id>/resume  - 恢复任务")
-        print(f"     ├─ POST /api/download/task/<id>/cancel  - 取消任务")
-        print(f"     └─ DELETE /api/download/task/<id>   - 删除任务")
         print("\n🎵 支持的音质:")
         print(f"  standard, exhigh, lossless, hires, sky, jyeffect, jymaster")
+        print("\n📡 支持的数据源:")
+        print(f"  official   - 官方API")
+        print(f"  xuanluoge  - 第三方解析API")
+        print(f"  haitangw   - 第三方解析API")
         print("="*60)
         print(f"⏰ 启动时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
         print("🌟 服务已就绪，等待请求...\n")

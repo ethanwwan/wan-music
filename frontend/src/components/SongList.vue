@@ -187,7 +187,7 @@
           <div :class="listType === 'playlist' ? 'playlist-info' : 'album-info'">
             <h4 :class="listType === 'playlist' ? 'playlist-name' : 'album-name'">{{ item.name }}</h4>
             <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
-              {{ listType === 'playlist' ? item.creator : item.artist }}
+              {{ listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist) }}
             </p>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
@@ -413,7 +413,8 @@ const playTrack = async (track) => {
     }
     
     emit('track-parsed', { track, quality: qualityValue })
-    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc }, props.items)
+    // 只传递当前歌曲信息，不传递列表
+    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc })
     message.success(`开始播放：${track.name}`)
   } catch (error) {
     // 如果是版权相关错误，标记为不可用
@@ -564,7 +565,7 @@ const handleBatchDownload = async () => {
           })
         }
       } catch (err) {
-        console.error(`解析歌曲失败: ${track.name}`, err)
+        console.error(`解析歌曲失败: ${track.name} - ${getArtist(track)}`, err)
       }
     }
 
