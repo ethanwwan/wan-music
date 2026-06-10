@@ -39,17 +39,19 @@
         </a-button>
       </div>
 
-      <!-- 示例数据 -->
-      <div class="example-section">
-        <span class="example-label">{{ exampleTitle }}</span>
-        <div class="example-tags">
+      <!-- 数据源选择器 -->
+      <div class="data-source-section">
+        <span class="data-source-label">数据源</span>
+        <div class="data-source-tags">
           <span
-            v-for="link in exampleLinks"
-            :key="link.name"
-            class="example-tag"
-            @click="handleTagClick(link, 'example-click')"
+            v-for="source in dataSources"
+            :key="source.id"
+            class="data-source-tag"
+            :class="{ active: selectedSources.includes(source.id) }"
+            :style="selectedSources.includes(source.id) ? { backgroundColor: source.color + '15', borderColor: source.color, color: source.color } : {}"
+            @click="toggleDataSource(source.id)"
           >
-            {{ link.name }}
+            {{ source.name }}
           </span>
         </div>
       </div>
@@ -76,9 +78,10 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
+import { ref, defineProps, onMounted, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
+import { dataSources, defaultSelectedSources } from '../utils/dataSourceConfig.js'
 
 // 历史记录存储的localStorage key
 const HISTORY_STORAGE_KEY = 'wan-music-history-records'
@@ -120,14 +123,6 @@ const props = defineProps({
     type: String,
     default: '在此输入网易云音乐单曲链接或ID'
   },
-  exampleLinks: {
-    type: Array,
-    default: () => []
-  },
-  exampleTitle: {
-    type: String,
-    default: '示例歌曲'
-  },
   loading: {
     type: Boolean,
     default: false
@@ -136,7 +131,6 @@ const props = defineProps({
 
 const emit = defineEmits([
   'parse',
-  'example-click',
   'chart-change',
   'history-click'
 ])
@@ -144,6 +138,7 @@ const emit = defineEmits([
 const inputValue = ref('')
 const selectedChart = ref('19723756')
 const historyRecords = ref([])
+const selectedSources = ref([...defaultSelectedSources])
 
 // 从设置中读取音质，如果没有则使用默认值 'lossless'
 const selectedQuality = computed({
@@ -193,6 +188,17 @@ const handleTagClick = (item, eventName) => {
   emit(eventName, item)
 }
 
+const toggleDataSource = (sourceId) => {
+  const index = selectedSources.value.indexOf(sourceId)
+  if (index > -1) {
+    if (selectedSources.value.length > 1) {
+      selectedSources.value.splice(index, 1)
+    }
+  } else {
+    selectedSources.value.push(sourceId)
+  }
+}
+
 const handleParse = () => {
   const value = inputValue.value.trim()
   if (!value) {
@@ -201,7 +207,8 @@ const handleParse = () => {
   }
   emit('parse', {
     url: value,
-    quality: selectedQuality.value
+    quality: selectedQuality.value,
+    sources: [...selectedSources.value]
   })
 }
 
@@ -334,18 +341,18 @@ defineExpose({
   transform: none;
 }
 
-.example-section {
+.data-source-section {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
 }
 
-.example-label {
+.data-source-label {
   color: var(--color-text-muted);
   font-size: var(--font-size-body-sm);
 }
 
-.example-tags {
+.data-source-tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
@@ -353,7 +360,7 @@ defineExpose({
   margin-left: 0;
 }
 
-.example-tag {
+.data-source-tag {
   cursor: pointer;
   transition: all 0.2s;
   padding: var(--spacing-xs) var(--spacing-lg);
@@ -362,12 +369,23 @@ defineExpose({
   border-radius: var(--radius-sm);
   font-size: var(--font-size-label);
   color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
-.example-tag:hover {
+.data-source-tag:hover {
   border-color: var(--color-primary);
-  color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+.data-source-tag.active {
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+
 
 .history-section {
   display: flex;

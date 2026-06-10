@@ -92,6 +92,13 @@
               <td class="col-name">
                 <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ track.name }}</span>
                 <span v-if="isTrackUnavailable(track)" class="unavailable-reason">无版权</span>
+                <span 
+                  v-if="track.source" 
+                  class="source-tag"
+                  :style="{ backgroundColor: getSourceInfo(track.source)?.color + '20', color: getSourceInfo(track.source)?.color }"
+                >
+                  {{ getSourceInfo(track.source)?.name || track.source }}
+                </span>
               </td>
               <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</td>
               <td class="col-action">
@@ -189,6 +196,13 @@
             <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
               {{ listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist) }}
             </p>
+            <span 
+              v-if="item.source" 
+              class="source-tag"
+              :style="{ backgroundColor: getSourceInfo(item.source)?.color + '20', color: getSourceInfo(item.source)?.color }"
+            >
+              {{ getSourceInfo(item.source)?.name || item.source }}
+            </span>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
             <a-button size="middle" type="primary" @click.stop="handleItemClick(item, listType)">
@@ -210,6 +224,7 @@ import { settings } from '../utils/settingsManager.js'
 import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
 import { embedMetadata } from '../services/metadataWriter.js'
 import Pagination from './Pagination.vue'
+import { dataSources } from '../utils/dataSourceConfig.js'
 
 const props = defineProps({
   // 列表类型：song / artist / playlist / album
@@ -344,6 +359,10 @@ const getArtist = (track) => {
     (Array.isArray(track?.ar) && track.ar[0]?.name) ||
     ''
   )
+}
+
+const getSourceInfo = (sourceId) => {
+  return dataSources.find(s => s.id === sourceId) || null
 }
 
 const getAlbum = (track) => {
@@ -894,6 +913,16 @@ const handleItemClick = (item, action) => {
   background: #fff1f0;
   border-radius: 3px;
   vertical-align: middle;
+}
+
+.source-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 3px;
+  vertical-align: middle;
+  font-weight: 500;
 }
 
 /* 暗色模式 */

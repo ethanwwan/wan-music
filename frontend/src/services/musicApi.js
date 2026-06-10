@@ -43,14 +43,21 @@ const isCacheValid = (cacheEntry) => {
 
 // 获取缓存数据
 const getCachedSearchResult = (type, keyword) => {
-  if (!settings.enableCache) return null
+  if (!settings.enableCache) {
+    console.log(`缓存已禁用，跳过缓存查询`)
+    return null
+  }
   
   const cache = searchCache[type]
-  if (!cache) return null
+  if (!cache) {
+    console.log(`缓存类型 ${type} 不存在`)
+    return null
+  }
   
   const cached = cache.get(keyword)
   if (isCacheValid(cached)) {
-    console.log(`使用缓存的${type}搜索结果: ${keyword}`)
+    const dataLength = cached.data?.songs?.length || Object.keys(cached.data || {}).length
+    console.log(`使用缓存的${type}搜索结果: ${keyword}, 数据长度: ${dataLength}`)
     return cached.data
   }
   
@@ -283,13 +290,13 @@ export const getMusicUrl = async (musicId, quality = 'lossless', options = {}) =
 
   try {
     // 使用后端 /song 接口而不是直接调用 EAPI
-    const dataSource = settings?.dataSource || 'official'
+    // 数据源自动切换，无需前端指定
     const response = await fetch('/song', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `ids=${musicId}&level=${quality}&type=url&source=${dataSource}`
+      body: `ids=${musicId}&level=${quality}&type=url`
     })
     
     const result = await response.json()
@@ -609,49 +616,185 @@ export const getAlbumDetail = async (url) => {
   }
 }
 
-// 搜索音乐
-export const searchMusic = async (keyword) => {
+// 搜索音乐（支持多数据源）
+export const searchMusic = async (keyword, sources = ['netease']) => {
   try {
-    // 检查缓存
-    const cached = getCachedSearchResult('music', keyword)
-    if (cached) {
-      return { success: true, data: cached, fromCache: true }
+    // 如果只有网易云数据源，使用原有逻辑
+    if (sources.length === 1 && sources[0] === 'netease') {
+      // 检查缓存
+      const cached = getCachedSearchResult('music', keyword)
+      if (cached) {
+        return { success: true, data: cached, fromCache: true }
+      }
+
+      const response = await fetch('/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        const searchData = {
+          songs: result.data.map(song => ({
+            id: song.id,
+            name: song.name,
+            artists: song.artists || [],
+            album: song.album || (song.al ? song.al.name : ''),
+            duration: song.duration || 0,
+            picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || '',
+            source: 'netease'
+          }))
+        }
+        
+        // 缓存结果
+        setCachedSearchResult('music', keyword, searchData)
+        
+        return {
+          success: true,
+          data: searchData
+        }
+      } else {
+        return {
+          success: false,
+          error: result.message || '搜索失败'
+        }
+      }
     }
 
-    const response = await fetch('/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ keyword })
+    // 多数据源搜索
+    const promises = sources.map(source => {
+      return fetch('/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword, source })
+      }).then(res => res.json()).then(result => {
+        if (result.success && result.data) {
+          return result.data.map(song => ({
+            id: song.id,
+            name: song.name,
+            artists: song.artists || [],
+            album: song.album || (song.al ? song.al.name : ''),
+            duration: song.duration || 0,
+            picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || '',
+            source: source
+          }))
+        }
+        return []
+      }).catch(() => [])
     })
+
+    const results = await Promise.all(promises)
+    const allSongs = results.flat()
     
-    const result = await response.json()
-    
-    if (result.success && result.data) {
-      const searchData = {
-        songs: result.data.map(song => ({
-          id: song.id,
-          name: song.name,
-          artists: song.artists || [],
-          album: song.album || (song.al ? song.al.name : ''),
-          duration: song.duration || 0,
-          picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || ''
+    // 去重（基于id和source）
+    const seen = new Set()
+    const uniqueSongs = allSongs.filter(song => {
+      const key = `${song.source}-${song.id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    return {
+      success: true,
+      data: { songs: uniqueSongs }
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || '搜索失败'
+    }
+  }
+}
+
+// 搜索歌单（支持多数据源）
+export const searchPlaylist = async (keyword, sources = ['netease']) => {
+  try {
+    if (sources.length === 1 && sources[0] === 'netease') {
+      // 检查缓存
+      const cached = getCachedSearchResult('playlist', keyword)
+      if (cached) {
+        return { success: true, data: cached, fromCache: true }
+      }
+
+      const response = await fetch('/search/playlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        const searchData = result.data.map(playlist => ({
+          id: playlist.id,
+          name: playlist.name,
+          creator: playlist.creator || '',
+          coverImgUrl: playlist.coverImgUrl || '',
+          trackCount: playlist.trackCount || 0,
+          source: 'netease'
         }))
+        
+        // 缓存结果
+        setCachedSearchResult('playlist', keyword, searchData)
+        
+        return {
+          success: true,
+          data: searchData
+        }
+      } else {
+        return {
+          success: false,
+          error: result.message || '搜索失败'
+        }
       }
-      
-      // 缓存结果
-      setCachedSearchResult('music', keyword, searchData)
-      
-      return {
-        success: true,
-        data: searchData
-      }
-    } else {
-      return {
-        success: false,
-        error: result.message || '搜索失败'
-      }
+    }
+
+    // 多数据源搜索
+    const promises = sources.map(source => {
+      return fetch('/search/playlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword, source })
+      }).then(res => res.json()).then(result => {
+        if (result.success && result.data) {
+          return result.data.map(playlist => ({
+            id: playlist.id,
+            name: playlist.name,
+            creator: playlist.creator || '',
+            coverImgUrl: playlist.coverImgUrl || '',
+            trackCount: playlist.trackCount || 0,
+            source: source
+          }))
+        }
+        return []
+      }).catch(() => [])
+    })
+
+    const results = await Promise.all(promises)
+    const allPlaylists = results.flat()
+    
+    const seen = new Set()
+    const uniquePlaylists = allPlaylists.filter(playlist => {
+      const key = `${playlist.source}-${playlist.id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    return {
+      success: true,
+      data: uniquePlaylists
     }
   } catch (error) {
     return {
@@ -661,95 +804,88 @@ export const searchMusic = async (keyword) => {
   }
 }
 
-// 搜索歌单
-export const searchPlaylist = async (keyword) => {
+// 搜索专辑（支持多数据源）
+export const searchAlbum = async (keyword, sources = ['netease']) => {
   try {
-    // 检查缓存
-    const cached = getCachedSearchResult('playlist', keyword)
-    if (cached) {
-      return { success: true, data: cached, fromCache: true }
+    if (sources.length === 1 && sources[0] === 'netease') {
+      // 检查缓存
+      const cached = getCachedSearchResult('album', keyword)
+      if (cached) {
+        return { success: true, data: cached, fromCache: true }
+      }
+
+      const response = await fetch('/search/album', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        const searchData = result.data.map(album => ({
+          id: album.id,
+          name: album.name,
+          artist: album.artist || '',
+          coverImgUrl: album.coverImgUrl || '',
+          trackCount: album.trackCount || 0,
+          source: 'netease'
+        }))
+        
+        // 缓存结果
+        setCachedSearchResult('album', keyword, searchData)
+        
+        return {
+          success: true,
+          data: searchData
+        }
+      } else {
+        return {
+          success: false,
+          error: result.message || '搜索失败'
+        }
+      }
     }
 
-    const response = await fetch('/search/playlist', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ keyword })
+    // 多数据源搜索
+    const promises = sources.map(source => {
+      return fetch('/search/album', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ keyword, source })
+      }).then(res => res.json()).then(result => {
+        if (result.success && result.data) {
+          return result.data.map(album => ({
+            id: album.id,
+            name: album.name,
+            artist: album.artist || '',
+            coverImgUrl: album.coverImgUrl || '',
+            trackCount: album.trackCount || 0,
+            source: source
+          }))
+        }
+        return []
+      }).catch(() => [])
     })
+
+    const results = await Promise.all(promises)
+    const allAlbums = results.flat()
     
-    const result = await response.json()
-    
-    if (result.success && result.data) {
-      const searchData = result.data.map(playlist => ({
-        id: playlist.id,
-        name: playlist.name,
-        creator: playlist.creator || '',
-        coverImgUrl: playlist.coverImgUrl || '',
-        trackCount: playlist.trackCount || 0
-      }))
-      
-      // 缓存结果
-      setCachedSearchResult('playlist', keyword, searchData)
-      
-      return {
-        success: true,
-        data: searchData
-      }
-    } else {
-      return {
-        success: false,
-        error: result.message || '搜索失败'
-      }
-    }
-  } catch (error) {
+    const seen = new Set()
+    const uniqueAlbums = allAlbums.filter(album => {
+      const key = `${album.source}-${album.id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
     return {
-      success: false,
-      error: error.message || '搜索失败'
-    }
-  }
-}
-
-// 搜索专辑
-export const searchAlbum = async (keyword) => {
-  try {
-    // 检查缓存
-    const cached = getCachedSearchResult('album', keyword)
-    if (cached) {
-      return { success: true, data: cached, fromCache: true }
-    }
-
-    const response = await fetch('/search/album', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ keyword })
-    })
-    
-    const result = await response.json()
-    
-    if (result.success && result.data) {
-      const searchData = result.data.map(album => ({
-        id: album.id,
-        name: album.name,
-        artist: album.artist || '',
-        coverImgUrl: album.coverImgUrl || '',
-        trackCount: album.trackCount || 0
-      }))
-      
-      // 缓存结果
-      setCachedSearchResult('album', keyword, searchData)
-      
-      return {
-        success: true,
-        data: searchData
-      }
-    } else {
-      return {
-        success: false,
-        error: result.message || '搜索失败'
-      }
+      success: true,
+      data: uniqueAlbums
     }
   } catch (error) {
     return {

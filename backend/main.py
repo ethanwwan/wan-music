@@ -13,18 +13,19 @@ import logging
 import sys
 import time
 import traceback
-import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from urllib.parse import quote
-from flask import Flask, request, send_file, render_template, Response
+import requests as req
+from flask import Flask, request, send_file, send_from_directory, render_template, Response
 
 try:
     from api.music_api import (
         url_v1, name_v1, lyric_v1, search_music, 
         playlist_detail_v1, album_detail_v1,
-        get_platforms, get_data_sources
+        get_platforms, get_data_sources,
+        music_api
     )
     from api.netease_api import NeteaseAPIClient, QualityLevel, CookieManager, CookieException, QRLoginManager, netease_client
 except ImportError as e:
@@ -90,6 +91,9 @@ class MusicAPIService:
         self.logger = self._setup_logger()
         self.cookie_manager = CookieManager()
         self.netease_api = NeteaseAPIClient()
+        self.downloads_path = Path(config.downloads_dir)
+        self.downloads_path.mkdir(exist_ok=True)
+        self.downloader = None
         
         self.logger.info("音乐API服务初始化完成")
     
@@ -278,14 +282,12 @@ def handle_internal_error(e):
 @app.route('/')
 def index() -> Response:
     """首页路由"""
-    from flask import send_from_directory
     return send_from_directory('frontend', 'index.html')
 
 
 @app.route('/<path:filename>')
 def static_files(filename) -> Response:
     """静态文件路由"""
-    from flask import send_from_directory
     return send_from_directory('frontend', filename)
 
 
@@ -485,6 +487,22 @@ def search_music_api():
         limit = int(data.get('limit', 30))
         offset = int(data.get('offset', 0))
         search_type = data.get('type', '1')  # 1-歌曲, 10-专辑, 100-歌手, 1000-歌单
+        source = data.get('source', 'netease')  # 数据源
+        
+        # 搜索类型映射
+        search_type_map = {
+            '1': '歌曲',
+            '10': '专辑', 
+            '100': '歌手',
+            '1000': '歌单',
+            '1002': '用户',
+            '1004': 'MV',
+            '1006': '歌词',
+            '1009': '电台',
+            '1014': '视频',
+            '1018': '综合'
+        }
+        search_type_name = search_type_map.get(search_type, f'未知({search_type})')
         
         # 参数验证
         validation_error = api_service._validate_request_params({'keyword': keyword})
@@ -495,8 +513,17 @@ def search_music_api():
         if limit > 100:
             limit = 100
         
+        # 记录请求日志
+        api_service.logger.info(f"【搜索音乐】关键词={keyword}, 数据源={source}, 类型={search_type_name}({search_type}), 限制={limit}, 偏移={offset}")
+        
         cookies = api_service._get_cookies()
-        result = search_music(keyword, cookies, limit)
+        
+        # 根据source参数调用不同的搜索接口
+        if source == 'netease':
+            result = search_music(keyword, cookies, limit)
+        else:
+            # 使用统一的MusicAPI进行多平台搜索
+            result = music_api.search(keyword, platform=source, limit=limit, offset=offset)
         
         # search_music返回的是歌曲列表，需要包装成前端期望的格式
         if result:
@@ -521,13 +548,18 @@ def search_playlist_api():
     try:
         data = api_service._safe_get_request_data()
         keyword = data.get('keyword') or data.get('keywords') or data.get('q') or data.get('s')
+        source = data.get('source', 'netease')  # 数据源
+        limit = int(data.get('limit', 20))
+        
+        # 限制搜索数量
+        if limit > 100:
+            limit = 100
+        
+        # 记录请求日志
+        api_service.logger.info(f"【搜索歌单】关键词={keyword}, 数据源={source}, 限制数量={limit}")
         
         if not keyword:
             return APIResponse.error("请提供搜索关键词")
-        
-        limit = int(data.get('limit', 20))
-        if limit > 100:
-            limit = 100
         
         result = netease_client.search_playlist(keyword, limit)
         
@@ -910,7 +942,6 @@ def api_info():
 def proxy_song_detail():
     """代理歌曲详情API"""
     try:
-        import requests as req
         data = api_service._safe_get_request_data()
         cookies = api_service._get_cookies()
         
@@ -942,7 +973,6 @@ def proxy_song_detail():
 def proxy_lyric():
     """代理歌词API"""
     try:
-        import requests as req
         data = api_service._safe_get_request_data()
         cookies = api_service._get_cookies()
         

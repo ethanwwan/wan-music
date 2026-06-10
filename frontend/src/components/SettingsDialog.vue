@@ -15,46 +15,6 @@
     </div>
     
     <div class="settings-content">
-      <!-- 主题设置 -->
-      <div class="setting-section">
-        <div class="section-title">主题设置</div>
-        
-        <div class="theme-color-options">
-          <div 
-            v-for="color in themeColors" 
-            :key="color.value"
-            class="theme-color-option"
-            :class="{ active: selectedThemeColor === color.value }"
-            @click="handleThemeColorChange(color.value)"
-            :style="{ '--theme-color': color.hex }"
-          >
-            <div class="color-preview" :style="{ background: color.hex }"></div>
-            <span class="color-name">{{ color.name }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 数据源设置 -->
-      <div class="setting-section">
-        <div class="section-title">数据源设置</div>
-        <a-form :model="settings" layout="horizontal" class="settings-form">
-          <a-form-item label="数据源">
-            <a-select
-              v-model:value="settings.dataSource"
-              @change="handleSave"
-              :style="{ width: '180px' }"
-            >
-              <a-select-option value="official">官方API</a-select-option>
-              <a-select-option value="xuanluoge">xuanluoge</a-select-option>
-              <a-select-option value="haitangw">haitangw</a-select-option>
-            </a-select>
-            <div class="form-item-hint">
-              <a-tag color="blue" bordered>选择解析音乐链接的数据源，优先使用官方API</a-tag>
-            </div>
-          </a-form-item>
-        </a-form>
-      </div>
-
       <!-- 音质设置 -->
       <div class="setting-section">
         <div class="section-title">音质设置</div>
@@ -169,7 +129,7 @@ import { CloseOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
 
-const emit = defineEmits(['theme-color-change', 'update:open'])
+const emit = defineEmits(['update:open'])
 
 const cacheSize = ref('0 KB')
 const clearingCache = ref(false)
@@ -240,42 +200,6 @@ const drawerVisible = computed({
   get: () => props.open,
   set: (value) => emit('update:open', value)
 })
-
-const selectedThemeColor = ref('#0057c2')
-
-const themeColors = [
-  { name: '默认蓝', value: 'blue', hex: '#0057c2' },
-  { name: '活力红', value: 'red', hex: '#e53935' },
-  { name: '优雅紫', value: 'purple', hex: '#8e24aa' },
-  { name: '清新绿', value: 'green', hex: '#43a047' },
-  { name: '温暖橙', value: 'orange', hex: '#fb8c00' },
-  { name: '深邃青', value: 'cyan', hex: '#00acc1' }
-]
-
-const initThemeSettings = () => {
-  const savedThemeColor = localStorage.getItem('themeColor')
-  
-  if (savedThemeColor) {
-    const color = themeColors.find(c => c.value === savedThemeColor)
-    if (color) {
-      selectedThemeColor.value = color.hex
-    }
-  }
-}
-
-initThemeSettings()
-
-const handleThemeColorChange = async (colorValue) => {
-  const color = themeColors.find(c => c.value === colorValue)
-  if (!color) return
-  
-  selectedThemeColor.value = color.hex
-  localStorage.setItem('themeColor', colorValue)
-  
-  emit('theme-color-change', color.hex)
-  
-  message.success(`已切换到${color.name}`)
-}
 
 const handleSave = () => {
   saveSettings()
@@ -384,67 +308,6 @@ const handleClose = () => {
   color: var(--color-on-surface-variant);
   margin-bottom: 12px;
   padding-left: 4px;
-}
-
-.theme-mode-section {
-  margin-bottom: 20px;
-}
-
-.theme-mode-options {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 0 8px;
-}
-
-.theme-color-options {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 0 8px;
-}
-
-.theme-color-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--color-surface-container-low);
-}
-
-.theme-color-option:hover {
-  border-color: var(--theme-color);
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.theme-color-option.active {
-  border-color: var(--theme-color);
-  background: var(--color-surface-white);
-}
-
-.color-preview {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.color-name {
-  font-size: 12px;
-  color: var(--color-on-surface-variant);
-  text-align: center;
-  font-weight: 500;
-}
-
-.theme-color-option.active .color-name {
-  color: var(--theme-color);
-  font-weight: 600;
 }
 
 .cache-info {

@@ -9,13 +9,7 @@
           subtitle="实时解析网易云音乐单曲、获取真实下载地址及封面信息。"
         />
 
-        <!-- System Notice 组件 -->
-        <SystemNotice 
-          v-model:visible="showNotice"
-          title="系统公告"
-          message="欢迎使用网易云音乐解析工具！如需反馈问题，请添加QQ群：1036593883"
-          @close="handleNoticeClose"
-        />
+
 
         <!-- Search Container 组件 -->
         <SearchContainer
@@ -23,11 +17,8 @@
           :title="searchConfig.title"
           :description="searchConfig.description"
           :placeholder="searchConfig.placeholder"
-          :example-links="exampleLinks"
-          :example-title="exampleTitle"
           :loading="loading"
           @parse="handleParse"
-          @example-click="handleExampleClick"
         />
 
         <!-- 搜索结果面板组件 -->
@@ -104,7 +95,7 @@
       <FloatingActions @open-settings="showSettingsDialog = true" />
 
       <!-- 设置对话框 -->
-      <SettingsDialog v-model:open="showSettingsDialog" @theme-color-change="handleThemeColorChange" />
+      <SettingsDialog v-model:open="showSettingsDialog" />
 
       <!-- 底部播放器 -->
       <MusicPlayer :current-song="currentSong" :autoplay="true" @play-error="handlePlayError" />
@@ -118,7 +109,7 @@ import { message } from 'ant-design-vue'
 
 // 导入组件
 import HeroHeader from './components/HeroHeader.vue'
-import SystemNotice from './components/SystemNotice.vue'
+
 import SearchContainer from './components/SearchContainer.vue'
 import SearchResult from './components/SearchResult.vue'
 import Footer from './components/Footer.vue'
@@ -137,11 +128,10 @@ import {
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { isMobile, initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
-import { getExampleLinks, getExampleTitle } from './utils/exampleData.js'
+
 
 // 响应式数据
 const currentView = ref('search')
-const showNotice = ref(true)
 const showSettingsDialog = ref(false)
 const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
@@ -161,10 +151,6 @@ const searchConfig = {
   description: '支持搜索歌曲、歌手、歌单、专辑',
   placeholder: '请输入歌曲名、歌手名、专辑名或歌单名'
 }
-
-// 示例链接
-const exampleLinks = getExampleLinks('search')
-const exampleTitle = getExampleTitle('search')
 
 // 主题配置 - 响应式主题token
 const themeToken = reactive({
@@ -196,31 +182,19 @@ const handleStorageChange = (e) => {
   }
 }
 
-// 处理主题色变化（从设置对话框）
-const handleThemeColorChange = (color) => {
-  themeToken.colorPrimary = color
-  applyTheme()
-}
-
-const handleNoticeClose = () => {
-  console.log('Notice closed')
-}
-
-const handleParse = async ({ url }) => {
+const handleParse = async ({ url, sources = ['netease'] }) => {
   // 重新挂载 SearchResult 组件，重置所有状态
   searchResultKey.value++
   musicUrl.value = url
   const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, 'search')
+  await parseMusic(quality, 'search', sources)
   
   if (searchContainerRef.value && url.trim()) {
     searchContainerRef.value.addHistoryRecord(url.trim())
   }
 }
 
-const handleExampleClick = () => {
-  // 示例tag点击只填充输入框，不自动解析
-}
+
 
 const handlePageChange = (page) => {
   console.log('App.vue handlePageChange called with page:', page)

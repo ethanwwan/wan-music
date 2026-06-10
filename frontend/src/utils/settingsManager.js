@@ -13,9 +13,7 @@ export const defaultSettings = {
   cacheTTLMinutes: 15, // 缓存时间（分钟） 
   // 音质设置
   selectedQuality: 'lossless', // 默认音质：无损
-  // 数据源设置
-  dataSource: 'official', // 数据源：official, xuanluoge, haitangw
-  // 极验验证码设置已移除
+  // 数据源设置已移除，现在使用自动切换线路
 }
 
 // 当前设置
@@ -64,7 +62,7 @@ export const loadSettings = () => {
       }
       
       // 清理已移除的旧字段
-      const deprecatedKeys = ['enableUrlCache', 'urlCacheTTLMinutes']
+      const deprecatedKeys = ['enableUrlCache', 'urlCacheTTLMinutes', 'dataSource']
       deprecatedKeys.forEach(key => {
         if (parsed[key] !== undefined) {
           delete settings[key]

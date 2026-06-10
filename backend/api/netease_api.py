@@ -290,8 +290,8 @@ class QRLoginManager:
             return {'success': False, 'status': 'error', 'message': str(e)}
 
 
-class NeteaseDataSource(Enum):
-    """网易云数据源枚举"""
+class NeteaseAPISource(Enum):
+    """网易云API源枚举"""
     OFFICIAL = "official"        # 官方API
     XUANLUOGE = "xuanluoge"      # xuanluoge第三方API
     HAITANGW = "haitangw"        # haitangw第三方API
@@ -616,9 +616,18 @@ class NeteaseAPIClient:
             logger.error(f"[测试日志] haitangw API获取歌曲URL失败 - song_id={song_id}, error={str(e)}")
             return None
     
-    def get_song_url(self, song_id: int, quality: str, data_source: str) -> Dict[str, Any]:
-        """获取歌曲下载链接（根据指定数据源，支持自动回退）"""
-        logger.info(f"[测试日志] ===== 开始获取歌曲URL ===== song_id={song_id}, quality={quality}, data_source={data_source}")
+    def get_song_url(self, song_id: int, quality: str, api_source: str = None) -> Dict[str, Any]:
+        """获取歌曲下载链接（自动切换线路，官方API优先）
+        
+        Args:
+            song_id: 歌曲ID
+            quality: 音质等级
+            api_source: API源（已废弃，保留向后兼容，实际使用自动切换）
+        
+        Returns:
+            包含歌曲URL的字典
+        """
+        logger.info(f"[测试日志] ===== 开始获取歌曲URL ===== song_id={song_id}, quality={quality}")
         
         # 验证音质参数
         valid_qualities = [q.value for q in QualityLevel]
@@ -626,57 +635,44 @@ class NeteaseAPIClient:
             logger.warning(f"[测试日志] 无效音质参数 '{quality}'，使用默认值 'lossless'")
             quality = 'lossless'
         
-        # 数据源函数映射
+        # API源优先级排序：官方API优先
         source_func_map = {
             'official': self.get_song_url_official,
             'xuanluoge': self.get_song_url_xuanluoge,
             'haitangw': self.get_song_url_haitangw
         }
         
-        # 获取指定数据源的函数
-        source_func = source_func_map.get(data_source)
-        if not source_func:
-            logger.error(f"[测试日志] 无效的数据源: {data_source}")
-            raise ValueError(f"无效的数据源: {data_source}")
+        # 如果指定了API源且有效，优先使用指定的API源
+        if api_source and api_source in source_func_map:
+            sources_to_try = [api_source] + [key for key in source_func_map.keys() if key != api_source]
+        else:
+            # 自动模式：按优先级顺序尝试所有API源
+            sources_to_try = ['official', 'xuanluoge', 'haitangw']
         
-        logger.info(f"[测试日志] 将尝试数据源: {data_source}")
+        logger.info(f"[测试日志] API源尝试顺序: {sources_to_try}")
         
-        # 首先尝试用户指定的数据源
-        download_url = source_func(song_id, quality)
-        
-        if download_url:
-            logger.info(f"[测试日志] ===== 成功获取歌曲URL ===== song_id={song_id}, source={data_source}, url_length={len(download_url)}")
-            return {
-                'url': download_url,
-                'quality': quality,
-                'source': data_source,
-                'song_id': song_id
-            }
-        
-        # 如果指定数据源失败，尝试其他数据源
-        logger.warning(f"[测试日志] 指定数据源 {data_source} 失败，开始尝试备用数据源...")
-        other_sources = [key for key in source_func_map.keys() if key != data_source]
-        
-        for source in other_sources:
+        # 按优先级顺序尝试API源
+        for index, source in enumerate(sources_to_try):
             try:
-                logger.info(f"[测试日志] 尝试备用数据源: {source}")
-                fallback_url = source_func_map[source](song_id, quality)
-                if fallback_url:
-                    logger.info(f"[测试日志] ===== 备用数据源成功 ===== song_id={song_id}, original_source={data_source}, fallback_source={source}, url_length={len(fallback_url)}")
+                logger.info(f"[测试日志] 尝试API源 [{index + 1}/{len(sources_to_try)}]: {source}")
+                download_url = source_func_map[source](song_id, quality)
+                
+                if download_url:
+                    logger.info(f"[测试日志] ===== 成功获取歌曲URL ===== song_id={song_id}, api_source={source}, url_length={len(download_url)}")
                     return {
-                        'url': fallback_url,
+                        'url': download_url,
                         'quality': quality,
-                        'source': source,
+                        'api_source': source,
                         'song_id': song_id,
-                        'fallback': True
+                        'fallback': index > 0  # 标记是否是备用API源
                     }
                 else:
-                    logger.warning(f"[测试日志] 备用数据源 {source} 也返回空URL")
+                    logger.warning(f"[测试日志] API源 {source} 返回空URL")
             except Exception as e:
-                logger.warning(f"[测试日志] 备用数据源 {source} 调用失败: {e}")
+                logger.warning(f"[测试日志] API源 {source} 调用失败: {e}")
         
-        logger.error(f"[测试日志] ===== 所有数据源均失败 ===== song_id={song_id}, requested_source={data_source}")
-        raise Exception(f"所有数据源均无法获取歌曲 {song_id} 的下载链接")
+        logger.error(f"[测试日志] ===== 所有API源均失败 ===== song_id={song_id}")
+        raise Exception(f"所有API源均无法获取歌曲 {song_id} 的下载链接")
     
     def get_song_detail(self, song_id: int) -> Dict[str, Any]:
         """获取歌曲详情"""

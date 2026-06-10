@@ -93,8 +93,9 @@ export const cleanupTimer = () => {
  * 解析音乐信息
  * @param {string} selectedQuality 选择的音质
  * @param {string} mode 当前模式 ('search', 'music', 'playlist', 'album', 'rank')
+ * @param {Array} sources 数据源列表 ['netease', 'qq', 'bilibili']
  */
-export const parseMusic = async (selectedQuality, mode = 'music') => {
+export const parseMusic = async (selectedQuality, mode = 'music', sources = ['netease']) => {
   if (!musicUrl.value.trim()) {
     message.warning('请输入内容')
     return
@@ -105,7 +106,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     loading.value = true
     try {
       // 只搜索单曲
-      const songResult = await musicApi.searchMusic(musicUrl.value)
+      const songResult = await musicApi.searchMusic(musicUrl.value, sources)
 
       musicInfo.value = { name: musicUrl.value }
 
@@ -170,7 +171,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     // 如果不是URL，尝试搜索歌单
     loading.value = true
     try {
-      const result = await musicApi.searchPlaylist(musicUrl.value)
+      const result = await musicApi.searchPlaylist(musicUrl.value, sources)
       playlistInfo.value = result
       if (result.success && result.data) {
         playlistSearchResults.value = result.data
@@ -208,7 +209,7 @@ export const parseMusic = async (selectedQuality, mode = 'music') => {
     // 如果不是URL，尝试搜索专辑
     loading.value = true
     try {
-      const result = await musicApi.searchAlbum(musicUrl.value)
+      const result = await musicApi.searchAlbum(musicUrl.value, sources)
       albumInfo.value = result
       if (result.success && result.data) {
         albumSearchResults.value = result.data
