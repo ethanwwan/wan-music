@@ -28,3 +28,6 @@ logs/
 .DS_Store
 Thumbs.db
 netease_cookie.txt
+
+/tests/
+/test-results/

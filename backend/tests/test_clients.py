@@ -33,14 +33,14 @@ class APITester:
             'netease': '25706282',
             'qq': '003OUlho2HcRHC',
             'bodian': '3940273',
-            'kugou': '89757'
+            'kugou': 'A758EF54F67AE76E2BD0C249CD7B904A'  # 使用FileHash而不是数字ID
         }
         
         self.playlist_ids = {
             'netease': '7583298906',
             'qq': '8262370668',
-            'bodian': '1001',
-            'kugou': '694966'
+            'bodian': '2410926933',  # 酷我音乐歌单ID
+            'kugou': '9180602'
         }
     
     def run_test(self, client_name, client, method_name, func, *args, **kwargs):
