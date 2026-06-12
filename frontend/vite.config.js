@@ -18,31 +18,11 @@ export default defineConfig({
         target: 'http://localhost:5002',
         changeOrigin: true
       },
-      '/eapi': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/weapi': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/health': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/Song_V1': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/song': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
       '/search': {
         target: 'http://localhost:5002',
         changeOrigin: true
       },
-      '/cloudsearch': {
+      '/song': {
         target: 'http://localhost:5002',
         changeOrigin: true
       },
@@ -58,11 +38,7 @@ export default defineConfig({
         target: 'http://localhost:5002',
         changeOrigin: true
       },
-      '/download': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/stream': {
+      '/health': {
         target: 'http://localhost:5002',
         changeOrigin: true
       }
