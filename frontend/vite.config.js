@@ -14,10 +14,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5175,
     proxy: {
-      '/api': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
+      // 后端API代理配置
       '/search': {
         target: 'http://localhost:5002',
         changeOrigin: true
@@ -30,11 +27,7 @@ export default defineConfig({
         target: 'http://localhost:5002',
         changeOrigin: true
       },
-      '/album': {
-        target: 'http://localhost:5002',
-        changeOrigin: true
-      },
-      '/artist': {
+      '/api': {
         target: 'http://localhost:5002',
         changeOrigin: true
       },
