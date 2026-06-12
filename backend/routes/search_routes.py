@@ -51,3 +51,6 @@ def search_playlist():
     except Exception as e:
         logger.error(f"搜索歌单失败: {e}")
         return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))
+
+
+

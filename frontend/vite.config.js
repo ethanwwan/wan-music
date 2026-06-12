@@ -14,7 +14,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5175,
     proxy: {
-      // 后端API代理配置
+      // 后端实际提供的API端点
       '/search': {
         target: 'http://localhost:5002',
         changeOrigin: true
