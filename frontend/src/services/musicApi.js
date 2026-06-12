@@ -568,40 +568,12 @@ export const getPlaylistDetail = async (url) => {
   }
 }
 
-// 获取专辑详情
+// 获取专辑详情（后端暂未实现，返回空结果）
 export const getAlbumDetail = async (url) => {
-  try {
-    const albumId = await extractIdFromUrl(url)
-    if (!albumId) {
-      throw new Error('无法从链接中提取专辑ID')
-    }
-
-    const response = await fetch('/album', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `id=${albumId}`
-    })
-
-    const result = await response.json()
-    
-    if (result.success) {
-      return {
-        success: true,
-        data: result.data.album
-      }
-    } else {
-      return {
-        success: false,
-        error: result.message || '获取专辑信息失败'
-      }
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: `网络请求失败: ${error.message || '未知错误'}`
-    }
+  console.warn('获取专辑详情功能暂未实现')
+  return {
+    success: false,
+    error: '获取专辑详情功能暂未实现'
   }
 }
 
@@ -793,210 +765,21 @@ export const searchPlaylist = async (keyword, sources = ['netease']) => {
   }
 }
 
-// 搜索专辑（支持多数据源）
+// 搜索专辑（后端暂未实现，返回空结果）
 export const searchAlbum = async (keyword, sources = ['netease']) => {
-  try {
-    if (sources.length === 1 && sources[0] === 'netease') {
-      // 检查缓存
-      const cached = getCachedSearchResult('album', keyword)
-      if (cached) {
-        return { success: true, data: cached, fromCache: true }
-      }
-
-      const response = await fetch('/search/album', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword })
-      })
-      
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const searchData = result.data.map(album => ({
-          id: album.id,
-          name: album.name,
-          artist: album.artist || '',
-          coverImgUrl: album.coverImgUrl || '',
-          trackCount: album.trackCount || 0,
-          source: 'netease'
-        }))
-        
-        // 缓存结果
-        setCachedSearchResult('album', keyword, searchData)
-        
-        return {
-          success: true,
-          data: searchData
-        }
-      } else {
-        return {
-          success: false,
-          error: result.message || '搜索失败'
-        }
-      }
-    }
-
-    // 多数据源搜索
-    const promises = sources.map(source => {
-      return fetch('/search/album', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword, source })
-      }).then(res => res.json()).then(result => {
-        if (result.success && result.data) {
-          return result.data.map(album => ({
-            id: album.id,
-            name: album.name,
-            artist: album.artist || '',
-            coverImgUrl: album.coverImgUrl || '',
-            trackCount: album.trackCount || 0,
-            source: source
-          }))
-        }
-        return []
-      }).catch(() => [])
-    })
-
-    const results = await Promise.all(promises)
-    const allAlbums = results.flat()
-    
-    const seen = new Set()
-    const uniqueAlbums = allAlbums.filter(album => {
-      const key = `${album.source}-${album.id}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-
-    return {
-      success: true,
-      data: uniqueAlbums
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message || '搜索失败'
-    }
+  console.warn('搜索专辑功能暂未实现')
+  return {
+    success: true,
+    data: []
   }
 }
 
-// 搜索歌手
+// 搜索歌手（后端暂未实现，返回空结果）
 export const searchArtist = async (keyword) => {
-  try {
-    // 如果是歌曲链接，提取歌曲ID并获取歌手信息
-    const songIdMatch = keyword.match(/id=(\d+)/)
-    if (songIdMatch) {
-      const songId = songIdMatch[1]
-      try {
-        // 获取歌曲详情
-        const songDetailResponse = await fetch('/api/v3/song/detail', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: `ids=[${songId}]`
-        })
-        const text = await songDetailResponse.text()
-        // 处理可能的重复响应
-        const match = text.match(/^\{.*\}$/)
-        const songDetailResult = match ? JSON.parse(match[0]) : {}
-        if (!songDetailResult.songs) {
-          return null
-        }
-        
-        if (songDetailResult.songs && songDetailResult.songs.length > 0) {
-          const song = songDetailResult.songs[0]
-          // 从歌曲详情中提取歌手信息
-          const artists = song.artists || song.ar || []
-          if (artists.length > 0) {
-            // 使用歌手名称搜索
-            const artistName = artists[0].name
-            // 检查缓存
-            const cached = getCachedSearchResult('artist', artistName)
-            if (cached) {
-              return { success: true, data: cached, fromCache: true }
-            }
-            
-            const artistResponse = await fetch('/search/artist', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ keyword: artistName })
-            })
-            const artistText = await artistResponse.text()
-            // 处理可能的重复响应
-            const artistMatch = artistText.match(/^\{.*\}$/)
-            const artistResult = artistMatch ? JSON.parse(artistMatch[0]) : {}
-            
-            if (artistResult.success && artistResult.data && artistResult.data.length > 0) {
-              const searchData = artistResult.data.map(artist => ({
-                id: artist.id,
-                name: artist.name,
-                avatarUrl: artist.avatarUrl || artist.picUrl || '',
-                musicCount: artist.musicCount || artist.songCount || 0,
-                albumCount: artist.albumCount || 0,
-                fansCount: artist.fansCount || 0
-              }))
-              // 缓存结果
-              setCachedSearchResult('artist', artistName, searchData)
-              return { success: true, data: searchData }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('从歌曲链接获取歌手失败:', e)
-      }
-    }
-
-    // 检查缓存
-    const cached = getCachedSearchResult('artist', keyword)
-    if (cached) {
-      return { success: true, data: cached, fromCache: true }
-    }
-
-    const response = await fetch('/search/artist', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ keyword })
-    })
-    
-    const result = await response.json()
-    
-    if (result.success && result.data) {
-      const searchData = result.data.map(artist => ({
-        id: artist.id,
-        name: artist.name,
-        avatarUrl: artist.avatarUrl || artist.picUrl || '',
-        musicCount: artist.musicCount || artist.songCount || 0,
-        albumCount: artist.albumCount || 0,
-        fansCount: artist.fansCount || 0
-      }))
-      
-      // 缓存结果
-      setCachedSearchResult('artist', keyword, searchData)
-      
-      return {
-        success: true,
-        data: searchData
-      }
-    } else {
-      return {
-        success: false,
-        error: result.message || '搜索失败'
-      }
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message || '搜索失败'
-    }
+  console.warn('搜索歌手功能暂未实现')
+  return {
+    success: true,
+    data: []
   }
 }
 
