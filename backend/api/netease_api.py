@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from hashlib import md5
 from enum import Enum
 from pathlib import Path
+
+from .quality_config import QualityLevel, get_quality_label, is_valid_quality
 from datetime import datetime
 
 import requests
@@ -295,18 +297,6 @@ class NeteaseAPISource(Enum):
     OFFICIAL = "official"        # 官方API
     XUANLUOGE = "xuanluoge"      # xuanluoge第三方API
     HAITANGW = "haitangw"        # haitangw第三方API
-
-
-class QualityLevel(Enum):
-    """音质等级枚举"""
-    STANDARD = "standard"      # 标准音质
-    EXHIGH = "exhigh"          # 极高音质
-    LOSSLESS = "lossless"      # 无损音质
-    HIRES = "hires"            # Hi-Res音质
-    SKY = "sky"                # 沉浸环绕声
-    JYEFFECT = "jyeffect"      # 高清环绕声
-    JYMASTER = "jymaster"      # 超清母带
-    DOLBY = "dolby"            # 杜比全景声
 
 
 # 常量定义

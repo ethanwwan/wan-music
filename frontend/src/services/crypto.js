@@ -249,16 +249,5 @@ export const APIConstants = {
     appver: '',
     osver: '',
     deviceId: 'pyncm!'
-  },
-
-  QUALITY_LEVELS: {
-    standard: 'standard',
-    exhigh: 'exhigh',
-    lossless: 'lossless',
-    hires: ' hires',
-    sky: 'sky',
-    jyeffect: 'jyeffect',
-    jymaster: 'jymaster',
-    dolby: 'dolby'
   }
 }

@@ -7,6 +7,7 @@ import { embedMetadata } from './metadataWriter.js'
 import { saveBlob, ensureBlobType, getMimeByExtension, sanitizeFilename } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
 import { NeteaseAPI } from './neteaseApi.js'
+import { getQualityLabel } from '../config/qualityLevels.js'
 
 const neteaseApi = new NeteaseAPI()
 
@@ -242,18 +243,6 @@ export const getMusicIdFromUrl = extractIdFromUrl
 export const extractPlaylistId = extractIdFromUrl
 export const extractAlbumId = extractIdFromUrl
 
-// 音质等级映射
-export const QUALITY_LEVELS = {
-  'jymaster': '超清母带(Master)',
-  'dolby': '杜比全景声(Dolby Atmos)',
-  'sky': '沉浸环绕声(Surround Audio)',
-  'jyeffect': '高清臻音(Spatial Audio)',
-  'hires': '高清晰度无损(Hi-Res)',
-  'lossless': '无损(SQ)',
-  'exhigh': '极高(HQ)',
-  'standard': '标准(128k)'
-}
-
 // 播放链接内存缓存
 const urlCache = new Map()
 const getUrlCacheKey = (id, quality) => `${id}|${quality}`
@@ -382,7 +371,7 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
       duration: songData.dt || 0,
       url: musicUrl,
       quality: actualQuality,
-      qualityName: QUALITY_LEVELS[actualQuality] || actualQuality,
+      qualityName: getQualityLabel(actualQuality),
       fileSize: fileSize,
       bitRate: bitRate,
       lrc: '',

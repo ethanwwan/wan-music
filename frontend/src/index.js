@@ -37,11 +37,18 @@ export {
   batchGetMusicInfo,
   downloadMusic,
   batchDownloadMusic,
-  getLyrics,
-  getQualityLevels,
-  getQualityLabel,
-  QUALITY_LEVELS
+  getLyrics
 } from './services/musicApi.js'
+
+// 音质配置
+export {
+  QUALITY_LEVELS,
+  getQualityOptions,
+  getQualityLabel,
+  isValidQuality,
+  getAllQualityValues,
+  getDefaultQuality
+} from './config/qualityLevels.js'
 
 // 元数据写入
 export { embedMetadata } from './services/metadataWriter.js'

@@ -25,13 +25,13 @@
               @change="handleSave"
               :style="{ width: '160px' }"
             >
-              <a-select-option value="standard">标准 (128kbps)</a-select-option>
-              <a-select-option value="exhigh">极高 (320kbps)</a-select-option>
-              <a-select-option value="lossless">无损 (FLAC)</a-select-option>
-              <a-select-option value="hires">Hi-Res (FLAC 24bit)</a-select-option>
-              <a-select-option value="sky">沉浸 (Dolby Atmos)</a-select-option>
-              <a-select-option value="jyeffect">环绕 (Sony 360RA)</a-select-option>
-              <a-select-option value="jymaster">母带 (FLAC 24bit/96kHz)</a-select-option>
+              <a-select-option 
+                v-for="option in getQualityOptions()" 
+                :key="option.value" 
+                :value="option.value"
+              >
+                {{ option.label }}
+              </a-select-option>
             </a-select>
             <div class="form-item-hint">
               <a-tag color="blue" bordered>解析和下载时使用的默认音质</a-tag>
@@ -128,6 +128,7 @@ import { message, Modal } from 'ant-design-vue'
 import { CloseOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
+import { getQualityOptions } from '../config/qualityLevels.js'
 
 const emit = defineEmits(['update:open'])
 

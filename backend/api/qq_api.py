@@ -9,9 +9,13 @@ https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/qq
 import json
 import urllib.parse
 import logging
+import time
+import random
 from typing import Dict, List, Optional, Any
 
 import requests
+
+from .quality_config import QualityLevel
 
 # 数据结构标准化辅助函数
 def _normalize_artist(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -93,13 +97,6 @@ def _normalize_track(item: Dict[str, Any]) -> Dict[str, Any]:
 logger = logging.getLogger(__name__)
 
 
-class QualityLevel:
-    """音质等级枚举"""
-    STANDARD = "standard"      # 标准音质
-    EXHIGH = "exhigh"          # 极高音质
-    LOSSLESS = "lossless"      # 无损音质
-
-
 class QQAPIClient:
     """QQ音乐API客户端"""
     
@@ -108,54 +105,72 @@ class QQAPIClient:
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-            'Referer': 'https://y.qq.com/'
+            'Referer': 'https://y.qq.com/',
+            'Origin': 'https://y.qq.com'
         })
     
+    def _generate_search_id(self) -> str:
+        """生成随机搜索ID"""
+        return str(int(time.time() * 1000)) + str(int(random.random() * 100000000))
+        
     def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
-        """搜索歌曲"""
-        url = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
-        params = {
-            'ct': '24',
-            'qqmusic_ver': '1298',
-            'new_json': '1',
-            'remoteplace': 'txt.yqq.top',
-            'searchid': '6423056225238206',
-            't': '0',
-            'aggr': '1',
-            'cr': '1',
-            'catZhida': '1',
-            'lossless': '0',
-            'flag_qc': '0',
-            'p': str(offset // limit + 1),
-            'n': str(limit),
-            'w': keyword,
-            'g_tk_new_20200303': '1320007797',
-            'g_tk': '1320007797',
-            'loginUin': '0',
-            'hostUin': '0',
-            'format': 'json',
-            'inCharset': 'utf8',
-            'outCharset': 'utf-8',
-            'notice': '0',
-            'platform': 'yqq.json',
-            'needNewCode': '0'
+        """搜索歌曲 - 使用musicdl方式"""
+        url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
+        
+        payload = {
+            'comm': {
+                'cv': 13020508,
+                'v': 13020508,
+                'QIMEI36': 'd3926e96895b430847efc144100010b1730b',
+                'ct': '11',
+                'tmeAppID': 'qqmusic',
+                'format': 'json',
+                'inCharset': 'utf-8',
+                'outCharset': 'utf-8',
+                'uid': '3931641530'
+            },
+            'music.search.SearchCgiService.DoSearchForQQMusicMobile': {
+                'module': 'music.search.SearchCgiService',
+                'method': 'DoSearchForQQMusicMobile',
+                'param': {
+                    'searchid': self._generate_search_id(),
+                    'query': keyword,
+                    'search_type': 0,
+                    'num_per_page': limit,
+                    'page_num': offset // limit + 1,
+                    'highlight': 1,
+                    'grp': 1
+                }
+            }
+        }
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            'Referer': 'https://y.qq.com/',
+            'Origin': 'https://y.qq.com',
+            'Content-Type': 'application/json'
         }
         
         try:
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.session.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
             
             songs = []
-            for item in data.get('data', {}).get('song', {}).get('list', []):
+            result_key = 'music.search.SearchCgiService.DoSearchForQQMusicMobile'
+            req_data = data.get(result_key, {})
+            body = req_data.get('data', {}).get('body', {})
+            for item in body.get('item_song', []):
                 singer_name = '/'.join([s.get('name', '') for s in item.get('singer', [])])
                 album_info = item.get('album', {})
+                pic_mid = album_info.get('mid', '')
+                pic_url = f"https://y.qq.com/music/photo_new/T002R300x300M000{pic_mid}.jpg" if pic_mid else ""
                 songs.append({
-                    'id': item.get('songid', 0),
-                    'name': item.get('songname', ''),
+                    'id': item.get('mid', 0),
+                    'name': item.get('title', ''),
                     'artists': singer_name,
                     'album': album_info.get('name', ''),
-                    'picUrl': album_info.get('mid', '') and f"https://y.qq.com/music/photo_new/T002R300x300M000{album_info['mid']}.jpg",
+                    'picUrl': pic_url,
                     'artist_string': singer_name,
                     'source': 'qq'
                 })

@@ -36,6 +36,7 @@ try:
     from .netease_api import NeteaseAPIClient, netease_client
     from .qq_api import QQAPIClient, qq_client
     from .bodian_api import BodianAPIClient, bodian_client
+    from .kugou_api import KugouAPIClient, kugou_client
 except ImportError as e:
     logger.error(f"导入API模块失败: {e}")
     raise
@@ -63,7 +64,8 @@ class MusicAPI:
         self,
         netease_client: Optional[NeteaseAPIClient] = None,
         qq_client: Optional[QQAPIClient] = None,
-        bodian_client: Optional[BodianAPIClient] = None
+        bodian_client: Optional[BodianAPIClient] = None,
+        kugou_client: Optional[KugouAPIClient] = None
     ):
         """初始化API总控
         
@@ -71,6 +73,7 @@ class MusicAPI:
             netease_client: 自定义网易云客户端实例，默认为全局单例
             qq_client: 自定义QQ音乐客户端实例，默认为全局单例
             bodian_client: 自定义波点音乐客户端实例，默认为全局单例
+            kugou_client: 自定义酷狗音乐客户端实例，默认为全局单例
         """
         self.platform_clients: Dict[str, Any] = {}
         
@@ -89,6 +92,11 @@ class MusicAPI:
             self.register_platform('bodian', bodian_client)
         else:
             self.register_platform('bodian', globals()['bodian_client'])
+        
+        if kugou_client:
+            self.register_platform('kugou', kugou_client)
+        else:
+            self.register_platform('kugou', globals()['kugou_client'])
         
         self.default_platform = 'netease'
     
@@ -119,7 +127,8 @@ class MusicAPI:
         return [
             {'value': 'netease', 'label': '网易云音乐', 'description': '网易云音乐平台'},
             {'value': 'qq', 'label': 'QQ音乐', 'description': 'QQ音乐平台'},
-            {'value': 'bodian', 'label': '波点音乐', 'description': '波点音乐平台'}
+            {'value': 'bodian', 'label': '波点音乐', 'description': '波点音乐平台'},
+            {'value': 'kugou', 'label': '酷狗音乐', 'description': '酷狗音乐平台'}
         ]
     
     def get_data_sources(self, platform: str = 'netease') -> List[Dict[str, str]]:
