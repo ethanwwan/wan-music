@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any
 from contextlib import suppress
 
 from .base_client import BaseMusicClient
+from .quality_config import QualityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,7 @@ class QQClient(BaseMusicClient):
         logger.error(f"[{self.platform_name}] 搜索歌单失败")
         return []
     
-    def get_song_url(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
+    def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
         """获取歌曲播放/下载URL - 使用分层的第三方API"""
         l1_apis = [
             lambda sid: f"https://api.vkeys.cn/v2/music/tencent/geturl?mid={sid}&quality=3",

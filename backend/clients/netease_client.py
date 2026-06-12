@@ -290,11 +290,11 @@ class NeteaseClient(BaseMusicClient):
             logger.error(f"[{self.platform_name}] Meting API获取歌曲URL失败: {e}")
             return None
     
-    def get_song_url(self, song_id: int, quality: str = 'high') -> Dict[str, Any]:
+    def get_song_url(self, song_id: int, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
         """获取歌曲播放/下载URL（自动切换线路）"""
-        valid_qualities = [q.value for q in QualityLevel]
-        if quality not in valid_qualities:
-            quality = 'lossless'
+        from .quality_config import is_valid_quality, get_default_quality
+        if not is_valid_quality(quality):
+            quality = get_default_quality()
         
         source_func_map = {
             'official': self._get_song_url_official,

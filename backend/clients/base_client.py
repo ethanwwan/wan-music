@@ -7,8 +7,11 @@ https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/ba
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 import requests
+
+from .quality_config import QualityLevel, get_default_quality, is_valid_quality
 import logging
 
 logger = logging.getLogger(__name__)
@@ -110,12 +113,12 @@ class BaseMusicClient(ABC):
         pass
     
     @abstractmethod
-    def get_song_url(self, song_id: Any, quality: str = 'high') -> Dict[str, Any]:
+    def get_song_url(self, song_id: Any, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
         """获取歌曲播放/下载URL
         
         Args:
             song_id: 歌曲ID
-            quality: 音质 (standard/high/exhigh/lossless/hires)
+            quality: 音质 (standard/exhigh/lossless/hires/sky/jyeffect/jymaster/dolby)
         
         Returns:
             包含url的字典

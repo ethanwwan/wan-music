@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any
 from urllib.parse import urlencode, quote
 
 from .base_client import BaseMusicClient
+from .quality_config import QualityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class BodianClient(BaseMusicClient):
             logger.error(f"[{self.platform_name}] 搜索歌单失败: {e}")
             return []
     
-    def get_song_url(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
+    def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
         apis = [
             f"https://kw-api.cenguigui.cn/?id={song_id}&type=song&level=lossless&format=json",
