@@ -1,15 +1,10 @@
 """波点音乐客户端
 
 继承自 BaseMusicClient，实现波点音乐平台的具体逻辑。
-
-参考 musicdl 的波点音乐实现：
-https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/bodian.py
 """
 
 import logging
-import uuid
-import hashlib
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 from .base_client import BaseMusicClient
 
@@ -24,47 +19,36 @@ class BodianClient(BaseMusicClient):
         self.platform_name = "波点音乐"
         self.platform_id = "bodian"
         
-        self.dev_id = hashlib.md5(uuid.uuid4().bytes).hexdigest()
-        
         self.session.headers.update({
-            'user-agent': 'Dart/3.3 (dart:io)',
-            'plat': 'win',
-            'accept-encoding': 'gzip',
-            'api-ver': 'application/json',
-            'channel': 'W1',
-            'brand': 'Windows 11 Pro for Workstations',
-            'net': 'wifi',
-            'content-type': 'application/json',
-            'ver': '1.1.5',
-            'svrver': '13',
-            'devid': self.dev_id,
-            'qimei36': self.dev_id
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.bodianmusic.com/'
         })
     
     def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
-        url = "https://bd-api.kuwo.cn/api/search/searchMusic"
-        params = {
-            'key': keyword,
-            'pn': offset // limit + 1,
-            'rn': limit,
-            'devId': self.dev_id
-        }
-        
         try:
+            url = "https://www.bodianmusic.com/api/search"
+            params = {
+                'keyword': keyword,
+                'page': offset // limit + 1,
+                'limit': limit,
+                'type': 'song'
+            }
+            
             data = self._get(url, params=params)
             
             songs = []
-            for item in data.get('data', {}).get('resultList', []):
-                songs.append({
-                    'id': item.get('rid', ''),
-                    'name': item.get('name', ''),
-                    'artists': item.get('artist', ''),
-                    'album': item.get('album', ''),
-                    'picUrl': item.get('pic', ''),
-                    'artist_string': item.get('artist', ''),
-                    'source': 'bodian'
-                })
+            if isinstance(data, dict):
+                for item in data.get('data', {}).get('list', []):
+                    songs.append({
+                        'id': item.get('id', ''),
+                        'name': item.get('name', ''),
+                        'artists': item.get('artist', ''),
+                        'album': item.get('album', ''),
+                        'picUrl': item.get('cover', ''),
+                        'artist_string': item.get('artist', ''),
+                        'source': 'bodian'
+                    })
             return songs
         except Exception as e:
             logger.error(f"[{self.platform_name}] 搜索失败: {e}")
@@ -72,27 +56,28 @@ class BodianClient(BaseMusicClient):
     
     def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
         """搜索歌单"""
-        url = "https://bd-api.kuwo.cn/api/search/searchAlbum"
-        params = {
-            'key': keyword,
-            'pn': 1,
-            'rn': limit,
-            'devId': self.dev_id
-        }
-        
         try:
+            url = "https://www.bodianmusic.com/api/search"
+            params = {
+                'keyword': keyword,
+                'page': 1,
+                'limit': limit,
+                'type': 'playlist'
+            }
+            
             data = self._get(url, params=params)
             playlists = []
-            for item in data.get('data', {}).get('resultList', []):
-                playlists.append({
-                    'id': item.get('id', 0),
-                    'name': item.get('name', ''),
-                    'coverImgUrl': item.get('pic', ''),
-                    'description': item.get('desc', ''),
-                    'trackCount': item.get('songNum', 0),
-                    'playCount': item.get('playNum', 0),
-                    'source': 'bodian'
-                })
+            if isinstance(data, dict):
+                for item in data.get('data', {}).get('list', []):
+                    playlists.append({
+                        'id': item.get('id', 0),
+                        'name': item.get('name', ''),
+                        'coverImgUrl': item.get('cover', ''),
+                        'description': item.get('desc', ''),
+                        'trackCount': item.get('songCount', 0),
+                        'playCount': item.get('playCount', 0),
+                        'source': 'bodian'
+                    })
             return playlists
         except Exception as e:
             logger.error(f"[{self.platform_name}] 搜索歌单失败: {e}")
@@ -100,17 +85,12 @@ class BodianClient(BaseMusicClient):
     
     def get_song_url(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
-        url = "https://bd-api.kuwo.cn/api/music/getMusicUrl"
-        params = {
-            'rid': song_id,
-            'type': 'music',
-            'devId': self.dev_id
-        }
-        
         try:
-            data = self._get(url, params=params)
+            url = f"https://www.bodianmusic.com/api/song/url?id={song_id}"
             
+            data = self._get(url)
             download_url = data.get('data', {}).get('url', '')
+            
             if download_url and download_url.startswith('http'):
                 return {
                     'url': download_url,
@@ -125,22 +105,18 @@ class BodianClient(BaseMusicClient):
     
     def get_song_info(self, song_id: str) -> Dict[str, Any]:
         """获取歌曲信息"""
-        url = "https://bd-api.kuwo.cn/api/music/getMusicInfo"
-        params = {
-            'rid': song_id,
-            'devId': self.dev_id
-        }
-        
         try:
-            data = self._get(url, params=params)
+            url = f"https://www.bodianmusic.com/api/song/detail?id={song_id}"
+            
+            data = self._get(url)
             song_info = data.get('data', {})
             
             return {
-                'id': song_info.get('rid', ''),
+                'id': song_info.get('id', ''),
                 'name': song_info.get('name', ''),
                 'artists': song_info.get('artist', ''),
                 'album': song_info.get('album', ''),
-                'picUrl': song_info.get('pic', ''),
+                'picUrl': song_info.get('cover', ''),
                 'duration': song_info.get('duration', 0) * 1000,
                 'source': 'bodian'
             }
@@ -150,14 +126,10 @@ class BodianClient(BaseMusicClient):
     
     def get_lyric(self, song_id: str) -> str:
         """获取歌词"""
-        url = "https://bd-api.kuwo.cn/api/music/getLyric"
-        params = {
-            'rid': song_id,
-            'devId': self.dev_id
-        }
-        
         try:
-            data = self._get(url, params=params)
+            url = f"https://www.bodianmusic.com/api/song/lyric?id={song_id}"
+            
+            data = self._get(url)
             return data.get('data', {}).get('lyric', '')
         except Exception as e:
             logger.error(f"[{self.platform_name}] 获取歌词失败: {e}")
@@ -165,34 +137,30 @@ class BodianClient(BaseMusicClient):
     
     def get_playlist(self, playlist_id: int) -> Dict[str, Any]:
         """获取歌单"""
-        url = "https://bd-api.kuwo.cn/api/album/getAlbumInfo"
-        params = {
-            'id': playlist_id,
-            'devId': self.dev_id
-        }
-        
         try:
-            data = self._get(url, params=params)
-            album_info = data.get('data', {})
+            url = f"https://www.bodianmusic.com/api/playlist/detail?id={playlist_id}"
+            
+            data = self._get(url)
+            playlist_info = data.get('data', {})
             
             tracks = []
-            for item in album_info.get('songList', []):
+            for item in playlist_info.get('songs', []):
                 tracks.append({
-                    'id': item.get('rid', ''),
+                    'id': item.get('id', ''),
                     'name': item.get('name', ''),
                     'artists': item.get('artist', ''),
                     'album': item.get('album', ''),
-                    'picUrl': item.get('pic', ''),
+                    'picUrl': item.get('cover', ''),
                     'source': 'bodian'
                 })
             
             return {
-                'id': album_info.get('id', 0),
-                'name': album_info.get('name', ''),
-                'coverImgUrl': album_info.get('pic', ''),
-                'description': album_info.get('desc', ''),
+                'id': playlist_info.get('id', 0),
+                'name': playlist_info.get('name', ''),
+                'coverImgUrl': playlist_info.get('cover', ''),
+                'description': playlist_info.get('desc', ''),
                 'trackCount': len(tracks),
-                'playCount': album_info.get('playNum', 0),
+                'playCount': playlist_info.get('playCount', 0),
                 'tracks': tracks,
                 'source': 'bodian'
             }

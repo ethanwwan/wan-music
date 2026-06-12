@@ -7,6 +7,8 @@ https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/ku
 """
 
 import logging
+import hashlib
+import json
 from typing import Dict, List, Optional, Any
 
 from .base_client import BaseMusicClient
@@ -94,64 +96,25 @@ class KugouClient(BaseMusicClient):
     
     def get_song_url(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
-        quality_map = {
-            'standard': '128k',
-            'high': '320k',
-            'exhigh': '320k',
-            'lossless': 'flac',
-            'hires': 'flac24bit'
-        }
+        url = f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash={song_id}&mid=1"
         
-        api_quality = quality_map.get(quality, '320k')
-        
-        apis = [
-            f"http://api.liuyunidc.cn/baimusic/musicurl.php?source=kg&musicId={song_id}&quality={api_quality}&card=BAI-153B4JE4I40HSG40H1FP"
-        ]
-        
-        headers = {
-            "accept": "*/*",
-            "accept-encoding": "gzip, deflate",
-            "accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "referer": "http://api.liuyunidc.cn/baimusic/",
-            "host": "api.liuyunidc.cn",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-        }
-        
-        for api_url in apis:
-            try:
-                import requests
-                response = requests.get(api_url, headers=headers, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                
-                download_url = data.get('url')
-                if download_url and download_url.startswith('http'):
+        try:
+            data = self._get(url)
+            
+            if isinstance(data, dict) and data.get('data'):
+                song_info = data['data']
+                play_url = song_info.get('play_url') or song_info.get('url')
+                if play_url and play_url.startswith('http'):
                     return {
-                        'url': download_url,
+                        'url': play_url,
                         'quality': quality,
                         'song_id': song_id,
                         'source': 'kugou'
                     }
-            except Exception as e:
-                logger.debug(f"[{self.platform_name}] 尝试API失败: {api_url}, 错误: {e}")
-                continue
-        
-        try:
-            url = f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash={song_id}&mid=1"
-            data = self._get(url)
-            
-            audio_info = data.get('data', {})
-            play_url = audio_info.get('play_url') or audio_info.get('url')
-            if play_url:
-                return {
-                    'url': play_url,
-                    'quality': quality,
-                    'song_id': song_id,
-                    'source': 'kugou'
-                }
         except Exception as e:
-            logger.error(f"[{self.platform_name}] 获取歌曲URL失败: {e}")
+            logger.debug(f"[{self.platform_name}] 获取歌曲URL失败: {url}, 错误: {e}")
         
+        logger.error(f"[{self.platform_name}] 获取歌曲URL失败")
         return {}
     
     def get_song_info(self, song_id: str) -> Dict[str, Any]:
@@ -160,20 +123,23 @@ class KugouClient(BaseMusicClient):
         
         try:
             data = self._get(url)
-            song_info = data.get('data', {})
             
-            return {
-                'id': song_info.get('hash', ''),
-                'name': song_info.get('song_name', ''),
-                'artists': song_info.get('singer_name', ''),
-                'album': song_info.get('album_name', ''),
-                'picUrl': song_info.get('img', ''),
-                'duration': song_info.get('timelength', 0),
-                'source': 'kugou'
-            }
+            if isinstance(data, dict) and data.get('data'):
+                song_info = data['data']
+                return {
+                    'id': song_info.get('hash', ''),
+                    'name': song_info.get('song_name', ''),
+                    'artists': song_info.get('singer_name', ''),
+                    'album': song_info.get('album_name', ''),
+                    'picUrl': song_info.get('img', ''),
+                    'duration': song_info.get('timelength', 0),
+                    'source': 'kugou'
+                }
         except Exception as e:
-            logger.error(f"[{self.platform_name}] 获取歌曲信息失败: {e}")
-            return {}
+            logger.debug(f"[{self.platform_name}] 获取歌曲信息失败: {url}, 错误: {e}")
+        
+        logger.error(f"[{self.platform_name}] 获取歌曲信息失败")
+        return {}
     
     def get_lyric(self, song_id: str) -> str:
         """获取歌词"""
@@ -181,43 +147,49 @@ class KugouClient(BaseMusicClient):
         
         try:
             data = self._get(url)
-            return data.get('data', {}).get('lyrics', '')
+            
+            if isinstance(data, dict) and data.get('data'):
+                return data['data'].get('lyrics', '') or data['data'].get('lyric', '')
         except Exception as e:
-            logger.error(f"[{self.platform_name}] 获取歌词失败: {e}")
-            return ''
+            logger.debug(f"[{self.platform_name}] 获取歌词失败: {url}, 错误: {e}")
+        
+        logger.error(f"[{self.platform_name}] 获取歌词失败")
+        return ''
     
     def get_playlist(self, playlist_id: int) -> Dict[str, Any]:
         """获取歌单"""
-        url = f"https://www.kugou.com/yy/index.php?r=play/getPlaylistInfo&specialid={playlist_id}"
+        url = f"https://wwwapi.kugou.com/yy/index.php?r=play/get_special&specialid={playlist_id}"
         
         try:
             data = self._get(url)
-            playlist_data = data.get('data', {})
             
-            tracks = []
-            for item in playlist_data.get('list', []):
-                tracks.append({
-                    'id': item.get('hash', ''),
-                    'name': item.get('songname', ''),
-                    'artists': item.get('singername', ''),
-                    'album': item.get('album_name', ''),
-                    'picUrl': item.get('cover', ''),
+            if isinstance(data, dict) and data.get('data'):
+                playlist_info = data['data']
+                tracks = []
+                for item in playlist_info.get('list', []):
+                    tracks.append({
+                        'id': item.get('hash', ''),
+                        'name': item.get('songname', ''),
+                        'artists': item.get('singername', ''),
+                        'album': item.get('albumname', ''),
+                        'picUrl': item.get('img', ''),
+                        'source': 'kugou'
+                    })
+                
+                return {
+                    'id': playlist_info.get('specialid', 0),
+                    'name': playlist_info.get('specialname', ''),
+                    'coverImgUrl': playlist_info.get('cover', ''),
+                    'description': playlist_info.get('intro', ''),
+                    'trackCount': len(tracks),
+                    'playCount': playlist_info.get('playcount', 0),
+                    'tracks': tracks,
                     'source': 'kugou'
-                })
-            
-            return {
-                'id': playlist_id,
-                'name': playlist_data.get('specialname', ''),
-                'coverImgUrl': playlist_data.get('cover', ''),
-                'description': playlist_data.get('intro', ''),
-                'trackCount': len(tracks),
-                'playCount': playlist_data.get('playcount', 0),
-                'tracks': tracks,
-                'source': 'kugou'
-            }
+                }
         except Exception as e:
             logger.error(f"[{self.platform_name}] 获取歌单失败: {e}")
-            return {}
+        
+        return {}
 
 
 kugou_client = KugouClient()
