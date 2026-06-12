@@ -202,7 +202,7 @@ const toggleDataSource = (sourceId) => {
 const handleParse = () => {
   const value = inputValue.value.trim()
   if (!value) {
-    message.warning('请输入歌曲名、歌手名、专辑名或歌单名')
+    message.warning('请输入歌曲名或歌单名')
     return
   }
   emit('parse', {

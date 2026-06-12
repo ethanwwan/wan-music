@@ -19,7 +19,6 @@ const props = defineProps({
     type: Array,
     default: () => [
       { key: 'music', label: '单曲' },
-      { key: 'album', label: '专辑' },
       { key: 'playlist', label: '歌单' },
       { key: 'search', label: '搜索' },
       { key: 'rank', label: '榜单' }
@@ -42,7 +41,7 @@ const handleTabClick = (key) => {
 <style scoped>
 .nav-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-2xl);
 }

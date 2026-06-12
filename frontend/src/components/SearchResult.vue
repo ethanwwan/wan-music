@@ -15,7 +15,21 @@
     <div v-if="!currentDetail" class="result-header">
       <div class="header-left">
         <h3 class="result-title">{{ title }}</h3>
-        <span class="result-count">共 {{ totalCount }} 个结果</span>
+      </div>
+      <div class="header-right">
+        <a-select 
+          v-model:value="selectedDataSource" 
+          placeholder="选择数据源" 
+          size="small"
+          style="width: 140px"
+          @change="handleDataSourceChange"
+        >
+          <a-select-option value="all">全部</a-select-option>
+          <a-select-option value="netease">网易云音乐</a-select-option>
+          <a-select-option value="qq">QQ音乐</a-select-option>
+          <a-select-option value="kugou">酷狗音乐</a-select-option>
+          <a-select-option value="bodian">波点音乐</a-select-option>
+        </a-select>
       </div>
     </div>
 
@@ -139,13 +153,14 @@ const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select
 // 搜索类型Tab配置
 const searchTabs = [
   { key: 'search', label: '单曲' },
-  { key: 'artist', label: '歌手' },
-  { key: 'playlist', label: '歌单' },
-  { key: 'album', label: '专辑' }
+  { key: 'playlist', label: '歌单' }
 ]
 
 // 当前搜索类型
 const currentSearchType = ref('search')
+
+// 当前选择的数据源
+const selectedDataSource = ref('all')
 
 // 二级页面状态
 const currentDetail = ref(null)
@@ -612,6 +627,10 @@ const handleParseArtist = async (item) => {
   }
 }
 
+const handleDataSourceChange = (value) => {
+  selectedDataSource.value = value
+}
+
 const goBack = () => {
   currentDetail.value = null
   detailTracks.value = []
@@ -688,6 +707,11 @@ const goBack = () => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
 }
 
 .result-title {
