@@ -8,10 +8,17 @@
     "dev:lan": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
     "preview": "vite preview",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:api\"",
+    "dev:api": "cd .. && python3 backend/main.py",
     "test:ui": "playwright test",
     "test:ui:headed": "playwright test --headed",
     "test:ui:debug": "playwright test --debug",
-    "test:install": "playwright install --with-deps"
+    "test:install": "playwright install --with-deps",
+    "test:backend": "cd .. && python3 -m pytest tests/backend",
+    "test:quick": "cd .. && python3 tests/backend/test_quick_verify.py",
+    "test:download": "playwright test tests/system/test-download-module.mjs",
+    "test:download:headed": "playwright test tests/system/test-download-module.mjs --headed",
+    "test:all": "npm run test:backend && npm run test:download"
   },
   "dependencies": {
     "@vueuse/core": "^10.7.0",
@@ -27,6 +34,7 @@
     "@vitejs/plugin-vue": "^5.1.4",
     "vite": "^5.4.0",
     "vite-plugin-compression": "^0.5.1",
-    "vite-plugin-compression2": "^2.2.1"
+    "vite-plugin-compression2": "^2.2.1",
+    "concurrently": "^10.0.0"
   }
 }

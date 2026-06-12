@@ -4,30 +4,44 @@
 
 ```
 backend/
-├── main.py        # Flask API服务器主文件
-├── cookie.txt     # 网易云音乐认证Cookie
-└── README.md      # 本文件
+├── clients/          # 音乐平台客户端
+│   ├── base_client.py      # 抽象基类
+│   ├── netease_client.py   # 网易云音乐
+│   ├── qq_client.py        # QQ音乐
+│   ├── bodian_client.py    # 波点音乐
+│   └── kugou_client.py     # 酷狗音乐
+├── routes/           # Flask 路由
+│   ├── search_routes.py    # 搜索路由
+│   └── music_routes.py     # 音乐路由
+├── services/         # 业务服务层
+│   └── music_service.py    # 音乐业务服务
+├── utils/            # 工具函数
+│   └── api_response.py     # 统一响应工具
+├── logs/             # 日志目录
+├── tests/            # 测试目录
+├── main.py           # Flask API服务器主文件
+├── LICENSE           # 许可证
+├── .gitignore        # Git忽略配置
+└── README.md         # 本文件
 ```
 
 ## 🔧 技术栈
 
 - **Flask** - Web框架
+- **Flask-CORS** - CORS跨域支持
 - **Requests** - HTTP客户端
-- **Cryptography** - 加密工具（MD5、AES-ECB）
-- **Python 3** - 运行环境
+- **Python 3.8+** - 运行环境
 
 ## 🎯 核心功能
 
-### 1. API代理服务
-将前端请求代理到网易云音乐API，解决CORS跨域问题。
+### 1. 多平台音乐API
+支持网易云、QQ、波点、酷狗音乐平台的音乐搜索和播放。
 
-### 2. EAPI加密
-网易云音乐使用EAPI协议进行加密通信：
-- **MD5签名** - 生成请求摘要
-- **AES-ECB加密** - 加密请求参数（PKCS7 padding）
+### 2. 统一接口规范
+通过 `BaseMusicClient` 抽象基类定义统一的接口规范。
 
-### 3. Cookie认证
-管理网易云音乐Cookie，支持Cookie认证获取VIP歌曲。
+### 3. 自动线路切换
+网易云音乐API支持自动切换线路（官方API优先）。
 
 ## 📡 API端点
 
@@ -35,26 +49,49 @@ backend/
 ```bash
 GET /health
 ```
-返回服务状态。
 
-### 歌曲解析（核心接口）
+### 搜索歌曲
 ```bash
-POST /Song_V1
-Content-Type: application/x-www-form-urlencoded
+POST /search
+Content-Type: application/json
 
-ids=25706282&level=standard&type=json
+{"keyword": "陈楚生", "source": "netease", "limit": 10}
 ```
 
-参数说明：
-- `ids` - 歌曲ID
-- `level` - 音质（standard/exhigh/lossless/hires/sky）
-- `type` - 返回格式（json/text/down）
+### 搜索歌单
+```bash
+POST /search/playlist
+Content-Type: application/json
+
+{"keyword": "华语", "source": "netease", "limit": 20}
+```
+
+### 获取歌曲信息
+```bash
+POST /song
+Content-Type: application/x-www-form-urlencoded
+
+ids=25706282&level=lossless&type=json
+```
+
+### 获取歌单详情
+```bash
+POST /playlist
+Content-Type: application/x-www-form-urlencoded
+
+id=7583298906
+```
+
+### 获取数据源列表
+```bash
+GET /api/data-sources
+```
 
 ## 🚀 启动方式
 
 ### 前置要求
 ```bash
-pip install flask requests cryptography
+pip install flask flask-cors requests
 ```
 
 ### 启动服务
@@ -63,30 +100,7 @@ cd backend
 python3 main.py
 ```
 
-服务会在 `http://localhost:5002` 启动（5000和5001端口可能被占用）。
-
-## 📝 Cookie配置
-
-### Cookie文件格式
-```
-cookie.txt
-```
-包含网易云音乐的完整Cookie，通常为 `key=value; key=value` 格式。
-
-### 获取Cookie
-1. 登录 https://music.163.com
-2. 打开开发者工具（F12）
-3. 复制Cookie并保存到 `cookie.txt`
-
-### 重要Cookie字段
-- MUSIC_U - 用户认证令牌
-- NMTID - 设备标识
-
-## 🔐 安全说明
-
-- ✅ Cookie文件已添加到 `.gitignore`
-- ✅ 不要将Cookie提交到版本控制
-- ✅ 定期更新Cookie
+服务会在 `http://localhost:5002` 启动。
 
 ## 🧪 测试
 
@@ -94,26 +108,11 @@ cookie.txt
 # 健康检查
 curl http://localhost:5002/health
 
-# 测试歌曲解析
-curl "http://localhost:5002/Song_V1?ids=25706282&level=standard&type=json"
+# 测试搜索
+curl -X POST http://localhost:5002/search \
+  -H "Content-Type: application/json" \
+  -d '{"keyword": "陈楚生", "limit": 5}'
 ```
-
-## 🐛 故障排查
-
-### Cookie无效
-无法获取VIP歌曲URL。
-**解决**：更新 `cookie.txt` 文件
-
-### 端口占用
-```
-Port 5000 is in use
-```
-**解决**：代码中已自动使用5002端口，如需更改可修改 `main.py` 最后一行的端口号。
-
-## 📚 相关文档
-
-- [项目README](../README.md)
-- [网易云音乐API文档](https://github.com/Binaryify/NeteaseCloudMusicApi)
 
 ## 📄 许可证
 
