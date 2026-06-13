@@ -285,11 +285,13 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  align-items: stretch;
 }
 
 @media (min-width: 768px) {
   .input-row {
     flex-direction: row;
+    align-items: center;
   }
 }
 
@@ -309,6 +311,14 @@ defineExpose({
 .input-row :deep(.ant-input) {
   border: none;
   box-shadow: none;
+}
+
+.input-row :deep(.ant-select-selector) {
+  height: 48px !important;
+  display: flex;
+  align-items: center;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-subtle);
 }
 
 .input-row :deep(.ant-btn-primary) {
