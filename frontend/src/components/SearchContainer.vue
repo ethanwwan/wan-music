@@ -29,6 +29,20 @@
           @keyup.enter="handleParse"
           prefix-icon="link"
         />
+        <!-- 数据源下拉选择框 -->
+        <a-select 
+          v-model:value="selectedDataSource" 
+          placeholder="数据源" 
+          size="large"
+          style="width: 140px"
+          @change="handleDataSourceChange"
+        >
+          <a-select-option value="all">全部</a-select-option>
+          <a-select-option value="netease">网易云音乐</a-select-option>
+          <a-select-option value="qq">QQ音乐</a-select-option>
+          <a-select-option value="kugou">酷狗音乐</a-select-option>
+          <a-select-option value="bodian">波点音乐</a-select-option>
+        </a-select>
         <a-button
           type="primary"
           size="large"
@@ -37,23 +51,6 @@
         >
           开始解析
         </a-button>
-      </div>
-
-      <!-- 数据源选择器 -->
-      <div class="data-source-section">
-        <span class="data-source-label">数据源</span>
-        <div class="data-source-tags">
-          <span
-            v-for="source in dataSources"
-            :key="source.id"
-            class="data-source-tag"
-            :class="{ active: selectedSources.includes(source.id) }"
-            :style="selectedSources.includes(source.id) ? { backgroundColor: source.color + '15', borderColor: source.color, color: source.color } : {}"
-            @click="toggleDataSource(source.id)"
-          >
-            {{ source.name }}
-          </span>
-        </div>
       </div>
 
       <!-- 历史解析 -->
@@ -139,6 +136,7 @@ const inputValue = ref('')
 const selectedChart = ref('19723756')
 const historyRecords = ref([])
 const selectedSources = ref([...defaultSelectedSources])
+const selectedDataSource = ref('all')
 
 // 从设置中读取音质，如果没有则使用默认值 'lossless'
 const selectedQuality = computed({
@@ -188,14 +186,13 @@ const handleTagClick = (item, eventName) => {
   emit(eventName, item)
 }
 
-const toggleDataSource = (sourceId) => {
-  const index = selectedSources.value.indexOf(sourceId)
-  if (index > -1) {
-    if (selectedSources.value.length > 1) {
-      selectedSources.value.splice(index, 1)
-    }
+const handleDataSourceChange = (value) => {
+  selectedDataSource.value = value
+  // 根据选择的数据源更新selectedSources
+  if (value === 'all') {
+    selectedSources.value = ['netease', 'qq', 'kugou', 'bodian']
   } else {
-    selectedSources.value.push(sourceId)
+    selectedSources.value = [value]
   }
 }
 
