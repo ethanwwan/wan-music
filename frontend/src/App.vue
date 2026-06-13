@@ -150,8 +150,8 @@ const currentPlayIndex = ref(0)
 // 搜索配置
 const searchConfig = {
   title: '输入搜索关键词',
-  description: '支持搜索歌曲、歌手、歌单、专辑',
-  placeholder: '请输入歌曲名、歌手名、专辑名或歌单名'
+  description: '支持搜索歌曲、歌单',
+  placeholder: '请输入歌曲名或歌单名'
 }
 
 // 主题配置 - 响应式主题token
