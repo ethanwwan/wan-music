@@ -29,6 +29,7 @@
           :albums="albumSearchResults"
           :artists="artistSearchResults"
           :loading="loading"
+          :search-type="currentSearchType"
           @parse-song="handleParseSong"
           @parse-playlist="handleParsePlaylist"
           @parse-album="handleParseAlbum"
@@ -135,6 +136,7 @@ const currentView = ref('search')
 const showSettingsDialog = ref(false)
 const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
+const currentSearchType = ref('keyword') // 'keyword' | 'music_link' | 'playlist_link'
 
 // 播放列表（保留用于向后兼容）
 const playerPlaylist = ref([])
@@ -182,10 +184,28 @@ const handleStorageChange = (e) => {
   }
 }
 
+// 判断输入类型
+const detectInputType = (url) => {
+  // 检查是否是歌曲链接
+  if (musicApi.validateMusicUrl(url)) {
+    return 'music_link'
+  }
+  // 检查是否是歌单链接
+  if (musicApi.validatePlaylistUrl(url)) {
+    return 'playlist_link'
+  }
+  // 默认是keyword搜索
+  return 'keyword'
+}
+
 const handleParse = async ({ url, sources = ['netease'] }) => {
   // 重新挂载 SearchResult 组件，重置所有状态
   searchResultKey.value++
   musicUrl.value = url
+  
+  // 检测输入类型
+  currentSearchType.value = detectInputType(url)
+  
   const quality = settings.selectedQuality || 'lossless'
   await parseMusic(quality, 'search', sources)
   

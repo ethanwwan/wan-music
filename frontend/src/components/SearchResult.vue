@@ -145,19 +145,45 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  searchType: {
+    type: String,
+    default: 'keyword' // 'keyword' | 'music_link' | 'playlist_link'
   }
 })
 
 const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select', 'track-play', 'search-type-change'])
 
-// 搜索类型Tab配置
-const searchTabs = [
-  { key: 'search', label: '单曲' },
-  { key: 'playlist', label: '歌单' }
-]
+// 搜索类型Tab配置 - 根据搜索类型动态显示
+const searchTabs = computed(() => {
+  switch (props.searchType) {
+    case 'music_link':
+      // 歌曲链接，只显示单曲
+      return [{ key: 'search', label: '单曲' }]
+    case 'playlist_link':
+      // 歌单链接，只显示歌单
+      return [{ key: 'playlist', label: '歌单' }]
+    default:
+      // keyword搜索，显示单曲和歌单
+      return [
+        { key: 'search', label: '单曲' },
+        { key: 'playlist', label: '歌单' }
+      ]
+  }
+})
 
-// 当前搜索类型
-const currentSearchType = ref('search')
+// 当前搜索类型 - 根据搜索类型设置默认值
+const getDefaultSearchType = () => {
+  switch (props.searchType) {
+    case 'music_link':
+      return 'search'
+    case 'playlist_link':
+      return 'playlist'
+    default:
+      return 'search'
+  }
+}
+const currentSearchType = ref(getDefaultSearchType())
 
 // 当前选择的数据源
 const selectedDataSource = ref('all')
@@ -227,6 +253,11 @@ watch(
     }
   }
 )
+
+// 监听searchType变化，更新当前搜索类型
+watch(() => props.searchType, (newType) => {
+  currentSearchType.value = getDefaultSearchType()
+})
 
 // 获取各Tab的数据数量
 const getTabCount = (tabKey) => {
