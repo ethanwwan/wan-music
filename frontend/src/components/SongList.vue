@@ -190,7 +190,7 @@
             <span 
               v-if="item.source" 
               :class="listType === 'playlist' ? 'playlist-source-tag' : 'album-source-tag'"
-              :style="{ backgroundColor: getSourceInfo(item.source)?.color + '20', color: getSourceInfo(item.source)?.color }"
+              :style="{ backgroundColor: getSourceInfo(item.source)?.color, color: '#fff' }"
             >
               {{ getSourceInfo(item.source)?.name || item.source }}
             </span>
@@ -249,7 +249,7 @@ const props = defineProps({
   },
   pageSize: {
     type: Number,
-    default: 20
+    default: 12
   },
   totalTracks: {
     type: Number,

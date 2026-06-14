@@ -169,7 +169,7 @@ const detailTracks = ref([])
 
 // 详情页分页配置
 const currentDetailPage = ref(1)
-const detailPageSize = ref(10)
+const detailPageSize = ref(12)
 
 // 从 localStorage 加载缓存
 const loadDetailCache = () => {

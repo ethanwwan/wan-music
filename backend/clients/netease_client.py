@@ -401,76 +401,37 @@ class NeteaseClient(BaseMusicClient):
             logger.error(f"[{self.platform_name}] 获取歌词失败: {e}")
             return ''
     
-    def get_playlist(self, playlist_id: int, limit: int = 0) -> Dict[str, Any]:
+    def get_playlist(self, playlist_id: int, limit: int = 500) -> Dict[str, Any]:
         """获取歌单（官方API优先，两条备用线路）"""
         # 线路1: 官方API
         url = APIConstants.PLAYLIST_DETAIL_API
-        params = {'id': playlist_id}
-        # 添加n参数获取更多歌曲
-        # 先获取基本信息（包括歌曲总数），再获取完整歌曲列表
-        basic_url = APIConstants.PLAYLIST_DETAIL_API
-        basic_params = {'id': playlist_id, 'n': 0}  # n=0只返回基本信息，不包含tracks
+        params = {'id': playlist_id, 'n': limit if limit > 0 else 500}
         
         try:
-            basic_data = self._get(basic_url, params=basic_params)
-            if basic_data.get('code') == 200:
-                playlist_info = basic_data.get('playlist', basic_data)
-                total_tracks = playlist_info.get('trackCount', 0)
-                
-                # 如果有歌曲，获取完整列表
-                if total_tracks > 0:
-                    params['n'] = total_tracks
-                    data = self._get(url, params=params)
-                    if data.get('code') == 200:
-                        playlist_info = data.get('playlist', data)
-                        tracks = []
-                        for track in playlist_info.get('tracks', []):
-                            tracks.append({
-                                'id': track.get('id', 0),
-                                'name': track.get('name', ''),
-                                'artists': '/'.join([a['name'] for a in track.get('ar', [])]),
-                                'album': track.get('al', {}).get('name', ''),
-                                'picUrl': track.get('al', {}).get('picUrl', ''),
-                                'source': 'netease'
-                            })
-                        return {
-                            'id': playlist_info.get('id', 0),
-                            'name': playlist_info.get('name', ''),
-                            'coverImgUrl': playlist_info.get('coverImgUrl') or playlist_info.get('picUrl') or '',
-                            'description': playlist_info.get('description') or '',
-                            'trackCount': playlist_info.get('trackCount', len(tracks)),
-                            'playCount': playlist_info.get('playCount') or 0,
-                            'tracks': tracks,
-                            'source': 'netease',
-                            'api_source': 'official'
-                        }
-            else:
-                # 备用：直接获取，可能返回部分歌曲
-                params['n'] = 5000
-                data = self._get(url, params=params)
-                if data.get('code') == 200:
-                    playlist_info = data.get('playlist', data)
-                    tracks = []
-                    for track in playlist_info.get('tracks', []):
-                        tracks.append({
-                            'id': track.get('id', 0),
-                            'name': track.get('name', ''),
-                            'artists': '/'.join([a['name'] for a in track.get('ar', [])]),
-                            'album': track.get('al', {}).get('name', ''),
-                            'picUrl': track.get('al', {}).get('picUrl', ''),
-                            'source': 'netease'
-                        })
-                    return {
-                        'id': playlist_info.get('id', 0),
-                        'name': playlist_info.get('name', ''),
-                        'coverImgUrl': playlist_info.get('coverImgUrl') or playlist_info.get('picUrl') or '',
-                        'description': playlist_info.get('description') or '',
-                        'trackCount': playlist_info.get('trackCount', len(tracks)),
-                        'playCount': playlist_info.get('playCount') or 0,
-                        'tracks': tracks,
-                        'source': 'netease',
-                        'api_source': 'official'
-                    }
+            data = self._get(url, params=params)
+            if data.get('code') == 200:
+                playlist_info = data.get('playlist', data)
+                tracks = []
+                for track in playlist_info.get('tracks', []):
+                    tracks.append({
+                        'id': track.get('id', 0),
+                        'name': track.get('name', ''),
+                        'artists': '/'.join([a['name'] for a in track.get('ar', [])]),
+                        'album': track.get('al', {}).get('name', ''),
+                        'picUrl': track.get('al', {}).get('picUrl', ''),
+                        'source': 'netease'
+                    })
+                return {
+                    'id': playlist_info.get('id', 0),
+                    'name': playlist_info.get('name', ''),
+                    'coverImgUrl': playlist_info.get('coverImgUrl') or playlist_info.get('picUrl') or '',
+                    'description': playlist_info.get('description') or '',
+                    'trackCount': playlist_info.get('trackCount', len(tracks)),
+                    'playCount': playlist_info.get('playCount') or 0,
+                    'tracks': tracks,
+                    'source': 'netease',
+                    'api_source': 'official'
+                }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] 官方API获取歌单失败: {e}")
         
