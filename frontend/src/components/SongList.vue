@@ -190,6 +190,7 @@
             <span 
               v-if="item.source" 
               :class="listType === 'playlist' ? 'playlist-source-tag' : 'album-source-tag'"
+              :style="{ backgroundColor: getSourceInfo(item.source)?.color + '20', color: getSourceInfo(item.source)?.color }"
             >
               {{ getSourceInfo(item.source)?.name || item.source }}
             </span>
