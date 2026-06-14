@@ -90,7 +90,7 @@
                 </div>
               </td>
               <td class="col-name">
-                <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ track.name }}</span>
+                <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }" v-html="track.name"></span>
                 <span v-if="isTrackUnavailable(track)" class="unavailable-reason">无版权</span>
                 <span 
                   v-if="track.source" 
@@ -100,7 +100,7 @@
                   {{ getSourceInfo(track.source)?.name || track.source }}
                 </span>
               </td>
-              <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</td>
+              <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }" v-html="getArtist(track)"></td>
               <td class="col-action">
                 <a-button 
                   type="text"
@@ -198,10 +198,8 @@
             </div>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-info' : 'album-info'">
-            <h4 :class="listType === 'playlist' ? 'playlist-name' : 'album-name'">{{ item.name }}</h4>
-            <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
-              {{ listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist) }}
-            </p>
+            <h4 :class="listType === 'playlist' ? 'playlist-name' : 'album-name'" v-html="item.name"></h4>
+            <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'" v-html="listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist)"></p>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
             <a-button size="middle" type="primary" @click.stop="handleItemClick(item, listType)">
