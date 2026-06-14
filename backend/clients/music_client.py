@@ -182,7 +182,7 @@ def get_lyric(song_id: int, platform: str = None) -> Dict[str, Any]:
 
 
 def get_playlist_detail(playlist_id: int, platform: str = None) -> Dict[str, Any]:
-    """获取歌单详情（向后兼容）"""
+    """获取歌单详情"""
     return music_client.get_playlist(playlist_id, platform)
 
 

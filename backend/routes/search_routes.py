@@ -17,14 +17,17 @@ def search():
     try:
         data = request.get_json()
         keyword = data.get('keyword', '').strip()
+        platform = data.get('source')
+        limit = data.get('limit', 10)
+        
+        logger.info(f"[搜索请求] keyword={keyword}, source={platform}, limit={limit}")
         
         if not keyword:
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
         
-        platform = data.get('source')
-        limit = data.get('limit', 10)
-        
         results = music_service.search_songs(keyword, platform, limit)
+        
+        logger.info(f"[搜索结果] platform={platform}, 结果数量={len(results)}")
         
         return jsonify(APIResponse.success(results, "搜索成功"))
     except Exception as e:

@@ -7,7 +7,7 @@
     <div class="card-cover">
     <img 
       v-if="track.picUrl || track.cover" 
-      :src="getProxyUrl(track.picUrl || track.cover)" 
+      :src="track.picUrl || track.cover" 
       :alt="track.name"
       loading="lazy"
       :class="{ 'grayscale': track.unavailable }"
@@ -126,11 +126,6 @@ const handleImageError = (event) => {
   imageError.value = true
   const target = event.target
   target.style.display = 'none'
-}
-
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  return `/stream?url=${encodeURIComponent(url)}`
 }
 </script>
 

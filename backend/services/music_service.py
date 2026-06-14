@@ -87,6 +87,8 @@ class MusicService:
             url_info = self.get_song_url(song_id, quality)
             lyric = self.get_lyric(song_id)
             
+            url_data = url_info.get('data', [{}])[0] if isinstance(url_info, dict) else {}
+            
             return {
                 'id': song_id,
                 'name': song_info.get('name', ''),
@@ -94,10 +96,11 @@ class MusicService:
                 'album': song_info.get('album', ''),
                 'picUrl': song_info.get('picUrl', ''),
                 'duration': song_info.get('duration', 0),
-                'url': url_info.get('data', [{}])[0].get('url', '') if isinstance(url_info, dict) else '',
+                'url': url_data.get('url', ''),
                 'quality': quality,
                 'lyric': lyric,
-                'source': url_info.get('data', [{}])[0].get('source', 'netease') if isinstance(url_info, dict) else 'netease'
+                'source': url_data.get('source', 'netease'),
+                'fileType': url_data.get('type', 'mp3')  # 文件类型（mp3/flac等）
             }
         except Exception as e:
             logger.error(f"获取歌曲信息失败: {e}")

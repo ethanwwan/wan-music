@@ -11,28 +11,6 @@
       </a-button>
     </div>
 
-    <!-- 结果头部 -->
-    <div v-if="!currentDetail" class="result-header">
-      <div class="header-left">
-        <h3 class="result-title">{{ title }}</h3>
-      </div>
-      <div class="header-right">
-        <a-select 
-          v-model:value="selectedDataSource" 
-          placeholder="选择数据源" 
-          size="small"
-          style="width: 140px"
-          @change="handleDataSourceChange"
-        >
-          <a-select-option value="all">全部</a-select-option>
-          <a-select-option value="netease">网易云音乐</a-select-option>
-          <a-select-option value="qq">QQ音乐</a-select-option>
-          <a-select-option value="kugou">酷狗音乐</a-select-option>
-          <a-select-option value="bodian">波点音乐</a-select-option>
-        </a-select>
-      </div>
-    </div>
-
     <!-- 搜索类型Tab（搜索结果不为空时显示） -->
     <div v-if="hasSearchResults && !currentDetail" class="search-tabs">
       <a-button
@@ -108,9 +86,9 @@
       @select="handleSelect"
     />
 
-    <!-- 分页组件（歌手、歌单和专辑搜索结果） -->
+    <!-- 分页组件（歌手、歌单和专辑搜索结果） - 只有超过1页时才显示 -->
     <Pagination 
-      v-if="(displayMode === 'playlist' || displayMode === 'album' || displayMode === 'artist') && !currentDetail && totalCount > 0"
+      v-if="(displayMode === 'playlist' || displayMode === 'album' || displayMode === 'artist') && !currentDetail && totalPages > 1"
       :total-count="totalCount"
       :page-size="getPageSize()"
       v-model="currentPage"
@@ -182,11 +160,8 @@ const getDefaultSearchType = () => {
     default:
       return 'search'
   }
-}
+}// 当前搜索类型
 const currentSearchType = ref(getDefaultSearchType())
-
-// 当前选择的数据源
-const selectedDataSource = ref('all')
 
 // 二级页面状态
 const currentDetail = ref(null)
@@ -216,9 +191,9 @@ const saveDetailCache = (type, data) => {
 // 缓存存储（歌单和专辑，从 localStorage 加载）
 const cache = ref(loadDetailCache())
 
-// 分页配置 - 单曲每页10条
+// 分页配置 - 单曲每页12条
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(12)
 
 // 歌手分页配置 - 每页4行，移动端每行2个(8个)，大屏每行4个(16个)
 const artistPageSize = ref(8)
@@ -448,7 +423,7 @@ const handleParsePlaylist = async (item) => {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `id=${item.id}`
+      body: `id=${item.id}&limit=100`
     })
     
     const result = await response.json()
@@ -656,10 +631,6 @@ const handleParseArtist = async (item) => {
     message.error('解析失败，请稍后重试')
     currentDetail.value = null
   }
-}
-
-const handleDataSourceChange = (value) => {
-  selectedDataSource.value = value
 }
 
 const goBack = () => {

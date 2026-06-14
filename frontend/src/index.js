@@ -26,7 +26,6 @@ export {
 export { CookieManager } from './utils/cookieManager.js'
 
 // API 服务
-export { default as neteaseApi, NeteaseAPI } from './services/neteaseApi.js'
 export {
   parseUrl,
   getMusicUrl,

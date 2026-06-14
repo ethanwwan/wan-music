@@ -106,7 +106,9 @@ export const parseMusic = async (selectedQuality, mode = 'music', sources = ['ne
     loading.value = true
     try {
       // 只搜索单曲
+      console.log('[parseManager] 搜索模式, sources:', sources, 'keyword:', musicUrl.value)
       const songResult = await musicApi.searchMusic(musicUrl.value, sources)
+      console.log('[parseManager] 搜索结果:', songResult)
 
       musicInfo.value = { name: musicUrl.value }
 

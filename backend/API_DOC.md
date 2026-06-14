@@ -43,7 +43,7 @@
 |--------|------|------|--------|------|
 | keyword | string | 是 | - | 搜索关键词 |
 | source | string | 否 | null | 平台来源（netease/qq/kugou/bodian），null表示全部平台 |
-| limit | int | 否 | 10 | 返回数量 |
+| limit | int | 否 | 50 | 返回数量 |
 
 **请求示例**:
 ```json
@@ -164,7 +164,8 @@ ids=123456&type=json&level=lossless
         "source": "netease",
         "lyric": "[00:00.00]有没有人告诉你...",
         "tlyric": "",
-        "url": "https://example.com/song.mp3"
+        "fileType": "flac",
+        "url": "https://example.com/song.flac"
     }
 }
 ```

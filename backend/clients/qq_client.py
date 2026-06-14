@@ -63,7 +63,11 @@ class QQClient(BaseMusicClient):
     
     def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲 - 使用musicdl风格的POST请求"""
+        logger.info(f"[QQ] 搜索开始: keyword={keyword}, limit={limit}, offset={offset}")
         url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
+        
+        # QQ音乐API对num_per_page有限制，最大不能超过60
+        actual_limit = min(limit, 60)
         
         payload = {
             "music.search.SearchCgiService.DoSearchForQQMusicMobile": {
@@ -73,8 +77,8 @@ class QQClient(BaseMusicClient):
                     "searchid": str(random.randint(1000000000, 9999999999)),
                     "query": keyword,
                     "search_type": 0,
-                    "num_per_page": limit,
-                    "page_num": offset // limit + 1,
+                    "num_per_page": actual_limit,
+                    "page_num": offset // actual_limit + 1,
                     "highlight": 1,
                     "grp": 1
                 }
@@ -82,14 +86,18 @@ class QQClient(BaseMusicClient):
         }
         
         try:
+            logger.info(f"[QQ] 发送请求到: {url}")
             resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 
                                     headers=self.default_search_headers, timeout=10)
             resp.raise_for_status()
             data = resp.json()
+            logger.info(f"[QQ] API响应状态码: {resp.status_code}")
             
             song_list = self._safe_extract(data, ['music.search.SearchCgiService.DoSearchForQQMusicMobile', 'data', 'body', 'item_song'], [])
+            logger.info(f"[QQ] 第一次提取item_song结果: {len(song_list) if isinstance(song_list, list) else 'not list'}")
             if not isinstance(song_list, list) or len(song_list) == 0:
                 song_list = self._safe_extract(data, ['music.search.SearchCgiService.DoSearchForQQMusicMobile', 'data', 'body', 'item_song', 'list'], [])
+                logger.info(f"[QQ] 第二次提取item_song.list结果: {len(song_list) if isinstance(song_list, list) else 'not list'}")
             
             songs = []
             for item in song_list:
@@ -109,9 +117,10 @@ class QQClient(BaseMusicClient):
                     'source': 'qq',
                     'interval': item.get('interval', 0)
                 })
+            logger.info(f"[QQ] 搜索成功，返回 {len(songs)} 首歌曲")
             return songs
         except Exception as e:
-            logger.debug(f"[{self.platform_name}] 搜索失败: {e}")
+            logger.error(f"[{self.platform_name}] 搜索失败: {e}", exc_info=True)
         
         return self._search_fallback(keyword, limit, offset)
     

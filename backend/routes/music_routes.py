@@ -71,7 +71,8 @@ def get_song_info():
                 'level': level,
                 'source': song_info.get('source', 'netease'),
                 'lyric': song_info.get('lyric', ''),
-                'tlyric': ''
+                'tlyric': '',
+                'fileType': song_info.get('fileType', 'mp3')  # 文件类型（mp3/flac等）
             }
             
             if song_info.get('url'):

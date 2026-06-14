@@ -1,15 +1,12 @@
 /**
  * 音乐API服务
- * 使用纯JavaScript实现的网易云音乐API，无需后端
+ * 通过后端API实现多平台音乐搜索和解析
  */
 
 import { embedMetadata } from './metadataWriter.js'
 import { saveBlob, ensureBlobType, getMimeByExtension, sanitizeFilename } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
-import { NeteaseAPI } from './neteaseApi.js'
 import { getQualityLabel } from '../config/qualityLevels.js'
-
-const neteaseApi = new NeteaseAPI()
 
 // 从 localStorage 加载缓存
 const loadCacheFromStorage = (type) => {
@@ -39,7 +36,9 @@ const searchCache = {
 // 检查缓存是否有效（长期有效，不过期）
 const isCacheValid = (cacheEntry) => {
   if (!cacheEntry) return false
-  return true
+  // 检查数据是否有效（有歌曲数据）
+  const dataLength = cacheEntry.data?.songs?.length || 0
+  return dataLength > 0
 }
 
 // 获取缓存数据
@@ -106,7 +105,7 @@ const extractUrlFromText = (text) => {
   return match ? match[0] : text
 }
 
-// 统一的ID提取函数
+// 统一的ID提取函数 - 支持多平台
 export const extractIdFromUrl = async (text) => {
   try {
     if (!text) return null
@@ -117,21 +116,21 @@ export const extractIdFromUrl = async (text) => {
     const url = extractUrlFromText(text)
     if (!url) return null
     
-    // 短链接模式
+    // 网易云音乐 - 短链接模式
     if (/https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/.test(url)) {
       return url
     }
 
-    // 音乐链接模式
-    const musicPatterns = [
+    // 网易云音乐 - 歌曲链接模式
+    const neteaseMusicPatterns = [
       /https?:\/\/music\.163\.com\/song\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/song\?id=(\d+)/
     ]
     
-    // 歌单链接模式
-    const playlistPatterns = [
+    // 网易云音乐 - 歌单链接模式
+    const neteasePlaylistPatterns = [
       /https?:\/\/music\.163\.com\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\/(\d+)/,
@@ -139,8 +138,8 @@ export const extractIdFromUrl = async (text) => {
       /https?:\/\/music\.163\.com\/discover\/toplist\?id=(\d+)/
     ]
 
-    // 专辑链接模式
-    const albumPatterns = [
+    // 网易云音乐 - 专辑链接模式
+    const neteaseAlbumPatterns = [
       /https?:\/\/music\.163\.com\/album\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/album\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/album\?id=(\d+)/,
@@ -148,36 +147,186 @@ export const extractIdFromUrl = async (text) => {
       /https?:\/\/music\.163\.com\/#\/album\/(\d+)/
     ]
     
-    for (const pattern of [...musicPatterns, ...playlistPatterns, ...albumPatterns]) {
+    // QQ音乐 - 歌曲链接模式
+    const qqMusicPatterns = [
+      /https?:\/\/y\.qq\.com\/n\/ryqq\/songDetail\/([a-zA-Z0-9]+)/,
+      /https?:\/\/i\.y\.qq\.com\/n2\/m\/share\/details\/song\.html\?.*songid=(\d+)/,
+      /https?:\/\/c\.y\.qq\.com\/base\/cgi-bin\/u\.cgi\?.*url=.*songDetail\/([a-zA-Z0-9]+)/
+    ]
+    
+    // QQ音乐 - 歌单链接模式
+    const qqPlaylistPatterns = [
+      /https?:\/\/y\.qq\.com\/n\/ryqq\/playlist\/(\d+)/,
+      /https?:\/\/i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html\?.*id=(\d+)/
+    ]
+    
+    // 酷狗音乐 - 歌曲链接模式
+    const kugouMusicPatterns = [
+      /https?:\/\/www\.kugou\.com\/song\/#hash=([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.kugou\.com\/mixsong\/([a-zA-Z0-9]+)/,
+      /https?:\/\/m\.kugou\.com\/app\/i\/getSongInfo\.php\?.*hash=([a-zA-Z0-9]+)/
+    ]
+    
+    // 酷狗音乐 - 歌单链接模式
+    const kugouPlaylistPatterns = [
+      /https?:\/\/www\.kugou\.com\/yy\/special\/single\/(\d+)\.html/,
+      /https?:\/\/m\.kugou\.com\/plist\/list\/index\.php\?.*id=(\d+)/
+    ]
+    
+    // 波点音乐 - 歌曲链接模式
+    const bodianMusicPatterns = [
+      /https?:\/\/bodian\.kuwo\.cn\/song\/([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.bodianmusic\.com\/song\/([a-zA-Z0-9]+)/
+    ]
+    
+    // 波点音乐 - 歌单链接模式
+    const bodianPlaylistPatterns = [
+      /https?:\/\/bodian\.kuwo\.cn\/playlist\/([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.bodianmusic\.com\/playlist\/([a-zA-Z0-9]+)/
+    ]
+    
+    // 合并所有模式
+    const allPatterns = [
+      ...neteaseMusicPatterns,
+      ...neteasePlaylistPatterns,
+      ...neteaseAlbumPatterns,
+      ...qqMusicPatterns,
+      ...qqPlaylistPatterns,
+      ...kugouMusicPatterns,
+      ...kugouPlaylistPatterns,
+      ...bodianMusicPatterns,
+      ...bodianPlaylistPatterns
+    ]
+    
+    for (const pattern of allPatterns) {
       const match = url.match(pattern)
       if (match) {
         return match[1]
       }
     }
     
+    // 如果是URL格式但未匹配到特定模式，返回整个URL让后端处理
+    if (/^https?:\/\//.test(url)) {
+      return url
+    }
+    
     return null
   } catch {
     return null
   }
 }
 
-// 验证链接格式
+// 验证链接格式 - 支持多平台
 export const validateUrl = (url) => {
   try {
     if (!url || typeof url !== 'string') {
       return false
     }
     
-    const patterns = [
+    // 检查是否是URL格式
+    if (/^https?:\/\//.test(url)) {
+      return true
+    }
+    
+    return false
+  } catch {
+    return false
+  }
+}
+
+// 验证音乐链接格式 - 支持多平台
+export const validateMusicUrl = (url) => {
+  try {
+    if (!url || typeof url !== 'string') {
+      return false
+    }
+    
+    // 网易云音乐
+    const neteasePatterns = [
       /https?:\/\/music\.163\.com\/song\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/song\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/#\/song\?id=(\d+)/,
+      /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
+    ]
+    
+    // QQ音乐
+    const qqPatterns = [
+      /https?:\/\/y\.qq\.com\/n\/ryqq\/songDetail\/([a-zA-Z0-9]+)/,
+      /https?:\/\/i\.y\.qq\.com\/n2\/m\/share\/details\/song\.html\?.*songid=(\d+)/
+    ]
+    
+    // 酷狗音乐
+    const kugouPatterns = [
+      /https?:\/\/www\.kugou\.com\/song\/#hash=([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.kugou\.com\/mixsong\/([a-zA-Z0-9]+)/,
+      /https?:\/\/m\.kugou\.com\/app\/i\/getSongInfo\.php\?.*hash=([a-zA-Z0-9]+)/
+    ]
+    
+    // 波点音乐
+    const bodianPatterns = [
+      /https?:\/\/bodian\.kuwo\.cn\/song\/([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.bodianmusic\.com\/song\/([a-zA-Z0-9]+)/
+    ]
+    
+    const allPatterns = [...neteasePatterns, ...qqPatterns, ...kugouPatterns, ...bodianPatterns]
+    return allPatterns.some(pattern => pattern.test(url))
+  } catch {
+    return false
+  }
+}
+
+// 验证歌单链接格式 - 支持多平台
+export const validatePlaylistUrl = (url) => {
+  try {
+    if (!url || typeof url !== 'string') {
+      return false
+    }
+    
+    // 网易云音乐
+    const neteasePatterns = [
       /https?:\/\/music\.163\.com\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\?id=(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/playlist\/(\d+)/,
       /https?:\/\/music\.163\.com\/#\/playlist\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/discover\/toplist\?id=(\d+)/,
+      /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
+    ]
+    
+    // QQ音乐
+    const qqPatterns = [
+      /https?:\/\/y\.qq\.com\/n\/ryqq\/playlist\/(\d+)/,
+      /https?:\/\/i\.y\.qq\.com\/n2\/m\/share\/details\/taoge\.html\?.*id=(\d+)/
+    ]
+    
+    // 酷狗音乐
+    const kugouPatterns = [
+      /https?:\/\/www\.kugou\.com\/yy\/special\/single\/(\d+)\.html/,
+      /https?:\/\/m\.kugou\.com\/plist\/list\/index\.php\?.*id=(\d+)/
+    ]
+    
+    // 波点音乐
+    const bodianPatterns = [
+      /https?:\/\/bodian\.kuwo\.cn\/playlist\/([a-zA-Z0-9]+)/,
+      /https?:\/\/www\.bodianmusic\.com\/playlist\/([a-zA-Z0-9]+)/
+    ]
+    
+    const allPatterns = [...neteasePatterns, ...qqPatterns, ...kugouPatterns, ...bodianPatterns]
+    return allPatterns.some(pattern => pattern.test(url))
+  } catch {
+    return false
+  }
+}
+
+// 验证专辑链接格式
+export const validateAlbumUrl = (url) => {
+  try {
+    if (!url || typeof url !== 'string') {
+      return false
+    }
+    
+    // 网易云音乐
+    const neteasePatterns = [
       /https?:\/\/music\.163\.com\/album\?id=(\d+)/,
       /https?:\/\/music\.163\.com\/album\/(\d+)/,
       /https?:\/\/y\.music\.163\.com\/m\/album\?id=(\d+)/,
@@ -186,54 +335,7 @@ export const validateUrl = (url) => {
       /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
     ]
     
-    return patterns.some(pattern => pattern.test(url))
-  } catch {
-    return false
-  }
-}
-
-export const validateMusicUrl = (url) => {
-  try {
-    const patterns = [
-      /https?:\/\/music\.163\.com\/song\?id=(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/song\/(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/song\?id=(\d+)/,
-      /https?:\/\/music\.163\.com\/#\/song\?id=(\d+)/,
-      /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
-    ]
-    return patterns.some(p => p.test(url))
-  } catch {
-    return false
-  }
-}
-
-export const validatePlaylistUrl = (url) => {
-  try {
-    const patterns = [
-      /https?:\/\/music\.163\.com\/playlist\?id=(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/playlist\?id=(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/playlist\/(\d+)/,
-      /https?:\/\/music\.163\.com\/#\/playlist\?id=(\d+)/,
-      /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
-    ]
-    return patterns.some(p => p.test(url))
-  } catch {
-    return false
-  }
-}
-
-export const validateAlbumUrl = (url) => {
-  try {
-    const patterns = [
-      /https?:\/\/music\.163\.com\/album\?id=(\d+)/,
-      /https?:\/\/music\.163\.com\/album\/(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/album\?id=(\d+)/,
-      /https?:\/\/y\.music\.163\.com\/m\/album\/(\d+)/,
-      /https?:\/\/music\.163\.com\/#\/album\?id=(\d+)/,
-      /https?:\/\/music\.163\.com\/#\/album\/(\d+)/,
-      /https?:\/\/163cn\.tv\/([a-zA-Z0-9]+)/
-    ]
-    return patterns.some(p => p.test(url))
+    return neteasePatterns.some(pattern => pattern.test(url))
   } catch {
     return false
   }
@@ -309,7 +411,7 @@ export const getMusicUrl = async (musicId, quality = 'lossless', options = {}) =
   }
 }
 
-// 解析音乐信息
+// 解析音乐信息 - 使用后端API
 export const parseMusicInfo = async (url, quality = 'lossless') => {
   try {
     const musicId = await extractIdFromUrl(url)
@@ -317,92 +419,42 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
       throw new Error('无法从链接中提取歌曲ID')
     }
 
-    // 获取歌曲基本信息
-    const detailResult = await neteaseApi.getSongDetail(musicId)
+    // 使用后端 /song 接口获取完整歌曲信息
+    const response = await fetch('/song', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `ids=${musicId}&level=${quality}&type=json`
+    })
     
-    if (detailResult.code !== 200) {
-      throw new Error(detailResult.message || '获取歌曲信息失败')
+    const result = await response.json()
+    
+    if (!result.success) {
+      throw new Error(result.message || '获取歌曲信息失败')
     }
 
-    const songData = detailResult.songs?.[0]
+    const songData = result.data
     if (!songData) {
       throw new Error('未找到歌曲详情')
     }
 
-    // 获取音乐播放链接
-    let musicUrl = null
-    let actualQuality = quality
-    let fileSize = 0
-    let bitRate = 0
-    let fileType = 'mp3'
-
-    try {
-      const urlData = await getMusicUrl(musicId, quality)
-      if (urlData && urlData.url) {
-        musicUrl = urlData.url
-        actualQuality = urlData.level || quality
-        fileSize = urlData.size || 0
-        bitRate = urlData.br || 0
-        
-        if (urlData.type) {
-          fileType = urlData.type.toLowerCase()
-        } else {
-          const urlExtensionMatch = musicUrl.match(/\.([a-zA-Z0-9]+)(?=\?|$)/)
-          if (urlExtensionMatch && urlExtensionMatch[1]) {
-            fileType = urlExtensionMatch[1].toLowerCase()
-          } else if (['lossless', 'hires', 'jymaster', 'sky', 'jyeffect'].includes(actualQuality)) {
-            fileType = 'flac'
-          }
-        }
-      } else {
-        throw new Error('该歌曲已下架或者无法获取')
-      }
-    } catch {
-      throw new Error('该歌曲已下架或者无法获取')
-    }
-
     // 构造返回的音乐信息
     const musicInfo = {
-      id: songData.id.toString(),
-      name: songData.name,
-      artist: songData.ar?.map(a => a.name).join('/') || '',
-      album: songData.al?.name || '',
-      cover: songData.al?.picUrl || '',
-      duration: songData.dt || 0,
-      url: musicUrl,
-      quality: actualQuality,
-      qualityName: getQualityLabel(actualQuality),
-      fileSize: fileSize,
-      bitRate: bitRate,
-      lrc: '',
-      fileExtension: `.${fileType.toLowerCase()}`
-    }
-
-    // 尝试获取歌词
-    try {
-      const lyricsResult = await neteaseApi.getLyric(musicId)
-      if (lyricsResult.code === 200 && lyricsResult.lrc) {
-        // 确保 lrc 是字符串格式
-        musicInfo.lrc = typeof lyricsResult.lrc === 'string' 
-          ? lyricsResult.lrc 
-          : (lyricsResult.lrc.lyric || '')
-        
-        // 确保 tlyric 是字符串格式
-        musicInfo.tlyric = typeof lyricsResult.tlyric === 'string'
-          ? lyricsResult.tlyric
-          : (lyricsResult.tlyric?.lyric || '')
-        
-        // 其他歌词类型也做同样处理
-        musicInfo.romalrc = typeof lyricsResult.romalrc === 'string'
-          ? lyricsResult.romalrc
-          : (lyricsResult.romalrc?.lyric || '')
-        
-        musicInfo.klyric = typeof lyricsResult.klyric === 'string'
-          ? lyricsResult.klyric
-          : (lyricsResult.klyric?.lyric || '')
-      }
-    } catch {
-      // 歌词获取失败不影响主功能
+      id: songData.id?.toString() || musicId,
+      name: songData.name || '',
+      artist: songData.ar_name || songData.artist || '',
+      album: songData.al_name || songData.album || '',
+      cover: songData.pic || songData.cover || '',
+      duration: songData.duration || 0,
+      url: songData.url || '',
+      quality: songData.level || quality,
+      qualityName: getQualityLabel(songData.level || quality),
+      fileSize: songData.size || 0,
+      bitRate: songData.br || 0,
+      lrc: songData.lyric || '',
+      tlyric: songData.tlyric || '',
+      fileExtension: `.${songData.fileType || 'mp3'}`
     }
 
     return musicInfo
@@ -412,7 +464,7 @@ export const parseMusicInfo = async (url, quality = 'lossless') => {
   }
 }
 
-// 获取歌词
+// 获取歌词 - 使用后端API
 export const getLyrics = async (musicId) => {
   try {
     if (typeof musicId !== 'string') {
@@ -422,17 +474,26 @@ export const getLyrics = async (musicId) => {
       musicId = String(musicId)
     }
     
-    const result = await neteaseApi.getLyric(musicId)
+    // 使用后端 /song 接口获取歌词
+    const response = await fetch('/song', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `ids=${musicId}&type=lyric`
+    })
     
-    if (result.code !== 200) {
+    const result = await response.json()
+    
+    if (!result.success) {
       throw new Error(result.message || '获取歌词失败')
     }
 
     return {
-      lrc: result.lrc || '',
-      tlyric: result.tlyric || '',
-      romalrc: result.romalrc || '',
-      klyric: result.klyric || ''
+      lrc: result.data?.lyric || '',
+      tlyric: result.data?.tlyric || '',
+      romalrc: result.data?.romalrc || '',
+      klyric: result.data?.klyric || ''
     }
   } catch {
     return { 
@@ -544,15 +605,34 @@ export const getPlaylistDetail = async (url) => {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `id=${playlistId}`
+      body: `id=${playlistId}&limit=100`
     })
 
     const result = await response.json()
     
-    if (result.success) {
+    if (result.success && result.data) {
+      const playlist = result.data.playlist || result.data
+      // 后端返回的字段：id, name, cover, description, play_count, source, tracks[]
       return {
         success: true,
-        data: result.data.playlist
+        data: {
+          id: playlist.id,
+          name: playlist.name,
+          coverImgUrl: playlist.cover || playlist.coverImgUrl || '',
+          description: playlist.description || '',
+          playCount: playlist.play_count || playlist.playCount || 0,
+          trackCount: playlist.tracks?.length || 0,
+          source: playlist.source || 'netease',
+          tracks: (playlist.tracks || []).map(track => ({
+            id: track.id,
+            name: track.name,
+            artists: track.artists || track.artist_string || '',
+            album: track.album || '',
+            picUrl: track.picUrl || track.cover || '',
+            duration: track.duration || 0,
+            source: track.source || playlist.source || 'netease'
+          }))
+        }
       }
     } else {
       return {
@@ -580,93 +660,73 @@ export const getAlbumDetail = async (url) => {
 // 搜索音乐（支持多数据源）
 export const searchMusic = async (keyword, sources = ['netease']) => {
   try {
-    // 如果只有网易云数据源，使用原有逻辑
-    if (sources.length === 1 && sources[0] === 'netease') {
-      // 检查缓存
-      const cached = getCachedSearchResult('music', keyword)
-      if (cached) {
-        return { success: true, data: cached, fromCache: true }
-      }
-
-      const response = await fetch('/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword })
-      })
-      
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const searchData = {
-          songs: result.data.map(song => ({
-            id: song.id,
-            name: song.name,
-            artists: song.artists || [],
-            album: song.album || (song.al ? song.al.name : ''),
-            duration: song.duration || 0,
-            picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || '',
-            source: 'netease'
-          }))
-        }
-        
-        // 缓存结果
-        setCachedSearchResult('music', keyword, searchData)
-        
-        return {
-          success: true,
-          data: searchData
-        }
-      } else {
-        return {
-          success: false,
-          error: result.message || '搜索失败'
-        }
-      }
-    }
-
-    // 多数据源搜索
-    const promises = sources.map(source => {
-      return fetch('/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword, source })
-      }).then(res => res.json()).then(result => {
-        if (result.success && result.data) {
-          return result.data.map(song => ({
-            id: song.id,
-            name: song.name,
-            artists: song.artists || [],
-            album: song.album || (song.al ? song.al.name : ''),
-            duration: song.duration || 0,
-            picUrl: song.picUrl || song.al?.picUrl || song.album?.picUrl || '',
-            source: source
-          }))
-        }
-        return []
-      }).catch(() => [])
-    })
-
-    const results = await Promise.all(promises)
-    const allSongs = results.flat()
+    console.log('searchMusic called with keyword:', keyword, 'sources:', sources)
+    console.log('sources type:', typeof sources, 'isArray:', Array.isArray(sources))
     
-    // 去重（基于id和source）
-    const seen = new Set()
-    const uniqueSongs = allSongs.filter(song => {
-      const key = `${song.source}-${song.id}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    // 检查缓存
+    const cacheKey = `${keyword}-${sources.join(',')}`
+    console.log('cacheKey:', cacheKey)
+    const cached = getCachedSearchResult('music', cacheKey)
+    if (cached) {
+      console.log('Using cached result, data:', cached)
+      return { success: true, data: cached, fromCache: true }
+    }
+    console.log('No cache found, making API request')
+    
+    // 构建请求数据
+    const requestData = { keyword, limit: 60 }
+    
+    // 如果不是全部数据源，指定source参数
+    if (sources.length === 1) {
+      requestData.source = sources[0]
+      console.log('Setting source to:', sources[0])
+    }
+    
+    console.log('Sending request:', JSON.stringify(requestData, null, 2))
+    console.log('Request body:', JSON.stringify(requestData))
 
-    return {
-      success: true,
-      data: { songs: uniqueSongs }
+    const response = await fetch('/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+    
+    const result = await response.json()
+    console.log('API response:', result)
+    console.log('API response data length:', result.data?.length)
+    
+    if (result.success && result.data) {
+      // 后端返回的字段：id, name, artists, album, picUrl, duration, source
+      const songs = result.data.map(song => ({
+        id: song.id,
+        name: song.name,
+        artists: song.artists || song.artist_string || '',
+        album: song.album || '',
+        duration: song.duration || 0,
+        picUrl: song.picUrl || '',
+        source: song.source || 'netease'
+      }))
+      
+      const searchData = { songs }
+      
+      // 缓存结果
+      setCachedSearchResult('music', cacheKey, searchData)
+      
+      return {
+        success: true,
+        data: searchData
+      }
+    } else {
+      console.log('API returned error:', result)
+      return {
+        success: false,
+        error: result.message || '搜索失败'
+      }
     }
   } catch (error) {
+    console.log('API catch error:', error)
     return {
       success: false,
       error: error.message || '搜索失败'
@@ -677,85 +737,55 @@ export const searchMusic = async (keyword, sources = ['netease']) => {
 // 搜索歌单（支持多数据源）
 export const searchPlaylist = async (keyword, sources = ['netease']) => {
   try {
-    if (sources.length === 1 && sources[0] === 'netease') {
-      // 检查缓存
-      const cached = getCachedSearchResult('playlist', keyword)
-      if (cached) {
-        return { success: true, data: cached, fromCache: true }
-      }
-
-      const response = await fetch('/search/playlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword })
-      })
-      
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const searchData = result.data.map(playlist => ({
-          id: playlist.id,
-          name: playlist.name,
-          creator: playlist.creator || '',
-          coverImgUrl: playlist.coverImgUrl || '',
-          trackCount: playlist.trackCount || 0,
-          source: 'netease'
-        }))
-        
-        // 缓存结果
-        setCachedSearchResult('playlist', keyword, searchData)
-        
-        return {
-          success: true,
-          data: searchData
-        }
-      } else {
-        return {
-          success: false,
-          error: result.message || '搜索失败'
-        }
-      }
+    // 检查缓存
+    const cacheKey = `${keyword}-${sources.join(',')}`
+    const cached = getCachedSearchResult('playlist', cacheKey)
+    if (cached) {
+      return { success: true, data: cached, fromCache: true }
     }
 
-    // 多数据源搜索
-    const promises = sources.map(source => {
-      return fetch('/search/playlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ keyword, source })
-      }).then(res => res.json()).then(result => {
-        if (result.success && result.data) {
-          return result.data.map(playlist => ({
-            id: playlist.id,
-            name: playlist.name,
-            creator: playlist.creator || '',
-            coverImgUrl: playlist.coverImgUrl || '',
-            trackCount: playlist.trackCount || 0,
-            source: source
-          }))
-        }
-        return []
-      }).catch(() => [])
-    })
-
-    const results = await Promise.all(promises)
-    const allPlaylists = results.flat()
+    // 构建请求数据
+    const requestData = { keyword, limit: 20 }
     
-    const seen = new Set()
-    const uniquePlaylists = allPlaylists.filter(playlist => {
-      const key = `${playlist.source}-${playlist.id}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    // 如果不是全部数据源，指定source参数
+    if (sources.length === 1) {
+      requestData.source = sources[0]
+    }
 
-    return {
-      success: true,
-      data: uniquePlaylists
+    const response = await fetch('/search/playlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      // 后端返回的字段：id, name, cover, description, play_count, source
+      const playlists = result.data.map(playlist => ({
+        id: playlist.id,
+        name: playlist.name,
+        coverImgUrl: playlist.cover || playlist.coverImgUrl || '',
+        description: playlist.description || '',
+        playCount: playlist.play_count || playlist.playCount || 0,
+        trackCount: playlist.track_count || playlist.trackCount || 0,
+        source: playlist.source || 'netease'
+      }))
+      
+      // 缓存结果
+      setCachedSearchResult('playlist', cacheKey, playlists)
+      
+      return {
+        success: true,
+        data: playlists
+      }
+    } else {
+      return {
+        success: false,
+        error: result.message || '搜索失败'
+      }
     }
   } catch (error) {
     return {

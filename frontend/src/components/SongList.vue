@@ -126,9 +126,9 @@
         </table>
       </div>
 
-      <!-- 分页 -->
+      <!-- 分页 - 只有超过1页时才显示 -->
       <Pagination 
-        v-if="sortedTracks.length > pageSize"
+        v-if="Math.ceil(sortedTracks.length / pageSize) > 1"
         :total-count="sortedTracks.length"
         :page-size="pageSize"
         :model-value="currentPage"
@@ -147,7 +147,7 @@
           <div class="artist-cover-wrapper">
             <img 
               v-if="artist.avatarUrl"
-              :src="getProxyUrl(artist.avatarUrl)" 
+              :src="artist.avatarUrl" 
               :alt="artist.name" 
               class="artist-cover"
               loading="lazy"
@@ -180,13 +180,19 @@
           <div :class="listType === 'playlist' ? 'playlist-cover-wrapper' : 'album-cover-wrapper'">
             <img 
               v-if="item.coverImgUrl"
-              :src="getProxyUrl(item.coverImgUrl)" 
+              :src="item.coverImgUrl" 
               :alt="item.name" 
               :class="listType === 'playlist' ? 'playlist-cover' : 'album-cover'"
               loading="lazy"
               @error="handleImageError($event, listType)"
             />
             <div v-else :class="listType === 'playlist' ? 'playlist-cover-placeholder' : 'album-cover-placeholder'"></div>
+            <span 
+              v-if="item.source" 
+              :class="listType === 'playlist' ? 'playlist-source-tag' : 'album-source-tag'"
+            >
+              {{ getSourceInfo(item.source)?.name || item.source }}
+            </span>
             <div :class="listType === 'playlist' ? 'playlist-overlay' : 'album-overlay'">
               <span class="track-count">{{ item.trackCount }} 首</span>
             </div>
@@ -196,13 +202,6 @@
             <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
               {{ listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist) }}
             </p>
-            <span 
-              v-if="item.source" 
-              class="source-tag"
-              :style="{ backgroundColor: getSourceInfo(item.source)?.color + '20', color: getSourceInfo(item.source)?.color }"
-            >
-              {{ getSourceInfo(item.source)?.name || item.source }}
-            </span>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
             <a-button size="middle" type="primary" @click.stop="handleItemClick(item, listType)">
@@ -339,15 +338,10 @@ const downloadProgress = ref({
 })
 
 // 工具方法
-const getProxyUrl = (url) => {
-  if (!url) return ''
-  return `/stream?url=${encodeURIComponent(url)}`
-}
 
 const getCover = (track) => {
   const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || props.detailInfo?.coverImgUrl || ''
-  if (!coverUrl) return ''
-  return getProxyUrl(coverUrl)
+  return coverUrl
 }
 
 const getArtist = (track) => {
@@ -918,9 +912,9 @@ const handleItemClick = (item, action) => {
 .source-tag {
   display: inline-block;
   margin-left: 8px;
-  padding: 2px 6px;
+  padding: 4px;
   font-size: 10px;
-  border-radius: 3px;
+  border-radius: 4px;
   vertical-align: middle;
   font-weight: 500;
 }
@@ -1137,8 +1131,22 @@ const handleItemClick = (item, action) => {
   font-size: 12px;
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.playlist-source-tag,
+.album-source-tag {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  border-radius: 4px;
+  font-weight: 500;
+  z-index: 1;
 }
 
 .playlist-info,

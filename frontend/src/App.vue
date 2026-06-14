@@ -15,10 +15,10 @@
         <SearchContainer
           ref="searchContainerRef"
           :title="searchConfig.title"
-          :description="searchConfig.description"
           :placeholder="searchConfig.placeholder"
           :loading="loading"
           @parse="handleParse"
+          @open-settings="showSettingsDialog = true"
         />
 
         <!-- 搜索结果面板组件 -->
@@ -150,7 +150,7 @@ const currentPlayIndex = ref(0)
 // 搜索配置
 const searchConfig = {
   title: '输入搜索关键词',
-  description: '支持搜索歌曲、歌单',
+  description: '支持搜索歌曲、歌单、单曲分享链接或歌单分享链接',
   placeholder: '请输入歌曲名或歌单名'
 }
 
