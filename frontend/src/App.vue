@@ -198,10 +198,16 @@ const detectInputType = (url) => {
   return 'keyword'
 }
 
+// 当前选择的数据源（从localStorage读取）
+const currentSources = ref([localStorage.getItem('wan-music-selected-data-source') || 'netease'])
+
 const handleParse = async ({ url, sources = ['netease'] }) => {
   // 重新挂载 SearchResult 组件，重置所有状态
   searchResultKey.value++
   musicUrl.value = url
+  
+  // 保存当前选择的数据源
+  currentSources.value = sources
   
   // 检测输入类型
   currentSearchType.value = detectInputType(url)
@@ -229,7 +235,7 @@ const handleSearchTypeChange = async (searchType) => {
   console.log('Search type changed to:', searchType)
   console.log('musicUrl.value at artist tab switch:', musicUrl.value)
   const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, searchType)
+  await parseMusic(quality, searchType, currentSources.value)
 }
 
 const handleParseSong = (song) => {
