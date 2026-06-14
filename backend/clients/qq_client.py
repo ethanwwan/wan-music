@@ -12,6 +12,7 @@ import logging
 import random
 import requests
 import base64
+import re
 from typing import Dict, List, Optional, Any
 from contextlib import suppress
 
@@ -19,6 +20,13 @@ from .base_client import BaseMusicClient
 from .quality_config import QualityLevel
 
 logger = logging.getLogger(__name__)
+
+
+def strip_html_tags(text):
+    """移除HTML标签，只保留纯文本"""
+    if not text or not isinstance(text, str):
+        return text
+    return re.sub(r'<[^>]+>', '', text)
 
 
 class QQClient(BaseMusicClient):
@@ -101,15 +109,15 @@ class QQClient(BaseMusicClient):
             
             songs = []
             for item in song_list:
-                singer_name = '/'.join([s.get('name', '') for s in item.get('singer', []) if isinstance(s, dict)])
-                album_name = self._safe_extract(item, ['album', 'title'], '') or item.get('albumname', '')
+                singer_name = '/'.join([strip_html_tags(s.get('name', '')) for s in item.get('singer', []) if isinstance(s, dict)])
+                album_name = strip_html_tags(self._safe_extract(item, ['album', 'title'], '') or item.get('albumname', ''))
                 album_mid = self._safe_extract(item, ['album', 'mid'], '') or item.get('albummid', '')
                 
                 pic_url = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{album_mid}.jpg?max_age=2592000" if album_mid else ''
                 
                 songs.append({
                     'id': item.get('mid', '') or item.get('songmid', ''),
-                    'name': item.get('title', '') or item.get('songname', ''),
+                    'name': strip_html_tags(item.get('title', '') or item.get('songname', '')),
                     'artists': singer_name,
                     'album': album_name,
                     'picUrl': pic_url,
@@ -135,15 +143,15 @@ class QQClient(BaseMusicClient):
                 song_list = data['data']['song']['list']
                 songs = []
                 for item in song_list:
-                    singer_name = '/'.join([s.get('name', '') for s in item.get('singer', [])])
-                    album_name = item.get('album', {}).get('name', '')
+                    singer_name = '/'.join([strip_html_tags(s.get('name', '')) for s in item.get('singer', [])])
+                    album_name = strip_html_tags(item.get('album', {}).get('name', ''))
                     pic_url = item.get('album', {}).get('mid', '')
                     if pic_url:
                         pic_url = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{pic_url}.jpg?max_age=2592000"
                     
                     songs.append({
                         'id': item.get('mid', ''),
-                        'name': item.get('name', ''),
+                        'name': strip_html_tags(item.get('name', '')),
                         'artists': singer_name,
                         'album': album_name,
                         'picUrl': pic_url,
@@ -192,9 +200,9 @@ class QQClient(BaseMusicClient):
                 
                 playlists.append({
                     'id': item.get('dissid', 0),
-                    'name': item.get('dissname', ''),
+                    'name': strip_html_tags(item.get('dissname', '')),
                     'coverImgUrl': cover_url,
-                    'description': item.get('description', ''),
+                    'description': strip_html_tags(item.get('description', '')),
                     'trackCount': item.get('songnum', 0),
                     'playCount': item.get('listennum', 0),
                     'source': 'qq'
