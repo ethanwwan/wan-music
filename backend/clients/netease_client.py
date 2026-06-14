@@ -401,11 +401,16 @@ class NeteaseClient(BaseMusicClient):
             logger.error(f"[{self.platform_name}] 获取歌词失败: {e}")
             return ''
     
-    def get_playlist(self, playlist_id: int) -> Dict[str, Any]:
+    def get_playlist(self, playlist_id: int, limit: int = 0) -> Dict[str, Any]:
         """获取歌单（官方API优先，两条备用线路）"""
         # 线路1: 官方API
         url = APIConstants.PLAYLIST_DETAIL_API
         params = {'id': playlist_id}
+        # 添加n参数获取更多歌曲（0表示不限制，但实际最大返回数量有限制）
+        if limit > 0:
+            params['n'] = limit
+        else:
+            params['n'] = 5000  # 默认获取最多5000首
         
         try:
             data = self._get(url, params=params)
@@ -426,7 +431,7 @@ class NeteaseClient(BaseMusicClient):
                     'name': playlist_info.get('name', ''),
                     'coverImgUrl': playlist_info.get('coverImgUrl') or playlist_info.get('picUrl') or '',
                     'description': playlist_info.get('description') or '',
-                    'trackCount': len(tracks),
+                    'trackCount': playlist_info.get('trackCount', len(tracks)),
                     'playCount': playlist_info.get('playCount') or 0,
                     'tracks': tracks,
                     'source': 'netease',
@@ -455,7 +460,7 @@ class NeteaseClient(BaseMusicClient):
                     'name': data.get('name', ''),
                     'coverImgUrl': data.get('coverImgUrl', ''),
                     'description': data.get('description', ''),
-                    'trackCount': len(tracks),
+                    'trackCount': data.get('trackCount', len(tracks)),
                     'playCount': data.get('playCount', 0),
                     'tracks': tracks,
                     'source': 'netease',
@@ -485,7 +490,7 @@ class NeteaseClient(BaseMusicClient):
                     'name': playlist_info.get('name', ''),
                     'coverImgUrl': playlist_info.get('coverImgUrl', ''),
                     'description': playlist_info.get('description', ''),
-                    'trackCount': len(tracks),
+                    'trackCount': playlist_info.get('trackCount', len(tracks)),
                     'playCount': playlist_info.get('playCount', 0),
                     'tracks': tracks,
                     'source': 'netease',
