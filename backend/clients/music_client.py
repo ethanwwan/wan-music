@@ -153,7 +153,7 @@ def search_music(keywords: str, platform: str = None, limit: int = 10) -> List[D
 def get_song_url(song_id: int, quality: str, platform: str = None) -> Dict[str, Any]:
     """获取歌曲URL（向后兼容）"""
     try:
-        result = music_client.get_song_url(song_id, quality)
+        result = music_client.get_song_url(song_id, quality, platform)
         return {
             'data': [{
                 'id': song_id,

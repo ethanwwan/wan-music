@@ -25,6 +25,15 @@ def get_song_info():
         ids = params.get('ids', '')
         music_id = ids.split(',')[0] if ids else params.get('id', '')
         
+        # 尝试从URL中提取平台信息
+        source = params.get('source', '')
+        
+        # 如果没有传递source，尝试从ID中判断
+        if not source:
+            # QQ音乐的songmid是字母数字混合，网易云是纯数字
+            if music_id and not music_id.isdigit():
+                source = 'qq'
+        
         if not music_id:
             return jsonify(APIResponse.error("请提供歌曲ID", 400))
         
@@ -32,7 +41,7 @@ def get_song_info():
         level = params.get('level', 'lossless')
         
         if info_type == 'url':
-            result = music_service.get_song_url(music_id, level)
+            result = music_service.get_song_url(music_id, level, source)
             if result and result.get('data') and len(result['data']) > 0:
                 song_data = result['data'][0]
                 if song_data.get('url'):
@@ -41,7 +50,7 @@ def get_song_info():
                         'url': song_data.get('url'),
                         'level': song_data.get('level', level),
                         'type': song_data.get('type', 'mp3'),
-                        'source': song_data.get('source', 'netease')
+                        'source': song_data.get('source', source or 'netease')
                     }
                     return jsonify(APIResponse.success(response_data, "获取歌曲URL成功"))
                 else:
@@ -50,15 +59,15 @@ def get_song_info():
                 return jsonify(APIResponse.error("获取音乐URL失败，可能是版权限制或音质不支持", 404))
         
         elif info_type == 'name':
-            result = music_service.get_song_detail(music_id)
+            result = music_service.get_song_detail(music_id, source)
             return jsonify(APIResponse.success(result, "获取歌曲信息成功"))
         
         elif info_type == 'lyric':
-            lyric = music_service.get_lyric(music_id)
+            lyric = music_service.get_lyric(music_id, source)
             return jsonify(APIResponse.success({'lyric': lyric}, "获取歌词成功"))
         
         elif info_type == 'json':
-            song_info = music_service.get_song_info(music_id, level)
+            song_info = music_service.get_song_info(music_id, level, source)
             if not song_info:
                 return jsonify(APIResponse.error("未找到歌曲信息", 404))
             
@@ -69,7 +78,7 @@ def get_song_info():
                 'al_name': song_info.get('album', ''),
                 'pic': song_info.get('picUrl', ''),
                 'level': level,
-                'source': song_info.get('source', 'netease'),
+                'source': song_info.get('source', source or 'netease'),
                 'lyric': song_info.get('lyric', ''),
                 'tlyric': '',
                 'fileType': song_info.get('fileType', 'mp3')  # 文件类型（mp3/flac等）
@@ -105,11 +114,18 @@ def get_playlist():
                 params[key] = value
         
         playlist_id = params.get('id', '')
+        source = params.get('source', '')
+        
+        # 如果没有传递source，尝试从ID中判断
+        if not source:
+            # QQ音乐的songmid是字母数字混合，网易云是纯数字
+            if playlist_id and not playlist_id.isdigit():
+                source = 'qq'
         
         if not playlist_id:
             return jsonify(APIResponse.error("请提供歌单ID", 400))
         
-        result = music_service.get_playlist_detail(playlist_id)
+        result = music_service.get_playlist_detail(playlist_id, source)
         
         return jsonify(APIResponse.success({'playlist': result}, "获取歌单成功"))
     except Exception as e:
