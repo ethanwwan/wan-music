@@ -369,38 +369,46 @@ class QQClient(BaseMusicClient):
             logger.error(f"[{self.platform_name}] 获取歌词失败: {e}")
             return ''
     
-    def get_playlist(self, playlist_id: int) -> Dict[str, Any]:
+    def get_playlist(self, playlist_id: int, limit: int = 0) -> Dict[str, Any]:
         """获取歌单"""
-        url = "https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg"
-        params = {
-            'disstid': str(playlist_id),
-            'type': '1',
-            'json': '1',
-            'utf8': '1',
-            'onlysong': '0',
-            'format': 'json'
-        }
+        all_tracks = []
+        total_songs = 0
+        
+        # 使用分页API获取完整歌曲列表
+        url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
         
         try:
-            resp = self.session.get(url, params=params, headers={'Referer': f"https://y.qq.com/n/ryqq/playlist/{playlist_id}"}, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+            # 先获取基本信息
+            basic_url = "https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg"
+            basic_params = {
+                'disstid': str(playlist_id),
+                'type': '1',
+                'json': '1',
+                'utf8': '1',
+                'onlysong': '0',
+                'format': 'json'
+            }
             
-            cdlist = data.get('cdlist', [])
+            resp = self.session.get(basic_url, params=basic_params, headers={'Referer': f"https://y.qq.com/n/ryqq/playlist/{playlist_id}"}, timeout=15)
+            resp.raise_for_status()
+            basic_data = resp.json()
+            
+            cdlist = basic_data.get('cdlist', [])
             if not cdlist:
                 return {}
             
             playlist_info = cdlist[0]
-            tracks = []
-            
+            total_songs = playlist_info.get('songnum', 0)
             songlist = playlist_info.get('songlist', [])
+            
+            # 添加第一页歌曲
             for item in songlist:
                 singer_name = '/'.join([s.get('name', '') for s in item.get('singer', []) if isinstance(s, dict)])
                 album_name = self._safe_extract(item, ['album', 'title'], '') or item.get('albumname', '')
                 album_mid = self._safe_extract(item, ['album', 'mid'], '') or item.get('albummid', '')
                 pic_url = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{album_mid}.jpg?max_age=2592000" if album_mid else ''
                 
-                tracks.append({
+                all_tracks.append({
                     'id': item.get('songmid', ''),
                     'name': item.get('songname', ''),
                     'artists': singer_name,
@@ -408,6 +416,55 @@ class QQClient(BaseMusicClient):
                     'picUrl': pic_url,
                     'source': 'qq'
                 })
+            
+            # 如果歌曲数大于已获取的数量，尝试分页获取
+            if total_songs > len(all_tracks):
+                page = 2
+                while len(all_tracks) < total_songs and page <= 10:  # 最多获取10页
+                    try:
+                        payload = {
+                            "comm": {"ct": 24, "cv": 0},
+                            "playlist": {
+                                "module": "music.pf_song_detail_comm",
+                                "method": "get_song_detail_songinfo",
+                                "param": {
+                                    "song_mid_list": [str(playlist_id)],
+                                    "song_id_list": []
+                                }
+                            }
+                        }
+                        page_resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                                                headers=self.default_search_headers, timeout=10)
+                        if page_resp.status_code == 200:
+                            page_data = page_resp.json()
+                            track_list = self._safe_extract(page_data, ['playlist', 'data', 'track_list'], [])
+                            if not track_list:
+                                break
+                            for item in track_list:
+                                singer_name = '/'.join([s.get('name', '') for s in item.get('singer', []) if isinstance(s, dict)])
+                                album_name = self._safe_extract(item, ['album', 'name'], '') or item.get('albumname', '')
+                                album_mid = self._safe_extract(item, ['album', 'mid'], '') or item.get('albummid', '')
+                                pic_url = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{album_mid}.jpg?max_age=2592000" if album_mid else ''
+                                
+                                # 检查是否已存在
+                                track_id = item.get('mid', '') or item.get('songmid', '')
+                                if not any(t['id'] == track_id for t in all_tracks):
+                                    all_tracks.append({
+                                        'id': track_id,
+                                        'name': item.get('name', '') or item.get('songname', ''),
+                                        'artists': singer_name,
+                                        'album': album_name,
+                                        'picUrl': pic_url,
+                                        'source': 'qq'
+                                    })
+                            if len(track_list) < 100:
+                                break
+                            page += 1
+                        else:
+                            break
+                    except Exception as e:
+                        logger.debug(f"[{self.platform_name}] 分页获取歌曲失败: {e}")
+                        break
             
             cover_mid = playlist_info.get('logo', '').replace('https://y.gtimg.cn/music/photo_new/T002R800x800M000', '').replace('.jpg', '')
             cover_url = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{cover_mid}.jpg?max_age=2592000" if cover_mid else playlist_info.get('logo', '')
@@ -417,9 +474,9 @@ class QQClient(BaseMusicClient):
                 'name': playlist_info.get('dissname', ''),
                 'coverImgUrl': cover_url,
                 'description': playlist_info.get('desc', ''),
-                'trackCount': len(tracks),
+                'trackCount': total_songs if total_songs > 0 else len(all_tracks),
                 'playCount': playlist_info.get('playcount', 0),
-                'tracks': tracks,
+                'tracks': all_tracks,
                 'source': 'qq'
             }
         except Exception as e:
