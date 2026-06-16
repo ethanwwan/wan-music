@@ -105,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, reactive, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 
 // 导入组件
@@ -121,14 +121,13 @@ import SongList from './components/SongList.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'
-import { isDark, toggleTheme, initThemeFromLocalStorage, applyTheme } from './utils/themeManager.js'
-import { settings, loadSettings, saveSettings } from './utils/settingsManager.js'
+import { initThemeFromLocalStorage, themeColors, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
+import { settings, loadSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, playlistUrl, playlistLoading, playlistInfo, albumUrl, albumLoading, albumInfo, elapsedTime, parseMusic, parsePlaylist, parseAlbum, clearMusicResult, clearPlaylistResult, clearAlbumResult, setExampleUrl, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults,
-    currentParsingTrack, parsingProgress
+    musicUrl, loading, musicInfo, playlistUrl, playlistInfo, albumUrl, albumInfo, parseMusic, parsePlaylist, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
-import { isMobile, initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
+import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
 
 
 // 响应式数据
@@ -144,9 +143,6 @@ const playerPlaylist = ref([])
 // 当前播放的歌曲
 const currentSong = ref(null)
 
-// 当前播放索引（保留用于向后兼容）
-const currentPlayIndex = ref(0)
-
 // 搜索配置
 const searchConfig = {
   title: '输入搜索关键词',
@@ -156,25 +152,16 @@ const searchConfig = {
 
 // 主题配置 - 响应式主题token
 const themeToken = reactive({
-  colorPrimary: '#0057c2',
+  colorPrimary: DEFAULT_THEME_COLOR,
 })
 
 // 从localStorage读取保存的主题色
 const getSavedThemeColor = () => {
   const saved = localStorage.getItem('themeColor')
-  const themeColors = [
-    { name: '默认蓝', value: 'blue', hex: '#0057c2' },
-    { name: '活力红', value: 'red', hex: '#e53935' },
-    { name: '优雅紫', value: 'purple', hex: '#722ed1' },
-    { name: '清新绿', value: 'green', hex: '#13c2c2' },
-    { name: '温暖橙', value: 'orange', hex: '#fa8c16' },
-    { name: '浪漫粉', value: 'pink', hex: '#eb2f96' },
-  ]
-  if (saved) {
-    const color = themeColors.find(c => c.value === saved)
-    return color ? color.hex : '#0057c2'
+  if (saved && themeColors[saved]) {
+    return themeColors[saved]
   }
-  return '#0057c2'
+  return DEFAULT_THEME_COLOR
 }
 
 // 监听主题色变化
@@ -239,13 +226,15 @@ const handleSearchTypeChange = async (searchType) => {
 }
 
 const handleParseSong = (song) => {
-  musicUrl.value = `https://music.163.com/song?id=${song.id}`
+  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
+  if (!song.url) {
+    message.error('歌曲链接无效，请重新搜索')
+    return
+  }
+  musicUrl.value = song.url
   const quality = settings.selectedQuality || 'lossless'
   parseMusic(quality, 'music')
 }
-
-// 保存当前播放列表的完整数据（用于点击播放时）
-const currentFullPlaylist = ref([])
 
 // 处理歌曲播放 - 只播放当前点击的歌曲
 const handlePlaySong = async (track) => {
@@ -278,13 +267,25 @@ const getCoverUrl = (track) => {
 
 const handleParsePlaylist = (playlist) => {
   currentView.value = 'playlist'
-  playlistUrl.value = `https://music.163.com/playlist?id=${playlist.id}`
+  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
+  if (playlist.url) {
+    playlistUrl.value = playlist.url
+  } else {
+    message.error('歌单链接无效，请重新搜索')
+    return
+  }
   parsePlaylist()
 }
 
 const handleParseAlbum = (album) => {
   currentView.value = 'album'
-  albumUrl.value = `https://music.163.com/album?id=${album.id}`
+  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
+  if (album.url) {
+    albumUrl.value = album.url
+  } else {
+    message.error('专辑链接无效，请重新搜索')
+    return
+  }
   parseAlbum()
 }
 

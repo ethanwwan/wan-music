@@ -31,7 +31,7 @@ class MusicService:
             logger.error(f"搜索歌单失败: {e}")
             return []
     
-    def get_song_url(self, song_id: int, quality: str = 'high', platform: str = None) -> Dict[str, Any]:
+    def get_song_url(self, song_id: str, quality: str = 'high', platform: str = None) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
         try:
             valid_qualities = [q.value for q in QualityLevel]
@@ -44,7 +44,7 @@ class MusicService:
             logger.error(f"获取歌曲URL失败: {e}")
             raise
     
-    def get_song_detail(self, song_id: int, platform: str = None) -> Dict[str, Any]:
+    def get_song_detail(self, song_id: str, platform: str = None) -> Dict[str, Any]:
         """获取歌曲详情"""
         try:
             return get_song_detail(song_id, platform)
@@ -52,7 +52,7 @@ class MusicService:
             logger.error(f"获取歌曲详情失败: {e}")
             return {}
     
-    def get_lyric(self, song_id: int, platform: str = None) -> str:
+    def get_lyric(self, song_id: str, platform: str = None) -> str:
         """获取歌词"""
         try:
             result = get_lyric(song_id, platform)
@@ -61,7 +61,7 @@ class MusicService:
             logger.error(f"获取歌词失败: {e}")
             return ''
     
-    def get_playlist_detail(self, playlist_id: int, platform: str = None) -> Dict[str, Any]:
+    def get_playlist_detail(self, playlist_id: str, platform: str = None) -> Dict[str, Any]:
         """获取歌单详情"""
         try:
             return get_playlist_detail(playlist_id, platform)
@@ -77,7 +77,7 @@ class MusicService:
             logger.error(f"获取平台列表失败: {e}")
             return []
     
-    def get_song_info(self, song_id: int, quality: str = 'lossless', platform: str = None) -> Dict[str, Any]:
+    def get_song_info(self, song_id: str, quality: str = 'lossless', platform: str = None) -> Dict[str, Any]:
         """获取完整歌曲信息（包含URL和歌词）"""
         try:
             song_info = self.get_song_detail(song_id, platform)
@@ -90,7 +90,7 @@ class MusicService:
             url_data = url_info.get('data', [{}])[0] if isinstance(url_info, dict) else {}
             
             return {
-                'id': song_id,
+                'id': str(song_info.get('id', song_id)),
                 'name': song_info.get('name', ''),
                 'artists': song_info.get('artists', ''),
                 'album': song_info.get('album', ''),

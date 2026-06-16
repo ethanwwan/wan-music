@@ -100,6 +100,7 @@
 import { ref, computed, watch } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import { settings } from '../utils/settingsManager.js'
+import musicApi from '../services/musicApi.js'
 import SongList from './SongList.vue'
 import Pagination from './Pagination.vue'
 
@@ -418,18 +419,10 @@ const handleParsePlaylist = async (item) => {
   }
   
   try {
-    const response = await fetch('/playlist', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `id=${item.id}&limit=100`
-    })
+    const result = await musicApi.getPlaylistById(item.id, item.source || '')
     
-    const result = await response.json()
-    
-    if (result.success && result.data && result.data.playlist) {
-      const playlist = result.data.playlist
+    if (result.success && result.data) {
+      const playlist = result.data
       currentDetail.value = {
         id: playlist.id,
         name: playlist.name,

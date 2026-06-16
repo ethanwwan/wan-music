@@ -13,6 +13,7 @@ import random
 import requests
 import base64
 import re
+import os
 from typing import Dict, List, Optional, Any
 from contextlib import suppress
 
@@ -36,6 +37,7 @@ class QQClient(BaseMusicClient):
         super().__init__()
         self.platform_name = "QQ音乐"
         self.platform_id = "qq"
+        self.cookie = self._load_cookie()
         self.default_search_headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
             'Referer': 'https://y.qq.com/',
@@ -52,6 +54,17 @@ class QQClient(BaseMusicClient):
         }
         self.session.headers.update(self.default_search_headers)
         self.guid = self._generate_guid()
+    
+    def _load_cookie(self) -> str:
+        """加载cookie文件"""
+        cookie_file = os.path.join(os.path.dirname(__file__), 'cookie', 'qq_cookie.txt')
+        try:
+            if os.path.exists(cookie_file):
+                with open(cookie_file, 'r', encoding='utf-8') as f:
+                    return f.read().strip()
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] 加载cookie失败: {e}")
+        return ''
     
     def _generate_guid(self) -> str:
         """生成guid"""
@@ -377,6 +390,14 @@ class QQClient(BaseMusicClient):
         # 使用分页API获取完整歌曲列表
         url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
         
+        # 准备请求头，添加cookie
+        headers = {
+            'Referer': f'https://y.qq.com/n/ryqq/playlist/{playlist_id}',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+        }
+        if self.cookie:
+            headers['Cookie'] = self.cookie
+        
         try:
             # 先获取基本信息
             basic_url = "https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg"
@@ -389,12 +410,13 @@ class QQClient(BaseMusicClient):
                 'format': 'json'
             }
             
-            resp = self.session.get(basic_url, params=basic_params, headers={'Referer': f"https://y.qq.com/n/ryqq/playlist/{playlist_id}"}, timeout=15)
+            resp = self.session.get(basic_url, params=basic_params, headers=headers, timeout=15)
             resp.raise_for_status()
             basic_data = resp.json()
             
             cdlist = basic_data.get('cdlist', [])
             if not cdlist:
+                logger.warning(f"[{self.platform_name}] 歌单 {playlist_id} 返回为空，可能需要登录")
                 return {}
             
             playlist_info = cdlist[0]

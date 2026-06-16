@@ -2,7 +2,8 @@ import { ref } from 'vue'
 
 const isDark = ref(false)
 
-const themeColors = {
+/** 主题色配置 */
+export const themeColors = {
   'blue': '#0057c2',
   'red': '#e53935',
   'purple': '#8e24aa',
@@ -11,12 +12,15 @@ const themeColors = {
   'cyan': '#00acc1'
 }
 
+/** 默认主题色 */
+export const DEFAULT_THEME_COLOR = themeColors.blue
+
 const getCustomThemeColor = () => {
   const saved = localStorage.getItem('themeColor')
   if (saved && themeColors[saved]) {
     return themeColors[saved]
   }
-  return themeColors['blue']
+  return DEFAULT_THEME_COLOR
 }
 
 const hexToRgb = (hex) => {

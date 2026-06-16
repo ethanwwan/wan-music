@@ -27,7 +27,9 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+cookie/
 netease_cookie.txt
+qq_cookie.txt
 
 /tests/
 /test-results/

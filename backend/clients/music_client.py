@@ -111,12 +111,46 @@ class MusicClient:
     def search(self, keyword: str, platform: str = None, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         client = self._get_client(platform)
-        return client.search(keyword, limit, offset)
+        songs = client.search(keyword, limit, offset)
+        # 为每首歌曲补充完整的平台 URL（用于前端直接解析，无需前端拼接）
+        for song in songs:
+            song_id = song.get('id', '')
+            song_source = song.get('source', platform or self.default_platform)
+            song['url'] = self._build_song_url(song_id, song_source)
+        return songs
+
+    def _build_song_url(self, song_id: str, platform: str) -> str:
+        """根据平台和歌曲ID构建完整的歌曲链接 URL"""
+        if not song_id or not platform:
+            return ''
+        url_templates = {
+            'netease': f'https://music.163.com/song?id={song_id}',
+            'qq': f'https://y.qq.com/n/ryqq/songDetail/{song_id}',
+            'kugou': f'https://www.kugou.com/song/#hash={song_id}',
+            'bodian': f'https://bodian.kuwo.cn/song/{song_id}',
+        }
+        return url_templates.get(platform, '')
     
     def search_playlist(self, keyword: str, platform: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """搜索歌单"""
         client = self._get_client(platform)
-        return client.search_playlist(keyword, limit)
+        playlists = client.search_playlist(keyword, limit)
+        # 为每个歌单补充完整的平台 URL（用于前端直接解析，无需前端拼接）
+        for playlist in playlists:
+            playlist_id = playlist.get('id', '')
+            playlist_source = playlist.get('source', platform or self.default_platform)
+            playlist['url'] = self._build_playlist_url(playlist_id, playlist_source)
+        return playlists
+
+    def _build_playlist_url(self, playlist_id: str, platform: str) -> str:
+        """根据平台和歌单ID构建完整的歌单链接 URL"""
+        if not playlist_id or not platform:
+            return ''
+        url_templates = {
+            'netease': f'https://music.163.com/playlist?id={playlist_id}',
+            'qq': f'https://y.qq.com/n/ryqq/playlist/{playlist_id}',
+        }
+        return url_templates.get(platform, '')
     
     def get_song_url(self, song_id: Any, quality: str = 'high', platform: str = None) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
@@ -150,13 +184,13 @@ def search_music(keywords: str, platform: str = None, limit: int = 10) -> List[D
     return music_client.search(keywords, platform, limit=limit)
 
 
-def get_song_url(song_id: int, quality: str, platform: str = None) -> Dict[str, Any]:
+def get_song_url(song_id: str, quality: str, platform: str = None) -> Dict[str, Any]:
     """获取歌曲URL（向后兼容）"""
     try:
-        result = music_client.get_song_url(song_id, quality, platform)
+        result = music_client.get_song_url(str(song_id), quality, platform)
         return {
             'data': [{
-                'id': song_id,
+                'id': str(song_id),
                 'url': result.get('url', ''),
                 'level': quality,
                 'type': 'flac' if quality in ['lossless', 'hires', 'jymaster'] else 'mp3',
@@ -170,20 +204,20 @@ def get_song_url(song_id: int, quality: str, platform: str = None) -> Dict[str, 
         raise
 
 
-def get_song_detail(song_id: int, platform: str = None) -> Dict[str, Any]:
+def get_song_detail(song_id: str, platform: str = None) -> Dict[str, Any]:
     """获取歌曲详情（向后兼容）"""
-    return music_client.get_song_info(song_id, platform)
+    return music_client.get_song_info(str(song_id), platform)
 
 
-def get_lyric(song_id: int, platform: str = None) -> Dict[str, Any]:
+def get_lyric(song_id: str, platform: str = None) -> Dict[str, Any]:
     """获取歌词（向后兼容）"""
-    lyric = music_client.get_lyric(song_id, platform)
+    lyric = music_client.get_lyric(str(song_id), platform)
     return {'lyric': lyric}
 
 
-def get_playlist_detail(playlist_id: int, platform: str = None) -> Dict[str, Any]:
+def get_playlist_detail(playlist_id: str, platform: str = None) -> Dict[str, Any]:
     """获取歌单详情"""
-    return music_client.get_playlist(playlist_id, platform)
+    return music_client.get_playlist(str(playlist_id), platform)
 
 
 def get_platforms() -> List[Dict[str, str]]:

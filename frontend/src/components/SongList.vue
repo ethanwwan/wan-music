@@ -404,40 +404,53 @@ const handleTrackClick = (track) => {
   emit('track-selected', track)
 }
 
+/**
+ * 播放单首歌曲
+ *
+ * 流程：
+ *   1. 检查歌曲是否被标记为不可用
+ *   2. 用 track.id 调后端 /song 接口获取播放信息
+ *   3. 拿到 musicInfo 后触发播放事件
+ *
+ * @param {Object} track - 歌曲对象，必须包含 id、name、source
+ */
 const playTrack = async (track) => {
+  // 1. 不可用检查
   if (isTrackUnavailable(track)) {
     message.warning(`《${track.name}》因版权问题暂时无法播放`)
     return
   }
-  
+
+  // 2. 校验 track.id
+  if (!track?.id) {
+    message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
+    return
+  }
+
+  // 设置 loading 状态
   parsingTrackId.value = track.id
   parsingType.value = 'play'
-  
+
   try {
+    // 3. 用 id + source 调后端 /song 接口
     const qualityValue = settings.selectedQuality || 'lossless'
-    const songUrl = `https://music.163.com/song?id=${track.id}`
-    
-    const musicInfo = await parseMusicInfo(songUrl, qualityValue)
-    
+    const musicInfo = await parseMusicInfo(track.id, qualityValue, track.source)
+
+    // 4. URL 无效时标记为不可用
     if (!musicInfo?.url) {
-      // 标记为不可用
       markTrackUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法播放`)
       return
     }
-    
+
+    // 5. 触发播放
     emit('track-parsed', { track, quality: qualityValue })
-    // 只传递当前歌曲信息，不传递列表
     emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc })
     message.success(`开始播放：${track.name}`)
   } catch (error) {
-    // 如果是版权相关错误，标记为不可用
-    if (error.message?.includes('已下架') || error.message?.includes('无法获取')) {
-      markTrackUnavailable(track)
-      message.warning(`《${track.name}》因版权问题暂时无法播放`)
-    } else {
-      message.error(`播放失败：${error.message}`)
-    }
+    // 6. 统一错误处理
+    const errorMsg = error?.message || String(error) || '未知错误'
+    message.error(`播放失败：${errorMsg}`)
   } finally {
     parsingTrackId.value = null
     parsingType.value = null
@@ -457,9 +470,12 @@ const downloadSingle = async (track) => {
     const qualityValue = settings.selectedQuality || 'lossless'
     const writeMetadata = settings.writeMetadata !== false
     const filenameFormat = settings.filenameFormat || 'song-artist'
-    const songUrl = `https://music.163.com/song?id=${track.id}`
-    
-    const musicInfo = await parseMusicInfo(songUrl, qualityValue)
+
+    if (!track.id) {
+      message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
+      return
+    }
+    const musicInfo = await parseMusicInfo(track.id, qualityValue, track.source)
     
     if (!musicInfo?.url) {
       // 标记为不可用
@@ -511,15 +527,15 @@ const downloadSingle = async (track) => {
     
     const blob = new Blob([finalBuffer], { type: mimeType })
     saveBlob(blob, filename)
-    
+
     message.success(`已下载：${track.name}`)
   } catch (error) {
-    // 如果是版权相关错误，标记为不可用
-    if (error.message?.includes('已下架') || error.message?.includes('无法获取')) {
+    const errorMsg = error?.message || String(error) || '未知错误'
+    if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲')) {
       markTrackUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法下载`)
     } else {
-      message.error(`下载失败：${error.message}`)
+      message.error(`下载失败：${errorMsg}`)
     }
   } finally {
     parsingTrackId.value = null
@@ -562,10 +578,12 @@ const handleBatchDownload = async () => {
     const musicList = []
     for (const track of availableTracks) {
       try {
-        const songUrl = `https://music.163.com/song?id=${track.id}`
-        
+        if (!track.id) {
+          console.warn(`歌曲 ${track.name} 缺少ID，跳过`)
+          continue
+        }
         const quality = settings.selectedQuality || 'lossless'
-        const musicInfo = await parseMusicInfo(songUrl, quality)
+        const musicInfo = await parseMusicInfo(track.id, quality, track.source)
         if (musicInfo && musicInfo.url) {
           musicList.push({
             id: track.id,
@@ -618,7 +636,8 @@ const handleBatchDownload = async () => {
   } catch (error) {
     downloadProgress.value.isDownloading = false
     downloadProgress.value.status = 'exception'
-    message.error(`批量下载失败: ${error.message}`)
+    const errorMsg = error?.message || String(error) || '未知错误'
+    message.error(`批量下载失败: ${errorMsg}`)
   }
 }
 
