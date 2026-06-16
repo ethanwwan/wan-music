@@ -129,20 +129,34 @@ const notifySearchResult = (count, fromCache = false) => {
 }
 
 /** 处理搜索模式的搜索逻辑 */
-const handleSearchMode = async (sources) => {
+const handleSearchMode = async (sources, searchType = 0) => {
   loading.value = true
   try {
-    const result = await musicApi.searchMusic(musicUrl.value, sources)
-    const songs = result.success ? (result.data?.songs || []) : []
+    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources)
+    const data = result.success ? result.data : { type: searchType, songs: [], playlists: [] }
 
     musicInfo.value = { name: musicUrl.value }
-    searchResults.value = songs
+
+    // 根据后端返回的 type 字段决定展示
+    if (data.type === 1) {
+      // 只显示歌曲 tab
+      searchResults.value = data.songs || []
+      playlistSearchResults.value = []
+    } else if (data.type === 2) {
+      // 只显示歌单 tab
+      searchResults.value = []
+      playlistSearchResults.value = data.playlists || []
+    } else {
+      // 显示歌曲和歌单 tab
+      searchResults.value = data.songs || []
+      playlistSearchResults.value = data.playlists || []
+    }
     artistSearchResults.value = []
-    playlistSearchResults.value = []
     albumSearchResults.value = []
 
-    if (songs.length > 0) {
-      notifySearchResult(songs.length, result.fromCache)
+    const totalCount = (data.songs?.length || 0) + (data.playlists?.length || 0)
+    if (totalCount > 0) {
+      notifySearchResult(totalCount, result.fromCache)
     } else {
       message.warning('未找到相关结果')
     }
@@ -267,7 +281,7 @@ const searchMusicByKeyword = async () => {
  * @param {string} mode 当前模式 ('search', 'music', 'playlist', 'album', 'artist', 'rank')
  * @param {Array} sources 数据源列表 ['netease', 'qq', ...]
  */
-export const parseMusic = async (selectedQuality, mode = 'music', sources = ['netease']) => {
+export const parseMusic = async (selectedQuality, mode = 'music', sources = ['netease'], searchType = 0) => {
   if (!musicUrl.value.trim()) {
     message.warning('请输入内容')
     return
@@ -275,7 +289,7 @@ export const parseMusic = async (selectedQuality, mode = 'music', sources = ['ne
 
   switch (mode) {
     case 'search':
-      return handleSearchMode(sources)
+      return handleSearchMode(sources, searchType)
     case 'playlist':
       return handlePlaylistMode(sources)
     case 'album':

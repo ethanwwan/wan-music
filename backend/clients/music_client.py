@@ -111,46 +111,12 @@ class MusicClient:
     def search(self, keyword: str, platform: str = None, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         client = self._get_client(platform)
-        songs = client.search(keyword, limit, offset)
-        # 为每首歌曲补充完整的平台 URL（用于前端直接解析，无需前端拼接）
-        for song in songs:
-            song_id = song.get('id', '')
-            song_source = song.get('source', platform or self.default_platform)
-            song['url'] = self._build_song_url(song_id, song_source)
-        return songs
+        return client.search(keyword, limit, offset)
 
-    def _build_song_url(self, song_id: str, platform: str) -> str:
-        """根据平台和歌曲ID构建完整的歌曲链接 URL"""
-        if not song_id or not platform:
-            return ''
-        url_templates = {
-            'netease': f'https://music.163.com/song?id={song_id}',
-            'qq': f'https://y.qq.com/n/ryqq/songDetail/{song_id}',
-            'kugou': f'https://www.kugou.com/song/#hash={song_id}',
-            'bodian': f'https://bodian.kuwo.cn/song/{song_id}',
-        }
-        return url_templates.get(platform, '')
-    
     def search_playlist(self, keyword: str, platform: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """搜索歌单"""
         client = self._get_client(platform)
-        playlists = client.search_playlist(keyword, limit)
-        # 为每个歌单补充完整的平台 URL（用于前端直接解析，无需前端拼接）
-        for playlist in playlists:
-            playlist_id = playlist.get('id', '')
-            playlist_source = playlist.get('source', platform or self.default_platform)
-            playlist['url'] = self._build_playlist_url(playlist_id, playlist_source)
-        return playlists
-
-    def _build_playlist_url(self, playlist_id: str, platform: str) -> str:
-        """根据平台和歌单ID构建完整的歌单链接 URL"""
-        if not playlist_id or not platform:
-            return ''
-        url_templates = {
-            'netease': f'https://music.163.com/playlist?id={playlist_id}',
-            'qq': f'https://y.qq.com/n/ryqq/playlist/{playlist_id}',
-        }
-        return url_templates.get(platform, '')
+        return client.search_playlist(keyword, limit)
     
     def get_song_url(self, song_id: Any, quality: str = 'high', platform: str = None) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""
@@ -188,12 +154,33 @@ def get_song_url(song_id: str, quality: str, platform: str = None) -> Dict[str, 
     """获取歌曲URL（向后兼容）"""
     try:
         result = music_client.get_song_url(str(song_id), quality, platform)
+        download_url = result.get('url', '')
+
+        # 优先从 URL 后缀推断真实文件类型
+        # QQ 音乐的 lossless 实际是 m4a，硬编码成 flac 会导致文件名后缀错误
+        url_path = download_url.split('?')[0].split('#')[0].lower()
+        real_type = None
+        if url_path.endswith('.flac'):
+            real_type = 'flac'
+        elif url_path.endswith('.m4a') or url_path.endswith('.mp4') or url_path.endswith('.aac'):
+            real_type = 'm4a'
+        elif url_path.endswith('.mp3'):
+            real_type = 'mp3'
+        elif url_path.endswith('.ogg') or url_path.endswith('.oga'):
+            real_type = 'ogg'
+        elif url_path.endswith('.wav'):
+            real_type = 'wav'
+
+        # 如果 URL 无法判断，再根据 quality 推断
+        if not real_type:
+            real_type = 'flac' if quality in ['lossless', 'hires', 'jymaster'] else 'mp3'
+
         return {
             'data': [{
                 'id': str(song_id),
-                'url': result.get('url', ''),
+                'url': download_url,
                 'level': quality,
-                'type': 'flac' if quality in ['lossless', 'hires', 'jymaster'] else 'mp3',
+                'type': real_type,
                 'size': 0,
                 'br': 0,
                 'source': result.get('source', platform or 'netease')

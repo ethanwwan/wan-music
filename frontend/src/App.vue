@@ -30,9 +30,6 @@
           :artists="artistSearchResults"
           :loading="loading"
           :search-type="currentSearchType"
-          @parse-song="handleParseSong"
-          @parse-playlist="handleParsePlaylist"
-          @parse-album="handleParseAlbum"
           @track-play="handlePlaySong"
           @search-type-change="handleSearchTypeChange"
         />
@@ -124,7 +121,7 @@ import musicApi from './services/musicApi.js'
 import { initThemeFromLocalStorage, themeColors, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { settings, loadSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, playlistUrl, playlistInfo, albumUrl, albumInfo, parseMusic, parsePlaylist, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults
+    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
@@ -171,7 +168,21 @@ const handleStorageChange = (e) => {
   }
 }
 
-// 判断输入类型
+// 判断输入类型 → 返回后端 type 参数
+const detectSearchType = (url) => {
+  // 检查是否是歌曲链接
+  if (musicApi.validateMusicUrl(url)) {
+    return 1
+  }
+  // 检查是否是歌单链接
+  if (musicApi.validatePlaylistUrl(url)) {
+    return 2
+  }
+  // 默认是keyword搜索
+  return 0
+}
+
+// 判断输入类型（前端 UI 用）
 const detectInputType = (url) => {
   // 检查是否是歌曲链接
   if (musicApi.validateMusicUrl(url)) {
@@ -192,15 +203,16 @@ const handleParse = async ({ url, sources = ['netease'] }) => {
   // 重新挂载 SearchResult 组件，重置所有状态
   searchResultKey.value++
   musicUrl.value = url
-  
+
   // 保存当前选择的数据源
   currentSources.value = sources
-  
+
   // 检测输入类型
   currentSearchType.value = detectInputType(url)
-  
+  const searchType = detectSearchType(url)
+
   const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, 'search', sources)
+  await parseMusic(quality, 'search', sources, searchType)
   
   if (searchContainerRef.value && url.trim()) {
     searchContainerRef.value.addHistoryRecord(url.trim())
@@ -225,23 +237,11 @@ const handleSearchTypeChange = async (searchType) => {
   await parseMusic(quality, searchType, currentSources.value)
 }
 
-const handleParseSong = (song) => {
-  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
-  if (!song.url) {
-    message.error('歌曲链接无效，请重新搜索')
-    return
-  }
-  musicUrl.value = song.url
-  const quality = settings.selectedQuality || 'lossless'
-  parseMusic(quality, 'music')
-}
-
 // 处理歌曲播放 - 只播放当前点击的歌曲
+// track.url 由 SongList 的 track-play 事件传递（实际值是后端 /song 响应的下载 URL）
+// 同时设置 musicInfo.value，让 MusicPlayer 的 v-if 通过（无需第二次 /song URL 模式调用）
 const handlePlaySong = async (track) => {
-  console.log('Playing single track:', track.name)
-  
-  // 直接设置当前播放的歌曲，不使用播放列表
-  currentSong.value = {
+  const song = {
     id: track.id,
     name: track.name,
     artist: track.artist || track.ar?.[0]?.name || (Array.isArray(track.artists) ? track.artists[0]?.name : track.artists) || '未知艺术家',
@@ -249,44 +249,23 @@ const handlePlaySong = async (track) => {
     cover: getCoverUrl(track),
     lrc: track.lrc || '',
     url: track.url || '',
+    fileExtension: track.fileExtension || '.mp3',
     unavailable: track.unavailable || false
   }
+  currentSong.value = song
+  musicInfo.value = song
 }
 
 // 获取封面URL
 const getCoverUrl = (track) => {
   return (
-    track.cover || 
+    track.cover ||
     track.picUrl ||
-    track.al?.picUrl || 
+    track.al?.picUrl ||
     track.album?.coverImgUrl ||
     track.album?.picUrl ||
     ''
   )
-}
-
-const handleParsePlaylist = (playlist) => {
-  currentView.value = 'playlist'
-  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
-  if (playlist.url) {
-    playlistUrl.value = playlist.url
-  } else {
-    message.error('歌单链接无效，请重新搜索')
-    return
-  }
-  parsePlaylist()
-}
-
-const handleParseAlbum = (album) => {
-  currentView.value = 'album'
-  // 直接使用后端返回的完整 URL，避免前端硬编码拼接
-  if (album.url) {
-    albumUrl.value = album.url
-  } else {
-    message.error('专辑链接无效，请重新搜索')
-    return
-  }
-  parseAlbum()
 }
 
 const handleTrackParsed = async (data) => {

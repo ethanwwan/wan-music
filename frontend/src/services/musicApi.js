@@ -562,7 +562,12 @@ const mapSearchSongs = (songs) => songs.map(song => ({
   duration: song.duration || 0,
   picUrl: song.picUrl || '',
   source: song.source,
-  url: song.url || ''  // 后端返回的完整歌曲链接
+  // URL 解析模式下后端返回的歌曲详情（type=1 时的额外字段）
+  url: song.url || '',
+  lrc: song.lyric || '',
+  fileExtension: song.fileType ? `.${song.fileType}` : '.mp3',
+  // 类型标识（用于前端区分展示）
+  _type: song._type || 'song'
 }))
 
 const mapSearchPlaylists = (playlists) => playlists.map(playlist => ({
@@ -573,17 +578,24 @@ const mapSearchPlaylists = (playlists) => playlists.map(playlist => ({
   playCount: playlist.play_count || playlist.playCount || 0,
   trackCount: playlist.track_count || playlist.trackCount || 0,
   source: playlist.source || 'netease',
-  url: playlist.url || ''  // 后端返回的完整歌单链接
+  _type: playlist._type || 'playlist'
 }))
 
-/** 搜索音乐 */
-export const searchMusic = async (keyword, sources = ['netease']) => {
+/**
+ * 统一搜索接口
+ * @param {string} keyword 搜索内容（关键词或 URL）
+ * @param {number} type 搜索类型：0=全部 / 1=歌曲 / 2=歌单（仅当 keyword 不是 URL 时生效）
+ * @param {Array<string>} sources 数据源列表
+ *
+ * 返回：{type: 0/1/2, songs: [...], playlists: [...]}，根据 type 分桶
+ */
+export const unifiedSearch = async (keyword, type = 0, sources = ['netease']) => {
   try {
-    const cacheKey = `${keyword}-${sources.join(',')}`
-    const cached = getCachedSearchResult('music', cacheKey)
+    const cacheKey = `${type}-${keyword}-${sources.join(',')}`
+    const cached = getCachedSearchResult('unified', cacheKey)
     if (cached) return { success: true, data: cached, fromCache: true }
 
-    const requestData = { keyword, limit: 60 }
+    const requestData = { keyword, type, limit: 60 }
     if (sources.length === 1) requestData.source = sources[0]
 
     const result = await postJson('/search', requestData)
@@ -591,35 +603,38 @@ export const searchMusic = async (keyword, sources = ['netease']) => {
       return { success: false, error: result.message || '搜索失败' }
     }
 
-    const searchData = { songs: mapSearchSongs(result.data) }
-    setCachedSearchResult('music', cacheKey, searchData)
+    // result.data = {type: 0/1/2, data: [...]}，每项带 _type
+    const { type: respType, data: items } = result.data
+    const songs = []
+    const playlists = []
+    for (const item of items || []) {
+      if (item._type === 'playlist') {
+        playlists.push(mapSearchPlaylists([item])[0])
+      } else {
+        songs.push(mapSearchSongs([item])[0])
+      }
+    }
+
+    const searchData = { type: respType, songs, playlists }
+    setCachedSearchResult('unified', cacheKey, searchData)
     return { success: true, data: searchData }
   } catch (error) {
     return { success: false, error: error.message || '搜索失败' }
   }
 }
 
-/** 搜索歌单 */
+/** 搜索歌曲（兼容旧 API） */
+export const searchMusic = async (keyword, sources = ['netease']) => {
+  const result = await unifiedSearch(keyword, 1, sources)
+  if (!result.success) return result
+  return { ...result, data: { songs: result.data.songs } }
+}
+
+/** 搜索歌单（兼容旧 API） */
 export const searchPlaylist = async (keyword, sources = ['netease']) => {
-  try {
-    const cacheKey = `${keyword}-${sources.join(',')}`
-    const cached = getCachedSearchResult('playlist', cacheKey)
-    if (cached) return { success: true, data: cached, fromCache: true }
-
-    const requestData = { keyword, limit: 20 }
-    if (sources.length === 1) requestData.source = sources[0]
-
-    const result = await postJson('/search/playlist', requestData)
-    if (!result.success || !result.data) {
-      return { success: false, error: result.message || '搜索失败' }
-    }
-
-    const playlists = mapSearchPlaylists(result.data)
-    setCachedSearchResult('playlist', cacheKey, playlists)
-    return { success: true, data: playlists }
-  } catch (error) {
-    return { success: false, error: error.message || '搜索失败' }
-  }
+  const result = await unifiedSearch(keyword, 2, sources)
+  if (!result.success) return result
+  return { ...result, data: result.data.playlists }
 }
 
 // ==================== 批量下载 ====================
@@ -784,5 +799,6 @@ export default {
   getPlaylistById,
   searchMusic,
   searchPlaylist,
+  unifiedSearch,
   getMusicUrl
 }

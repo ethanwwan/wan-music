@@ -39,7 +39,6 @@
       :current-page="currentDetailPage"
       :page-size="detailPageSize"
       :total-tracks="detailTracks.length"
-      @track-parsed="handleTrackParse"
       @track-play="handleTrackPlay"
       @track-unavailable="handleTrackUnavailable"
       @page-change="goToDetailPage"
@@ -53,7 +52,6 @@
       :current-page="currentPage"
       :page-size="pageSize"
       :total-tracks="songs.length"
-      @track-parsed="handleTrackParse"
       @track-play="handleTrackPlay"
       @track-unavailable="handleTrackUnavailable"
       @page-change="goToPage"
@@ -131,7 +129,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['parse-song', 'parse-playlist', 'parse-album', 'select', 'track-play', 'search-type-change'])
+const emit = defineEmits(['select', 'track-play', 'search-type-change'])
 
 // 搜索类型Tab配置 - 根据搜索类型动态显示
 const searchTabs = computed(() => {
@@ -374,13 +372,6 @@ const handleTrackUnavailable = (track) => {
   }
   
   // 吐司提示已在 SongList 中处理
-}
-
-// 处理解析事件
-const handleTrackParse = (data) => {
-  if (data?.track) {
-    emit('parse-song', data.track, data.quality)
-  }
 }
 
 // 处理列表项点击（解析歌手/歌单/专辑）
