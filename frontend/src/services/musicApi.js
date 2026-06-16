@@ -640,149 +640,143 @@ export const searchPlaylist = async (keyword, sources = ['netease']) => {
 // ==================== 批量下载 ====================
 
 /**
- * 批量下载音乐（打包为 ZIP）
- * @param {Array} musicList 歌曲列表（需含 url、name、artist 等）
+ * 批量下载音乐（异步任务 + SSE 实时进度）
+ * 流程：
+ *   1. POST /download/batch/start 启动任务，返回 task_id
+ *   2. EventSource 订阅 /download/batch/progress/<id> 实时进度
+ *   3. 任务完成时 fetch /download/batch/file/<id> 下载 zip
+ *
+ * @param {Array} musicList 歌曲列表（需含 id, name, artist, album, source）
  * @param {string} playlistName 歌单名称（用于 zip 文件名）
- * @param {Object} downloadSettings 下载设置 { filenameFormat, writeMetadata, downloadLrcFile }
+ * @param {Object} downloadSettings { selectedQuality, filenameFormat, writeMetadata, downloadLrcFile }
  * @param {Function} onProgress 进度回调
  */
 export const batchDownloadMusic = async (musicList, playlistName = '', downloadSettings = {}, onProgress = null) => {
-  const results = []
   const total = musicList.length
-  let completed = 0
-  let failed = 0
-  let totalBytes = 0
-  let downloadedBytes = 0
-  const startTime = Date.now()
-  const activeDownloads = new Map()
-  const maxConcurrency = 12
-
-  /** 发送进度更新 */
-  const sendProgress = () => {
-    if (!onProgress) return
-    const elapsed = (Date.now() - startTime) / 1000
-    const speed = elapsed > 0 ? downloadedBytes / elapsed / 1024 : 0
-    const remainingBytes = totalBytes - downloadedBytes
-    const eta = speed > 0 ? Math.ceil(remainingBytes / speed / 1024) : 0
-    onProgress({
+  const sendProgress = (state) => {
+    onProgress?.({
       total,
-      completed,
-      failed,
-      totalBytes,
-      downloadedBytes,
-      percentage: totalBytes > 0
-        ? Math.round((downloadedBytes / totalBytes) * 100)
-        : Math.round(((completed + failed) / total) * 100),
-      speed: speed.toFixed(1),
-      eta,
-      activeDownloads: Array.from(activeDownloads.values())
+      completed: state.completed,
+      failed: state.failed,
+      percentage: state.percentage,
+      current: state.current
     })
   }
 
-  /** 预获取文件总大小 */
-  const fetchTotalSize = async () => {
-    const sizes = await Promise.all(musicList.map(async (info) => {
-      try {
-        const res = await fetch(info.url, { method: 'HEAD' })
-        return parseInt(res.headers.get('Content-Length') || '0', 10)
-      } catch {
-        return 0
-      }
-    }))
-    totalBytes = sizes.reduce((sum, s) => sum + s, 0)
+  if (total === 0) {
+    return { total: 0, completed: 0, failed: 0, results: [] }
   }
 
-  /** 下载单首歌曲并加入 zip */
-  const runDownload = async (musicInfo) => {
-    const trackId = musicInfo.id
-    activeDownloads.set(trackId, { name: musicInfo.name, downloaded: 0, total: 0, status: 'downloading' })
+  sendProgress({ completed: 0, failed: 0, percentage: 0, current: '启动任务...' })
 
+  const quality = downloadSettings.selectedQuality || 'lossless'
+  const items = musicList.map(m => ({
+    id: m.id,
+    name: m.name,
+    artist: m.artist,
+    album: m.album,
+    source: m.source,
+    quality
+  }))
+  const settings = {
+    writeMetadata: downloadSettings.writeMetadata !== false,
+    filenameFormat: downloadSettings.filenameFormat || 'song-artist',
+    downloadLrcFile: downloadSettings.downloadLrcFile === true
+  }
+
+  // 1. 启动任务
+  const startResp = await fetch('/download/batch/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, name: playlistName || 'playlist', settings })
+  })
+  if (!startResp.ok) {
+    let errMsg = '启动批量下载失败'
     try {
-      const extension = musicInfo.fileExtension || '.mp3'
-      const sanitizedName = musicInfo.name.replace(/[<>:"/\\|?*]/g, '_')
-      const sanitizedArtist = musicInfo.artist.replace(/[<>:"/\\|?*]/g, '_')
-      const filename = downloadSettings.filenameFormat === 'artist-song'
-        ? `${sanitizedArtist} - ${sanitizedName}${extension}`
-        : `${sanitizedName} - ${sanitizedArtist}${extension}`
+      const err = await startResp.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
+  }
+  const startData = await startResp.json()
+  const taskId = startData.data.task_id
 
-      const response = await fetch(musicInfo.url, { cache: 'no-store', mode: 'cors' })
-      if (!response.ok) throw new Error(`下载失败: ${response.statusText}`)
+  sendProgress({ completed: 0, failed: 0, percentage: 5, current: '后端下载中...' })
 
-      const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10)
-      const reader = response.body.getReader()
-      const chunks = []
-      let localDownloaded = 0
+  // 2. SSE 订阅进度
+  const finalState = await new Promise((resolve, reject) => {
+    const es = new EventSource(`/download/batch/progress/${taskId}`)
 
-      activeDownloads.set(trackId, { name: musicInfo.name, downloaded: 0, total: contentLength, status: 'downloading' })
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
-        localDownloaded += value.length
-        downloadedBytes += value.length
-        activeDownloads.set(trackId, { name: musicInfo.name, downloaded: localDownloaded, total: contentLength, status: 'downloading' })
-        sendProgress()
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.error) {
+          es.close()
+          reject(new Error(data.error))
+          return
+        }
+        const percentage = data.total > 0
+          ? Math.round((data.completed / data.total) * 90) + 5
+          : 5
+        sendProgress({
+          completed: data.completed,
+          failed: data.failed,
+          percentage,
+          current: data.current
+        })
+        if (data.status === 'done' || data.status === 'error') {
+          es.close()
+          resolve(data)
+        }
+      } catch (err) {
+        es.close()
+        reject(err)
       }
-
-      let audioBuffer = await new Blob(chunks).arrayBuffer()
-      audioBuffer = await applyAudioMetadata(audioBuffer, musicInfo, extension, downloadSettings.writeMetadata)
-
-      zip.file(filename, audioBuffer)
-      if (downloadSettings.downloadLrcFile !== false && musicInfo.lrc) {
-        zip.file(filename.replace(extension, '.lrc'), musicInfo.lrc)
-      }
-
-      activeDownloads.set(trackId, { name: musicInfo.name, downloaded: contentLength, total: contentLength, status: 'completed' })
-      completed++
-      sendProgress()
-      return { success: true, name: musicInfo.name, id: musicInfo.id }
-    } catch (error) {
-      activeDownloads.set(trackId, { name: musicInfo.name, downloaded: 0, total: 0, status: 'failed', error: error.message })
-      failed++
-      sendProgress()
-      return { success: false, name: musicInfo.name, id: musicInfo.id, error: error.message }
-    } finally {
-      activeDownloads.delete(trackId)
     }
+
+    es.onerror = () => {
+      es.close()
+      reject(new Error('SSE 连接失败'))
+    }
+  })
+
+  if (finalState.status === 'error') {
+    throw new Error(finalState.error || '任务执行失败')
   }
 
-  try {
-    const JSZip = (await import('jszip')).default
-    const zip = new JSZip()
+  // 3. 下载 zip
+  sendProgress({ completed: total, failed: finalState.failed, percentage: 95, current: '下载中...' })
+  const fileResp = await fetch(`/download/batch/file/${taskId}`)
+  if (!fileResp.ok) {
+    let errMsg = '下载 zip 失败'
+    try {
+      const err = await fileResp.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
+  }
 
-    await fetchTotalSize()
-    sendProgress()
+  const blob = await fileResp.blob()
 
-    // 简单的并发控制
-    const queue = [...musicList]
-    const workers = Array.from({ length: maxConcurrency }, async () => {
-      while (queue.length > 0) {
-        const item = queue.shift()
-        if (item) results.push(await runDownload(item))
-      }
-    })
-    await Promise.all(workers)
+  // 从 Content-Disposition 提取文件名
+  const disposition = fileResp.headers.get('Content-Disposition') || ''
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  const asciiMatch = disposition.match(/filename="?([^";]+)"?/i)
+  let zipFilename = 'playlist.zip'
+  if (utf8Match) {
+    zipFilename = decodeURIComponent(utf8Match[1])
+  } else if (asciiMatch) {
+    zipFilename = asciiMatch[1]
+  }
 
-    if (completed > 0) {
-      onProgress?.({ status: 'packing', message: '正在打包 ZIP 文件...' })
-      const content = await zip.generateAsync({ type: 'blob' })
-      const zipFilename = playlistName
-        ? `${playlistName.replace(/[<>:"/\\|?*]/g, '_')}.zip`
-        : `music_${Date.now()}.zip`
+  saveBlob(blob, zipFilename)
+  sendProgress({ completed: total, failed: finalState.failed, percentage: 100, current: '完成' })
 
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(content)
-      a.download = zipFilename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(a.href)
-    }
-
-    return { total, completed, failed, results }
-  } catch (error) {
-    throw new Error(`批量下载失败: ${error.message}`)
+  return {
+    total,
+    completed: finalState.completed,
+    failed: finalState.failed,
+    errors: finalState.errors || []
   }
 }
 

@@ -1,7 +1,21 @@
 """音乐相关路由"""
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file, Response
 import logging
+import os
+import tempfile
+import zipfile
+import time
+import uuid
+import json
+import threading
+import re
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
+
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, USLT, error as ID3Error
+from mutagen.flac import FLAC
+from mutagen.mp4 import MP4
 
 from services.music_service import music_service
 from utils.api_response import APIResponse
@@ -10,6 +24,479 @@ from utils.url_parser import parse_url, is_music_url, is_playlist_url, is_album_
 logger = logging.getLogger(__name__)
 
 music_bp = Blueprint('music', __name__)
+
+
+# ==================== 下载代理（解决 CORS） ====================
+
+EXT_MIME_TYPES = {
+    '.mp3': 'audio/mpeg',
+    '.flac': 'audio/flac',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.wav': 'audio/wav',
+}
+
+# 批量下载任务存储（task_id -> 任务状态）
+# 单进程 Flask 足够用，多进程部署需改为 Redis/DB
+batch_tasks: dict[str, dict] = {}
+batch_tasks_lock = threading.Lock()
+BATCH_TASK_TTL = 600  # 任务完成后 10 分钟清理
+BATCH_MAX_WORKERS = 6  # 并发下载线程数
+
+
+def _sanitize_filename(name: str) -> str:
+    """清理文件名中的非法字符"""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip()
+
+
+def _get_extension(url: str, fallback: str = '.mp3') -> str:
+    """从 URL 后缀推断文件扩展名"""
+    url_path = url.split('?')[0].split('#')[0].lower()
+    for ext in ['.flac', '.m4a', '.mp4', '.aac', '.mp3', '.ogg', '.wav']:
+        if url_path.endswith(ext):
+            return ext
+    return fallback
+
+
+def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = ''):
+    """给音频文件写入 metadata（mp3/flac/m4a）"""
+    try:
+        if extension == '.mp3':
+            try:
+                audio = ID3(file_path)
+            except ID3Error:
+                audio = ID3()
+            audio.delall('TIT2')
+            audio.delall('TPE1')
+            audio.delall('TALB')
+            audio.delall('USLT')
+            if name: audio.add(TIT2(encoding=3, text=[name]))
+            if artist: audio.add(TPE1(encoding=3, text=[artist]))
+            if album: audio.add(TALB(encoding=3, text=[album]))
+            if lyric: audio.add(USLT(encoding=3, lang='chi', desc='', text=lyric))
+            audio.save(file_path)
+        elif extension == '.flac':
+            audio = FLAC(file_path)
+            audio['title'] = name
+            audio['artist'] = artist
+            audio['album'] = album
+            if lyric: audio['lyrics'] = lyric
+            audio.save()
+        elif extension in ('.m4a', '.mp4'):
+            audio = MP4(file_path)
+            audio['\xa9nam'] = [name]
+            audio['\xa9ART'] = [artist]
+            audio['\xa9alb'] = [album]
+            if lyric: audio['\xa9lyr'] = [lyric]
+            audio.save()
+    except Exception as e:
+        logger.warning(f"写入 metadata 失败 ({extension}): {e}")
+
+
+def _safe_remove(path: str):
+    """安全删除文件（忽略错误）"""
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def _build_filename(artist: str, name: str, extension: str, filename_format: str = 'song-artist') -> str:
+    """根据文件命名格式构造文件名
+
+    filename_format: 'song-artist' (默认) | 'artist-song' | 'song'
+    """
+    if filename_format == 'artist-song':
+        return f"{artist} - {name}{extension}" if artist else f"{name}{extension}"
+    elif filename_format == 'song':
+        return f"{name}{extension}"
+    else:  # 'song-artist'
+        return f"{name} - {artist}{extension}" if artist else f"{name}{extension}"
+
+
+@music_bp.route('/download', methods=['GET'])
+def download_proxy():
+    """代理下载单曲（解决 CORS，可选写入 metadata，临时文件自动清理）
+
+    参数：
+      - id: 歌曲 ID
+      - quality: 音质（默认 lossless）
+      - source: 平台（默认 netease）
+      - name: 歌曲名
+      - artist: 歌手
+      - album: 专辑
+      - lrc: 歌词（可选，用于 metadata）
+      - filenameFormat: song-artist / artist-song / song（默认 song-artist）
+      - writeMetadata: true/false（默认 true）
+    """
+    song_id = request.args.get('id', '').strip()
+    quality = request.args.get('quality', 'lossless').strip()
+    source = request.args.get('source', '').strip() or None
+    name = request.args.get('name', 'song')
+    artist = request.args.get('artist', '')
+    album = request.args.get('album', '')
+    lyric = request.args.get('lrc', '')
+    filename_format = request.args.get('filenameFormat', 'song-artist').strip()
+    write_metadata = request.args.get('writeMetadata', 'true').lower() != 'false'
+
+    if not song_id:
+        return jsonify(APIResponse.error("缺少歌曲 id 参数", 400))
+
+    try:
+        song_info = music_service.get_song_info(song_id, quality, source)
+    except Exception as e:
+        logger.error(f"获取歌曲信息失败: {e}")
+        return jsonify(APIResponse.error(f"获取歌曲信息失败: {str(e)}", 500))
+
+    url = song_info.get('url')
+    if not url:
+        return jsonify(APIResponse.error("无法获取歌曲下载链接（可能因版权问题不可用）", 404))
+
+    extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
+    if not extension.startswith('.'):
+        extension = '.' + extension
+    mime_type = EXT_MIME_TYPES.get(extension, 'audio/mpeg')
+
+    # 1. 下载到临时文件
+    fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-')
+    os.close(fd)
+    try:
+        resp = requests.get(url, stream=True, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
+        resp.raise_for_status()
+        with open(tmp_path, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    f.write(chunk)
+
+        # 2. 可选写 metadata
+        if write_metadata:
+            _write_metadata(
+                tmp_path, extension,
+                name or song_info.get('name', ''),
+                artist or song_info.get('artists', ''),
+                album or song_info.get('album', ''),
+                lyric or song_info.get('lyric', '')
+            )
+
+        # 3. 发送文件，响应关闭后清理临时文件
+        safe_name = _sanitize_filename(
+            _build_filename(artist or song_info.get('artists', ''),
+                            name or song_info.get('name', 'song'),
+                            extension, filename_format)
+        )
+        response = send_file(
+            tmp_path,
+            mimetype=mime_type,
+            as_attachment=True,
+            download_name=safe_name
+        )
+        response.call_on_close(lambda p=tmp_path: _safe_remove(p))
+        return response
+    except Exception as e:
+        _safe_remove(tmp_path)
+        logger.error(f"下载失败: {e}")
+        return jsonify(APIResponse.error(f"下载失败: {str(e)}", 500))
+
+
+# ==================== 批量下载（异步任务 + SSE 进度） ====================
+
+def _process_song(item: dict, settings: dict) -> dict | None:
+    """处理单首歌曲：下载音频 + 写 metadata + 返回结果
+
+    settings: {
+      writeMetadata, filenameFormat, downloadLrcFile
+    }
+    返回：{ 'tmp_path', 'arcname', 'lrc_content', 'name' } 或 None
+    """
+    song_id = item.get('id')
+    if not song_id:
+        return None
+
+    quality = item.get('quality', 'lossless')
+    source = item.get('source', '').strip() or None
+    name = item.get('name', 'song')
+    artist = item.get('artist', '')
+    album = item.get('album', '')
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            song_info = music_service.get_song_info(song_id, quality, source)
+            url = song_info.get('url')
+            if not url:
+                return None
+
+            extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
+            if not extension.startswith('.'):
+                extension = '.' + extension
+
+            fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-batch-')
+            os.close(fd)
+
+            try:
+                resp = requests.get(url, stream=True, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
+                resp.raise_for_status()
+                with open(tmp_path, 'wb') as f:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if chunk:
+                            f.write(chunk)
+            except Exception as e:
+                _safe_remove(tmp_path)
+                raise e
+
+            # 写 metadata
+            lyric = song_info.get('lyric', '') or ''
+            if settings.get('writeMetadata', True):
+                _write_metadata(
+                    tmp_path, extension,
+                    name or song_info.get('name', ''),
+                    artist or song_info.get('artists', ''),
+                    album or song_info.get('album', ''),
+                    lyric
+                )
+
+            arcname = _sanitize_filename(
+                _build_filename(artist or song_info.get('artists', ''),
+                                name or song_info.get('name', 'song'),
+                                extension,
+                                settings.get('filenameFormat', 'song-artist'))
+            )
+
+            result = {
+                'tmp_path': tmp_path,
+                'arcname': arcname,
+                'lrc_content': None,
+                'name': name
+            }
+
+            # 可选：下载 LRC 歌词文件
+            if settings.get('downloadLrcFile', False) and lyric:
+                result['lrc_content'] = lyric
+
+            return result
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(0.5 * (2 ** attempt))
+
+    logger.warning(f"批量下载: 重试 3 次仍失败 [{song_id}]: {last_error}")
+    return None
+
+
+def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
+    """后台批量下载任务（Phase 1 并发下载 → Phase 2 单线程打包）"""
+    with batch_tasks_lock:
+        task = batch_tasks.get(task_id)
+    if not task:
+        return
+
+    # Phase 1: 并发下载到临时目录（BATCH_MAX_WORKERS 线程）
+    completed_results: list[dict] = []
+    failed_items: list[dict] = []
+
+    with ThreadPoolExecutor(max_workers=BATCH_MAX_WORKERS) as executor:
+        future_to_item = {executor.submit(_process_song, item, settings): item for item in items}
+        for future in as_completed(future_to_item):
+            item = future_to_item[future]
+            try:
+                result = future.result()
+                if result:
+                    completed_results.append(result)
+                else:
+                    failed_items.append({
+                        'id': item.get('id'),
+                        'name': item.get('name', ''),
+                        'reason': '无法获取下载链接（可能因版权问题）'
+                    })
+            except Exception as e:
+                failed_items.append({
+                    'id': item.get('id'),
+                    'name': item.get('name', ''),
+                    'reason': str(e)
+                })
+
+            with batch_tasks_lock:
+                task['completed'] = len(completed_results)
+                task['failed'] = len(failed_items)
+                task['current'] = item.get('name', '')
+
+    # Phase 2: 单线程打包到磁盘 zip
+    fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
+    os.close(fd)
+
+    try:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            for result in completed_results:
+                # 1. 写入音频文件
+                zf.write(result['tmp_path'], result['arcname'])
+
+                # 2. 可选：写入 LRC 歌词文件
+                if result.get('lrc_content'):
+                    lrc_name = result['arcname'].rsplit('.', 1)[0] + '.lrc'
+                    zf.writestr(lrc_name, result['lrc_content'])
+
+        with batch_tasks_lock:
+            task['status'] = 'done'
+            task['zip_path'] = zip_path
+            task['errors'] = failed_items
+
+        # 启动延迟清理（10 分钟未下载则清理）
+        def _cleanup_task():
+            with batch_tasks_lock:
+                t = batch_tasks.pop(task_id, None)
+            if t:
+                _safe_remove(t.get('zip_path', ''))
+
+        timer = threading.Timer(BATCH_TASK_TTL, _cleanup_task)
+        timer.daemon = True
+        timer.start()
+    except Exception as e:
+        _safe_remove(zip_path)
+        for r in completed_results:
+            _safe_remove(r['tmp_path'])
+        with batch_tasks_lock:
+            task['status'] = 'error'
+            task['error'] = str(e)
+
+
+@music_bp.route('/download/batch/start', methods=['POST'])
+def download_batch_start():
+    """启动批量下载任务（异步处理，立即返回 task_id）
+
+    请求体：
+      {
+        "items": [{"id", "quality", "source", "name", "artist", "album"}, ...],
+        "name": "歌单名",
+        "settings": {
+          "writeMetadata": true,
+          "filenameFormat": "song-artist",
+          "downloadLrcFile": false
+        }
+      }
+    """
+    data = request.get_json(silent=True) or {}
+    items = data.get('items', [])
+    zip_name = _sanitize_filename(data.get('name', 'playlist') or 'playlist')
+    settings = data.get('settings', {})
+
+    if not items:
+        return jsonify(APIResponse.error("缺少 items 参数", 400))
+
+    task_id = f"task_{uuid.uuid4().hex[:16]}"
+    with batch_tasks_lock:
+        batch_tasks[task_id] = {
+            'status': 'running',
+            'total': len(items),
+            'completed': 0,
+            'failed': 0,
+            'current': '',
+            'zip_path': None,
+            'zip_name': zip_name,
+            'errors': []
+        }
+
+    thread = threading.Thread(target=_run_batch_task, args=(task_id, items, zip_name, settings))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify(APIResponse.success({'task_id': task_id, 'total': len(items)}, "任务已启动"))
+
+
+@music_bp.route('/download/batch/progress/<task_id>', methods=['GET'])
+def download_batch_progress(task_id):
+    """SSE 实时进度推送
+
+    事件流（每 0.3s 推一次）：
+      data: {"status":"running","total":38,"completed":15,"failed":1,"current":"歌名"}
+      data: {"status":"done","completed":35,"failed":3,"errors":[...]}
+    """
+    def generate():
+        last_data = None
+        while True:
+            with batch_tasks_lock:
+                task = batch_tasks.get(task_id)
+
+            if not task:
+                yield f"data: {json.dumps({'error': '任务不存在或已过期'})}\n\n"
+                break
+
+            data = {
+                'status': task['status'],
+                'total': task['total'],
+                'completed': task['completed'],
+                'failed': task['failed'],
+                'current': task['current']
+            }
+
+            if task['status'] == 'done':
+                data['errors'] = task.get('errors', [])
+                yield f"data: {json.dumps(data)}\n\n"
+                break
+            elif task['status'] == 'error':
+                data['error'] = task.get('error', '未知错误')
+                yield f"data: {json.dumps(data)}\n\n"
+                break
+            else:
+                data_str = json.dumps(data, sort_keys=True)
+                if data_str != last_data:
+                    yield f"data: {data_str}\n\n"
+                    last_data = data_str
+                time.sleep(0.3)
+
+    response = Response(generate(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'  # 禁用 nginx 缓冲
+    return response
+
+
+@music_bp.route('/download/batch/file/<task_id>', methods=['GET'])
+def download_batch_file(task_id):
+    """下载已打包好的 zip 文件"""
+    with batch_tasks_lock:
+        task = batch_tasks.get(task_id)
+
+    if not task:
+        return jsonify(APIResponse.error("任务不存在或已过期", 404))
+    if task['status'] != 'done':
+        return jsonify(APIResponse.error("任务未完成", 400))
+
+    zip_path = task.get('zip_path')
+    if not zip_path or not os.path.exists(zip_path):
+        return jsonify(APIResponse.error("文件不存在", 404))
+
+    response = send_file(
+        zip_path,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f"{task.get('zip_name', 'playlist')}.zip"
+    )
+
+    # 响应关闭后清理
+    def cleanup():
+        with batch_tasks_lock:
+            t = batch_tasks.pop(task_id, None)
+        if t:
+            _safe_remove(t.get('zip_path', ''))
+
+    response.call_on_close(cleanup)
+    return response
+
+
+@music_bp.route('/download/batch/status/<task_id>', methods=['GET'])
+def download_batch_status(task_id):
+    """查询任务状态（一次性查询，不订阅 SSE）"""
+    with batch_tasks_lock:
+        task = batch_tasks.get(task_id)
+    if not task:
+        return jsonify(APIResponse.error("任务不存在或已过期", 404))
+    return jsonify(APIResponse.success({
+        'status': task['status'],
+        'total': task['total'],
+        'completed': task['completed'],
+        'failed': task['failed'],
+        'current': task['current']
+    }, "查询成功"))
 
 
 @music_bp.route('/parse/url', methods=['POST'])

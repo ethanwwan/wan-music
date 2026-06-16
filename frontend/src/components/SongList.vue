@@ -221,8 +221,7 @@ import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
-import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
-import { embedMetadata } from '../services/metadataWriter.js'
+import { saveBlob } from '../utils/downloadHelper.js'
 import Pagination from './Pagination.vue'
 import { dataSources } from '../utils/dataSourceConfig.js'
 
@@ -462,76 +461,57 @@ const downloadSingle = async (track) => {
     message.warning(`《${track.name}》因版权问题暂时无法下载`)
     return
   }
-  
+
+  if (!track.id) {
+    message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
+    return
+  }
+
   parsingTrackId.value = track.id
   parsingType.value = 'download'
-  
+
   try {
     const qualityValue = settings.selectedQuality || 'lossless'
-    const writeMetadata = settings.writeMetadata !== false
-    const filenameFormat = settings.filenameFormat || 'song-artist'
+    const params = new URLSearchParams({
+      id: String(track.id),
+      quality: qualityValue,
+      source: track.source || '',
+      name: track.name || 'song',
+      artist: getArtist(track) || '',
+      album: getAlbum(track) || ''
+    })
 
-    if (!track.id) {
-      message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
-      return
-    }
-    const musicInfo = await parseMusicInfo(track.id, qualityValue, track.source)
-    
-    if (!musicInfo?.url) {
-      // 标记为不可用
-      markTrackUnavailable(track)
-      message.warning(`《${track.name}》因版权问题暂时无法下载`)
-      return
-    }
-    
-    const extension = musicInfo.fileExtension || '.mp3'
-    
-    const response = await fetch(musicInfo.url)
+    const response = await fetch(`/download?${params.toString()}`)
     if (!response.ok) {
-      throw new Error('下载失败')
-    }
-    
-    const audioBuffer = await response.arrayBuffer()
-    
-    let finalBuffer = audioBuffer
-    if (writeMetadata && (extension === '.mp3' || extension === '.flac')) {
-      const metadata = {
-        name: track.name,
-        artist: getArtist(track),
-        album: getAlbum(track),
-        lyrics: musicInfo.lrc || '',
-        cover: getCover(track)
-      }
+      let errMsg = '下载失败'
       try {
-        finalBuffer = await embedMetadata(audioBuffer, metadata, extension)
+        const err = await response.json()
+        errMsg = err.message || errMsg
       } catch {}
+      throw new Error(errMsg)
     }
-    
-    const artist = getArtist(track)
-    const trackName = track.name
-    let filename
-    if (filenameFormat === 'artist-song') {
-      filename = sanitizeFilename(`${artist} - ${trackName}${extension}`)
-    } else if (filenameFormat === 'song') {
-      filename = sanitizeFilename(`${trackName}${extension}`)
-    } else {
-      filename = sanitizeFilename(`${trackName} - ${artist}${extension}`)
-    }
-    
-    const mimeTypes = {
-      '.mp3': 'audio/mpeg',
-      '.flac': 'audio/flac',
-      '.m4a': 'audio/mp4'
-    }
-    const mimeType = mimeTypes[extension] || 'audio/mpeg'
-    
-    const blob = new Blob([finalBuffer], { type: mimeType })
-    saveBlob(blob, filename)
 
+    // 从 Content-Disposition 提取文件名
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+    const asciiMatch = disposition.match(/filename="?([^";]+)"?/i)
+    let filename = ''
+    if (utf8Match) {
+      filename = decodeURIComponent(utf8Match[1])
+    } else if (asciiMatch) {
+      filename = asciiMatch[1]
+    }
+    if (!filename) {
+      const ext = (disposition.match(/\.([a-z0-9]+)['"]?$/i) || [])[1] || 'mp3'
+      filename = `${track.name}.${ext}`
+    }
+
+    const blob = await response.blob()
+    saveBlob(blob, filename)
     message.success(`已下载：${track.name}`)
   } catch (error) {
     const errorMsg = error?.message || String(error) || '未知错误'
-    if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲')) {
+    if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲') || errorMsg.includes('版权')) {
       markTrackUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法下载`)
     } else {
@@ -551,68 +531,41 @@ const handleBatchDownload = async () => {
   }
 
   try {
-    const availableTracks = props.items.filter(track => !track.unavailable)
-    const unavailableCount = props.items.length - availableTracks.length
-    
-    if (availableTracks.length === 0) {
-      message.warning('所有歌曲都因版权问题无法下载')
-      return
-    }
-    
     downloadProgress.value = {
       isDownloading: true,
       percentage: 0,
       status: '',
       currentSong: '',
-      total: availableTracks.length,
+      total: props.items.length,
       completed: 0,
       failed: 0
     }
 
-    let messageText = `开始批量下载 ${availableTracks.length} 首歌曲...`
-    if (unavailableCount > 0) {
-      messageText += `（${unavailableCount} 首因版权问题跳过）`
-    }
-    message.info(messageText)
+    message.info(`开始批量下载 ${props.items.length} 首歌曲...`)
 
-    const musicList = []
-    for (const track of availableTracks) {
-      try {
-        if (!track.id) {
-          console.warn(`歌曲 ${track.name} 缺少ID，跳过`)
-          continue
-        }
-        const quality = settings.selectedQuality || 'lossless'
-        const musicInfo = await parseMusicInfo(track.id, quality, track.source)
-        if (musicInfo && musicInfo.url) {
-          musicList.push({
-            id: track.id,
-            name: track.name,
-            artist: getArtist(track),
-            album: getAlbum(track),
-            url: musicInfo.url,
-            cover: getCover(track),
-            lrc: musicInfo.lrc || '',
-            fileExtension: musicInfo.fileExtension || '.mp3'
-          })
-        }
-      } catch (err) {
-        console.error(`解析歌曲失败: ${track.name} - ${getArtist(track)}`, err)
-      }
-    }
+    // 不做过滤：所有歌曲都尝试，后端自动跳过无版权的
+    const musicList = props.items
+      .filter(t => t.id)
+      .map(track => ({
+        id: track.id,
+        name: track.name,
+        artist: getArtist(track),
+        album: getAlbum(track),
+        source: track.source || ''
+      }))
 
     if (musicList.length === 0) {
-      throw new Error('没有成功解析的歌曲')
+      throw new Error('没有可下载的歌曲（缺少ID）')
     }
 
     const result = await batchDownloadMusic(
       musicList,
       props.detailInfo?.name || '',
       {
-        filenameFormat: settings.filenameFormat || 'artist-song',
+        selectedQuality: settings.selectedQuality || 'lossless',
+        filenameFormat: settings.filenameFormat || 'song-artist',
         writeMetadata: settings.writeMetadata !== false,
-        downloadLrcFile: settings.downloadLrcFile !== false,
-        selectedQuality: settings.selectedQuality || 'lossless'
+        downloadLrcFile: settings.downloadLrcFile === true
       },
       (progress) => {
         downloadProgress.value.percentage = progress.percentage
@@ -624,13 +577,14 @@ const handleBatchDownload = async () => {
     )
 
     downloadProgress.value.isDownloading = false
-    downloadProgress.value.status = result.failed === 0 ? 'success' : 'warning'
+    downloadProgress.value.status = (result.failed === 0 || result.completed > 0) ? 'success' : 'warning'
     downloadProgress.value.percentage = 100
 
-    if (result.failed === 0) {
-      message.success(`批量下载完成！共下载 ${result.completed} 首歌曲`)
+    if (result.completed > 0) {
+      const errorText = result.errors?.length > 0 ? `\n失败：${result.errors.slice(0, 3).map(e => e.name).join('、')}${result.errors.length > 3 ? '...' : ''}` : ''
+      message.success(`批量下载完成！共下载 ${result.completed} 首${result.failed > 0 ? `，${result.failed} 首失败` : ''}${errorText}`)
     } else {
-      message.warning(`下载完成！成功 ${result.completed} 首，失败 ${result.failed} 首`)
+      message.error('所有歌曲都下载失败')
     }
 
   } catch (error) {
