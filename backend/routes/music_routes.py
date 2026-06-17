@@ -102,6 +102,25 @@ def _safe_remove(path: str):
         pass
 
 
+# Flask 请求上下文清理钩子
+def _register_temp_file(tmp_path: str):
+    """注册临时文件到当前请求，请求结束后会自动清理"""
+    from flask import g
+    if not hasattr(g, '_temp_files'):
+        g._temp_files = set()
+    g._temp_files.add(tmp_path)
+
+
+@music_bp.teardown_request
+def _cleanup_temp_files(exception=None):
+    """请求结束时清理当前请求注册的临时文件"""
+    from flask import g
+    if hasattr(g, '_temp_files'):
+        for path in list(g._temp_files):
+            _safe_remove(path)
+        g._temp_files.clear()
+
+
 def _build_filename(artist: str, name: str, extension: str, filename_format: str = 'song-artist') -> str:
     """根据文件命名格式构造文件名
 
@@ -113,6 +132,30 @@ def _build_filename(artist: str, name: str, extension: str, filename_format: str
         return f"{name}{extension}"
     else:  # 'song-artist'
         return f"{name} - {artist}{extension}" if artist else f"{name}{extension}"
+
+
+def _build_content_disposition(filename: str) -> str:
+    """构造 Content-Disposition 头（兼容 UTF-8 和 ASCII）
+    - 主用 filename*=UTF-8''...（现代浏览器都支持，保留中文）
+    - 兼容老浏览器用 ASCII fallback（仅保留 ASCII 可打印部分，合并多余空白）
+    """
+    from urllib.parse import quote
+    try:
+        filename.encode('ascii')
+        return f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        # 分离扩展名
+        m = re.search(r'(\.[A-Za-z0-9]+)$', filename)
+        ext = m.group(1) if m else ''
+        name_no_ext = filename[:m.start()] if m else filename
+        # 提取 ASCII 可打印部分
+        ascii_part = re.sub(r'[^\x20-\x7e]', '', name_no_ext).strip()
+        ascii_part = re.sub(r'\s+', ' ', ascii_part)
+        if len(ascii_part) > 80:
+            ascii_part = ascii_part[:80]
+        ascii_fallback = (ascii_part or 'download') + ext
+        quoted = quote(filename, safe="!#$&+-.^_`|~")
+        return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quoted}"
 
 
 @music_bp.route('/download', methods=['GET'])
@@ -141,17 +184,17 @@ def download_proxy():
     write_metadata = request.args.get('writeMetadata', 'true').lower() != 'false'
 
     if not song_id:
-        return jsonify(APIResponse.error("缺少歌曲 id 参数", 400))
+        return APIResponse.json_error("缺少歌曲 id 参数", 400)
 
     try:
         song_info = music_service.get_song_info(song_id, quality, source)
     except Exception as e:
         logger.error(f"获取歌曲信息失败: {e}")
-        return jsonify(APIResponse.error(f"获取歌曲信息失败: {str(e)}", 500))
+        return APIResponse.json_error(f"获取歌曲信息失败: {str(e)}", 500)
 
     url = song_info.get('url')
     if not url:
-        return jsonify(APIResponse.error("无法获取歌曲下载链接（可能因版权问题不可用）", 404))
+        return APIResponse.json_error("无法获取歌曲下载链接（可能因版权问题不可用）", 404)
 
     extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
     if not extension.startswith('.'):
@@ -161,6 +204,7 @@ def download_proxy():
     # 1. 下载到临时文件
     fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-')
     os.close(fd)
+    _register_temp_file(tmp_path)
     try:
         resp = requests.get(url, stream=True, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
         resp.raise_for_status()
@@ -179,24 +223,30 @@ def download_proxy():
                 lyric or song_info.get('lyric', '')
             )
 
-        # 3. 发送文件，响应关闭后清理临时文件
+        # 3. 发送文件：先读取文件到内存，再通过 Response 返回
+        # 避免 send_file 内部流式读取与文件删除的时序问题
+        # 确保 Content-Length 精确匹配实际文件大小
+        with open(tmp_path, 'rb') as f:
+            file_data = f.read()
+        file_size = len(file_data)
+        logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
+
         safe_name = _sanitize_filename(
             _build_filename(artist or song_info.get('artists', ''),
                             name or song_info.get('name', 'song'),
                             extension, filename_format)
         )
-        response = send_file(
-            tmp_path,
-            mimetype=mime_type,
-            as_attachment=True,
-            download_name=safe_name
-        )
-        response.call_on_close(lambda p=tmp_path: _safe_remove(p))
-        return response
+        logger.info(f"准备发送: filename={safe_name}, size={file_size}")
+        return Response(file_data, status=200, headers={
+            'Content-Type': mime_type,
+            'Content-Disposition': _build_content_disposition(safe_name),
+            'Content-Length': str(file_size),
+            'Accept-Ranges': 'none',
+        })
     except Exception as e:
         _safe_remove(tmp_path)
         logger.error(f"下载失败: {e}")
-        return jsonify(APIResponse.error(f"下载失败: {str(e)}", 500))
+        return APIResponse.json_error(f"下载失败: {str(e)}", 500)
 
 
 # ==================== 批量下载（异步任务 + SSE 进度） ====================

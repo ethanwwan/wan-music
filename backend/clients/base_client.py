@@ -86,7 +86,7 @@ class BaseMusicClient(ABC):
         logger.error(f"[{self.platform_name}] {context} 错误: {error}")
     
     @abstractmethod
-    def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲
         
         Args:

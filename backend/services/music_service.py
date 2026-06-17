@@ -16,7 +16,7 @@ class MusicService:
     def __init__(self):
         self.music_client = music_client
 
-    def search_songs(self, keyword: str, platform: str = None, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_songs(self, keyword: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         try:
             return search_music(keyword, platform, limit)

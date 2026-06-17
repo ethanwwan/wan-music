@@ -28,7 +28,7 @@ def search():
         keyword = data.get('keyword', '').strip()
         search_type = int(data.get('type', 0))
         platform = data.get('source')
-        limit = data.get('limit', 20)
+        limit = data.get('limit', 50)
 
         logger.info(f"[搜索请求] keyword={keyword!r}, type={search_type}, source={platform}, limit={limit}")
 

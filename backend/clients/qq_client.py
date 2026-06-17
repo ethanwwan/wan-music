@@ -82,7 +82,7 @@ class QQClient(BaseMusicClient):
                 return default
         return result
     
-    def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲 - 使用musicdl风格的POST请求"""
         logger.info(f"[QQ] 搜索开始: keyword={keyword}, limit={limit}, offset={offset}")
         url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
@@ -145,7 +145,7 @@ class QQClient(BaseMusicClient):
         
         return self._search_fallback(keyword, limit, offset)
     
-    def _search_fallback(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def _search_fallback(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """备用搜索方式"""
         url = f"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?ct=24&qqmusic_ver=1298&new_json=1&remoteplace=txt.yqq.song&t=0&aggr=1&cr=1&catZhida=1&lossless=0&flag_qc=0&p={offset // limit + 1}&n={limit}&w={urllib.parse.quote(keyword)}&format=json"
         
@@ -282,35 +282,97 @@ class QQClient(BaseMusicClient):
         return self._get_song_url_official(song_id, quality)
     
     def _get_song_url_official(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
-        """使用官方API获取歌曲URL（需要vkey）"""
+        """使用 QQ 官方 vkey API 获取歌曲URL
+        参考 https://github.com/Suxiaoqinx/qqmusic_flac 的 fileConfig + GetVkeyServer
+
+        QQ音乐文件命名规则：{prefix}{songmid}{songmid}{ext}
+        - M500 + .mp3 = 128kbps MP3
+        - M800 + .mp3 = 320kbps MP3
+        - F000 + .flac = FLAC 无损
+        - AI00 + .flac = Master 母带
+        - SQ00 + .flac = Hi-Res
+        - C400-C800 + .m4a = AAC (低码率，存 m4a 容器)
+        """
+        # 音质到 (filename prefix, 文件后缀) 的映射
+        QQ_FILE_CONFIG = {
+            'jymaster': ('AI00', '.flac'),   # 母带
+            'dolby':    ('Q000', '.flac'),   # 杜比
+            'sky':      ('Q000', '.flac'),   # 沉浸环绕声
+            'hires':    ('SQ00', '.flac'),   # Hi-Res (24bit)
+            'jyeffect': ('SQ00', '.flac'),   # 高清臻音
+            'lossless': ('F000', '.flac'),   # FLAC 无损
+            'exhigh':   ('M800', '.mp3'),    # 320kbps MP3
+            'standard': ('M500', '.mp3'),    # 128kbps MP3
+        }
+        prefix, ext = QQ_FILE_CONFIG.get(quality, ('F000', '.flac'))
+        # 官方 filename 规则：prefix + songmid + songmid + ext
+        filename = f"{prefix}{song_id}{song_id}{ext}"
+
         try:
-            filename = f"C400{song_id}.m4a"
-            url = "https://c.y.qq.com/base/fcgi-bin/fcg_music_express_mobile3.fcg"
-            params = {
-                'format': 'json',
-                'cid': '205361747',
-                'uin': '0',
-                'songmid': song_id,
-                'filename': filename,
-                'guid': self.guid
-            }
-            
-            data = self._get(url, params=params)
-            items = data.get('data', {}).get('items', [])
-            
-            if items:
-                vkey = items[0].get('vkey', '')
-                if vkey:
-                    audio_url = f"http://dl.stream.qqmusic.qq.com/{filename}?vkey={vkey}&guid={self.guid}&uin=0&fromtag=66"
-                    return {
-                        'url': audio_url,
-                        'quality': quality,
-                        'song_id': song_id,
-                        'source': 'qq'
+            # 使用新的 musicu.fcg GetVkeyServer API（参考 Suxiaoqinx/qqmusic_flac）
+            url = 'https://u.y.qq.com/cgi-bin/musicu.fcg'
+            req_data = {
+                "req_1": {
+                    "module": "vkey.GetVkeyServer",
+                    "method": "CgiGetVkey",
+                    "param": {
+                        "filename": [filename],
+                        "guid": self.guid,
+                        "songmid": [song_id],
+                        "songtype": [0],
+                        "uin": "0",
+                        "loginflag": 1,
+                        "platform": "20"
                     }
+                },
+                "loginUin": "0",
+                "comm": {
+                    "uin": "0",
+                    "format": "json",
+                    "ct": 24,
+                    "cv": 0
+                }
+            }
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+                'Referer': 'https://y.qq.com/',
+                'Origin': 'https://y.qq.com/',
+                'Content-Type': 'application/json; charset=utf-8',
+            }
+            if self.cookie:
+                headers['Cookie'] = self.cookie
+
+            resp = self.session.post(url, data=json.dumps(req_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                                     headers=headers, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+            req1 = data.get('req_1', {}).get('data', {})
+            midurlinfo = req1.get('midurlinfo', [])
+            sip = req1.get('sip', [])
+
+            if midurlinfo and midurlinfo[0].get('purl') and sip:
+                purl = midurlinfo[0]['purl']
+                # 优先用 https 的 sip，否则用 http
+                base_sip = ''
+                for s in sip:
+                    if s.startswith('https://'):
+                        base_sip = s
+                        break
+                if not base_sip:
+                    base_sip = sip[1] if len(sip) > 1 else sip[0]
+                audio_url = f"{base_sip}{purl}".replace('http://', 'https://')
+                logger.info(f"[{self.platform_name}] 官方音质 {quality} → {filename}, url长度={len(audio_url)}")
+                return {
+                    'url': audio_url,
+                    'quality': quality,
+                    'song_id': song_id,
+                    'source': 'qq',
+                    'fileType': ext.lstrip('.')
+                }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] 官方API获取歌曲URL失败: {e}")
-        
+
         return {}
     
     def get_song_info(self, song_id: str) -> Dict[str, Any]:

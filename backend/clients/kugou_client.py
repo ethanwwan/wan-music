@@ -31,7 +31,7 @@ class KugouClient(BaseMusicClient):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
         })
     
-    def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         from urllib.parse import urlencode
         

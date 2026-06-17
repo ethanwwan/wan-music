@@ -595,7 +595,7 @@ export const unifiedSearch = async (keyword, type = 0, sources = ['netease']) =>
     const cached = getCachedSearchResult('unified', cacheKey)
     if (cached) return { success: true, data: cached, fromCache: true }
 
-    const requestData = { keyword, type, limit: 60 }
+    const requestData = { keyword, type, limit: 50 }
     if (sources.length === 1) requestData.source = sources[0]
 
     const result = await postJson('/search', requestData)

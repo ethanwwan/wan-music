@@ -75,7 +75,7 @@ class BodianClient(BaseMusicClient):
             seed += hashlib.md5(f"{body_text}kuwotest".encode("utf-8")).hexdigest()
         return hashlib.md5(f"{seed}{path}".encode("utf-8")).hexdigest()
     
-    def search(self, keyword: str, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         params = {
             "pn": str(offset),

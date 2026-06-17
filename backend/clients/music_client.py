@@ -108,7 +108,7 @@ class MusicClient:
         
         return client
     
-    def search(self, keyword: str, platform: str = None, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, platform: str = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
         client = self._get_client(platform)
         return client.search(keyword, limit, offset)
@@ -145,7 +145,7 @@ music_client = MusicClient()
 
 # ==================== 向后兼容的函数接口 ====================
 
-def search_music(keywords: str, platform: str = None, limit: int = 10) -> List[Dict[str, Any]]:
+def search_music(keywords: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
     """搜索音乐（向后兼容）"""
     return music_client.search(keywords, platform, limit=limit)
 

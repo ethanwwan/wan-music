@@ -2,26 +2,8 @@ import { ref } from 'vue'
 
 const isDark = ref(false)
 
-/** 主题色配置 */
-export const themeColors = {
-  'blue': '#0057c2',
-  'red': '#e53935',
-  'purple': '#8e24aa',
-  'green': '#43a047',
-  'orange': '#fb8c00',
-  'cyan': '#00acc1'
-}
-
-/** 默认主题色 */
-export const DEFAULT_THEME_COLOR = themeColors.blue
-
-const getCustomThemeColor = () => {
-  const saved = localStorage.getItem('themeColor')
-  if (saved && themeColors[saved]) {
-    return themeColors[saved]
-  }
-  return DEFAULT_THEME_COLOR
-}
+/** 默认主题色：蓝色 #0057c2 */
+export const DEFAULT_THEME_COLOR = '#0057c2'
 
 const hexToRgb = (hex) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
@@ -34,15 +16,16 @@ const hexToRgb = (hex) => {
 
 export const applyTheme = () => {
   if (typeof document === 'undefined') return
-  
+
   const root = document.documentElement
-  const customColor = getCustomThemeColor()
-  
-  root.style.setProperty('--color-primary', customColor)
-  root.style.setProperty('--color-primary-hover', customColor)
-  root.style.setProperty('--color-primary-light', `rgba(${hexToRgb(customColor).r}, ${hexToRgb(customColor).g}, ${hexToRgb(customColor).b}, 0.1)`)
-  root.style.setProperty('--color-primary-dim', customColor)
-  
+  const color = DEFAULT_THEME_COLOR
+  const { r, g, b } = hexToRgb(color)
+
+  root.style.setProperty('--color-primary', color)
+  root.style.setProperty('--color-primary-hover', color)
+  root.style.setProperty('--color-primary-light', `rgba(${r}, ${g}, ${b}, 0.1)`)
+  root.style.setProperty('--color-primary-dim', color)
+
   root.style.setProperty('--color-surface', '#f9f9f9')
   root.style.setProperty('--color-surface-white', '#ffffff')
   root.style.setProperty('--color-surface-variant', '#e2e2e2')
@@ -52,20 +35,20 @@ export const applyTheme = () => {
   root.style.setProperty('--color-surface-dim', '#dadada')
   root.style.setProperty('--color-surface-white-rgb', '255, 255, 255')
   root.style.setProperty('--color-surface-dark-rgb', '30, 30, 30')
-  
+
   root.style.setProperty('--color-on-surface', '#1b1b1b')
   root.style.setProperty('--color-on-surface-variant', '#414755')
   root.style.setProperty('--color-secondary', '#5d5f5f')
   root.style.setProperty('--color-text-muted', '#595959')
   root.style.setProperty('--color-outline', '#727786')
-  
+
   root.style.setProperty('--color-border-subtle', '#e5e5e5')
   root.style.setProperty('--color-outline-variant', '#c1c6d7')
-  
+
   root.style.setProperty('--color-background', '#f5f5f5')
-  root.style.setProperty('--color-notice-bg', `rgba(${hexToRgb(customColor).r}, ${hexToRgb(customColor).g}, ${hexToRgb(customColor).b}, 0.1)`)
-  root.style.setProperty('--color-notice-border', `rgba(${hexToRgb(customColor).r}, ${hexToRgb(customColor).g}, ${hexToRgb(customColor).b}, 0.3)`)
-  
+  root.style.setProperty('--color-notice-bg', `rgba(${r}, ${g}, ${b}, 0.1)`)
+  root.style.setProperty('--color-notice-border', `rgba(${r}, ${g}, ${b}, 0.3)`)
+
   root.style.setProperty('--app-bg', '#f0f2f5')
   root.style.setProperty('--app-header-bg', 'rgba(255, 255, 255, 0.95)')
   root.style.setProperty('--app-card-bg', '#FFFFFF')
@@ -74,23 +57,10 @@ export const applyTheme = () => {
   root.style.setProperty('--app-text-muted', '#999999')
   root.style.setProperty('--app-border-color', '#E8E8E8')
   root.style.setProperty('--app-shadow', '0 4px 16px rgba(0, 0, 0, 0.08)')
-  
+
   document.documentElement.classList.remove('dark')
 }
 
-export const setTheme = async (theme) => {
-  if (typeof theme === 'string' && themeColors[theme]) {
-    localStorage.setItem('themeColor', theme)
-    applyTheme()
-  }
-}
-
-export const toggleTheme = () => {
-  console.warn('toggleTheme is deprecated, use setTheme with color instead')
-}
-
-export const initThemeFromLocalStorage = () => {
-  applyTheme()
-}
+export const initThemeFromLocalStorage = applyTheme
 
 export { isDark }

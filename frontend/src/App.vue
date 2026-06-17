@@ -118,10 +118,10 @@ import SongList from './components/SongList.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'
-import { initThemeFromLocalStorage, themeColors, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
+import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { settings, loadSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults
+    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults, playlistInfo, albumInfo
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
@@ -152,23 +152,8 @@ const themeToken = reactive({
   colorPrimary: DEFAULT_THEME_COLOR,
 })
 
-// 从localStorage读取保存的主题色
-const getSavedThemeColor = () => {
-  const saved = localStorage.getItem('themeColor')
-  if (saved && themeColors[saved]) {
-    return themeColors[saved]
-  }
-  return DEFAULT_THEME_COLOR
-}
-
-// 监听主题色变化
-const handleStorageChange = (e) => {
-  if (e.key === 'themeColor') {
-    themeToken.colorPrimary = getSavedThemeColor()
-  }
-}
-
 // 判断输入类型 → 返回后端 type 参数
+// 0=全部(不再使用) | 1=只搜歌曲 | 2=只搜歌单
 const detectSearchType = (url) => {
   // 检查是否是歌曲链接
   if (musicApi.validateMusicUrl(url)) {
@@ -178,8 +163,8 @@ const detectSearchType = (url) => {
   if (musicApi.validatePlaylistUrl(url)) {
     return 2
   }
-  // 默认是keyword搜索
-  return 0
+  // 关键字搜索：默认只搜歌曲（点击歌单 tab 时再搜歌单）
+  return 1
 }
 
 // 判断输入类型（前端 UI 用）
@@ -232,9 +217,12 @@ const handlePageChange = (page) => {
 
 const handleSearchTypeChange = async (searchType) => {
   console.log('Search type changed to:', searchType)
-  console.log('musicUrl.value at artist tab switch:', musicUrl.value)
+  console.log('musicUrl.value at tab switch:', musicUrl.value)
   const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, searchType, currentSources.value)
+  // 将 SearchResult 的 tab key 转成后端 type
+  // 'search' → 1 (歌曲), 'playlist' → 2 (歌单)
+  const backendType = searchType === 'playlist' ? 2 : 1
+  await parseMusic(quality, 'search', currentSources.value, backendType)
 }
 
 // 处理歌曲播放 - 只播放当前点击的歌曲
@@ -302,20 +290,12 @@ onMounted(() => {
   loadSettings()
   initDeviceDetection()
   initThemeFromLocalStorage()
-  
-  // 初始化主题色
-  themeToken.colorPrimary = getSavedThemeColor()
-  
-  // 添加localStorage变化监听
-  window.addEventListener('storage', handleStorageChange)
+  themeToken.colorPrimary = DEFAULT_THEME_COLOR
 })
 
 onUnmounted(() => {
   cleanupDeviceDetection()
   cleanupTimer()
-  
-  // 移除localStorage变化监听
-  window.removeEventListener('storage', handleStorageChange)
 })
 </script>
 
