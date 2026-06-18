@@ -38,22 +38,25 @@ class QQClient(BaseMusicClient):
         self.platform_name = "QQ音乐"
         self.platform_id = "qq"
         self.cookie = self._load_cookie()
+        # 参考 https://github.com/Suxiaoqinx/qqmusic_flac 的 fileConfig
+        # 统一使用 Chrome 58 UA 和固定 guid '10000'，与参考项目保持一致
         self.default_search_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
             'Referer': 'https://y.qq.com/',
             'Origin': 'https://y.qq.com/',
         }
         self.default_parse_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
             'Referer': 'https://y.qq.com/',
             'Origin': 'https://y.qq.com/',
         }
         self.default_download_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
             'Referer': 'http://y.qq.com',
         }
         self.session.headers.update(self.default_search_headers)
-        self.guid = self._generate_guid()
+        # 参考项目使用固定 guid '10000'
+        self.guid = '10000'
     
     def _load_cookie(self) -> str:
         """加载cookie文件"""
@@ -228,88 +231,142 @@ class QQClient(BaseMusicClient):
         return []
     
     def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取歌曲播放/下载URL - 使用分层的第三方API"""
-        l1_apis = [
+        """获取歌曲播放/下载URL
+
+        策略：
+        1. 优先用官方 vkey API（需要 cookie，普通用户也能下到 EXhigh 320k M4A）
+        2. 失败时降级到第三方 API（保证至少能下到 M4A 256k）
+
+        注意：QQ 第三方 API（vkeys/xcvts/cyapi 等）通常都会返回 M4A 256k，
+        只有官方 API 配合 VIP cookie 才能下到 FLAC/Hi-Res/Master。
+        """
+        # 先尝试官方 API（用当前 cookie，普通用户通常能拿到 exhigh 320k M4A）
+        official = self._get_song_url_official(song_id, quality)
+        if official and official.get('url'):
+            return official
+
+        # 官方失败：降级到第三方 API（保证能下到 m4a 256k）
+        # 只试主流的几个第三方 API，避免等待太久
+        third_party_apis = [
             lambda sid: f"https://api.vkeys.cn/v2/music/tencent/geturl?mid={sid}&quality=3",
-            lambda sid: f"https://api.xcvts.cn/api/music/qq?apiKey=Nzg5OTMzNDRiOWJmMTEwNTY1NTU5OTAwOWNkYmEzZDI=&mid={sid}&type=HQ高品质",
-        ]
-        
-        l2_apis = [
             lambda sid: f"https://api.nki.pw/API/music_open_api.php?mid={sid}&apikey=MjhmZWNlOTI1NDM5YjA1Mjc5MmE5Nzk4OWM4NzBjZWQzODAzYTcxYzZiNTM0ZjcxZTVhNTMzMzhiMmQzMWVmOA==",
-            lambda sid: f"https://tang.api.s01s.cn/music_open_api.php?mid={sid}",
-        ]
-        
-        l3_apis = [
-            lambda sid: f"https://api.xunhuisi.store/API/QQMusic/Song.php?mid={sid}&type=json",
-            lambda sid: f"https://lpz.chatc.vip/apiqq.php?songmid={sid}&type=json&br=1",
             lambda sid: f"https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&mid={sid}&quality=lossless",
         ]
-        
-        l4_apis = [
-            lambda sid: f"https://api.ygking.top/api/song/url?mid={sid}&quality=320",
-            lambda sid: f"https://lxmusicapi.onrender.com/url/tx/{sid}/320k",
-        ]
-        
-        all_apis = l1_apis + l2_apis + l3_apis + l4_apis
-        
-        for api_func in all_apis:
+
+        for api_func in third_party_apis:
             api_url = api_func(song_id)
             try:
-                resp = requests.get(api_url, headers=self.default_download_headers, timeout=10)
+                resp = requests.get(api_url, headers=self.default_download_headers, timeout=5)
                 try:
                     data = resp.json()
                 except:
                     continue
-                
+
                 download_url = self._safe_extract(data, ['data', 'url'], '') or \
                               data.get('url', '') or \
                               data.get('song_play_url', '') or \
                               data.get('song_play_url_hq', '') or \
                               data.get('music_url', '') or \
                               data.get('song_play_url_sq', '')
-                
+
                 if download_url and str(download_url).startswith('http'):
+                    # 从 URL 后缀推断文件类型
+                    dl_lower = str(download_url).lower()
+                    if '.flac' in dl_lower:
+                        file_type = 'flac'
+                    elif '.mp3' in dl_lower:
+                        file_type = 'mp3'
+                    elif '.m4a' in dl_lower or '.mp4' in dl_lower:
+                        file_type = 'm4a'
+                    elif '.ogg' in dl_lower:
+                        file_type = 'ogg'
+                    else:
+                        file_type = 'm4a'  # 兜底，QQ 大多数情况是 m4a 容器
+                    logger.info(f"[{self.platform_name}] 第三方API音质 → {download_url[:100]}, fileType={file_type}")
                     return {
                         'url': download_url,
                         'quality': quality,
                         'song_id': song_id,
-                        'source': 'qq'
+                        'source': 'qq',
+                        'fileType': file_type
                     }
             except Exception as e:
                 logger.debug(f"[{self.platform_name}] 尝试API失败 {api_url}: {e}")
                 continue
-        
-        return self._get_song_url_official(song_id, quality)
+
+        # 第三方也全部失败：返回空（前端会提示下载失败）
+        return {
+            'url': '',
+            'quality': quality,
+            'song_id': song_id,
+            'source': 'qq',
+            'fileType': 'm4a',
+            'error': 'QQ音乐所有渠道均无法获取此歌曲，请尝试其他平台或单曲'
+        }
     
     def _get_song_url_official(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
         """使用 QQ 官方 vkey API 获取歌曲URL
-        参考 https://github.com/Suxiaoqinx/qqmusic_flac 的 fileConfig + GetVkeyServer
+        完全参考 https://github.com/Suxiaoqinx/qqmusic_flac/blob/main/qqapi.js
 
-        QQ音乐文件命名规则：{prefix}{songmid}{songmid}{ext}
-        - M500 + .mp3 = 128kbps MP3
-        - M800 + .mp3 = 320kbps MP3
+        QQ音乐 fileConfig 命名规则：{prefix}{songmid}{songmid}{ext}
+        - M500/M800 + .mp3 = MP3 128k/320k
         - F000 + .flac = FLAC 无损
         - AI00 + .flac = Master 母带
         - SQ00 + .flac = Hi-Res
-        - C400-C800 + .m4a = AAC (低码率，存 m4a 容器)
+        - Q000/Q001 + .flac = Atmos 2.0/5.1
+        - O400-O801 + .ogg = OGG 96k~640k
+        - C100-C800 + .m4a = AAC 24k~320k (m4a 容器)
+        - RS01 + .flac = Dolby Atmos
         """
-        # 音质到 (filename prefix, 文件后缀) 的映射
+        # 完整对照参考项目的 fileConfig
         QQ_FILE_CONFIG = {
-            'jymaster': ('AI00', '.flac'),   # 母带
-            'dolby':    ('Q000', '.flac'),   # 杜比
-            'sky':      ('Q000', '.flac'),   # 沉浸环绕声
-            'hires':    ('SQ00', '.flac'),   # Hi-Res (24bit)
-            'jyeffect': ('SQ00', '.flac'),   # 高清臻音
-            'lossless': ('F000', '.flac'),   # FLAC 无损
-            'exhigh':   ('M800', '.mp3'),    # 320kbps MP3
-            'standard': ('M500', '.mp3'),    # 128kbps MP3
+            # 极高 / 320k
+            'exhigh':    ('M800', '.mp3'),
+            '320':       ('M800', '.mp3'),
+            # 标准 / 128k
+            'standard':  ('M500', '.mp3'),
+            '128':       ('M500', '.mp3'),
+            # 无损 / FLAC
+            'lossless':  ('F000', '.flac'),
+            'flac':      ('F000', '.flac'),
+            # 母带
+            'jymaster':  ('AI00', '.flac'),
+            'master':    ('AI00', '.flac'),
+            # Hi-Res
+            'hires':     ('SQ00', '.flac'),
+            'jyeffect':  ('SQ00', '.flac'),
+            # 杜比全景声（注意：参考项目是 RS01）
+            'dolby':     ('RS01', '.flac'),
+            # 沉浸环绕声（参考项目用 Q001 = Atmos 5.1）
+            'sky':       ('Q001', '.flac'),
+            # Atmos 2.0
+            'atmos_2':   ('Q000', '.flac'),
+            # Atmos 5.1
+            'atmos_51':  ('Q001', '.flac'),
+            # OGG 系列
+            'ogg_640':   ('O801', '.ogg'),
+            'ogg_320':   ('O800', '.ogg'),
+            'ogg_192':   ('O600', '.ogg'),
+            'ogg_96':    ('O400', '.ogg'),
+            # AAC 系列
+            'aac_320':   ('C800', '.m4a'),
+            'aac_256':   ('C700', '.m4a'),
+            'aac_192':   ('C600', '.m4a'),
+            'aac_128':   ('C500', '.m4a'),
+            'aac_96':    ('C400', '.m4a'),
+            'aac_64':    ('C300', '.m4a'),
+            'aac_48':    ('C200', '.m4a'),
+            'aac_24':    ('C100', '.m4a'),
+            # APE/DTS
+            'ape':       ('A000', '.ape'),
+            'dts':       ('D000', '.dts'),
         }
         prefix, ext = QQ_FILE_CONFIG.get(quality, ('F000', '.flac'))
         # 官方 filename 规则：prefix + songmid + songmid + ext
         filename = f"{prefix}{song_id}{song_id}{ext}"
 
         try:
-            # 使用新的 musicu.fcg GetVkeyServer API（参考 Suxiaoqinx/qqmusic_flac）
+            # 使用 musicu.fcg GetVkeyServer API（与参考项目完全一致）
             url = 'https://u.y.qq.com/cgi-bin/musicu.fcg'
             req_data = {
                 "req_1": {
@@ -333,11 +390,10 @@ class QQClient(BaseMusicClient):
                     "cv": 0
                 }
             }
+            # 完全照搬参考项目的 headers
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
                 'Referer': 'https://y.qq.com/',
-                'Origin': 'https://y.qq.com/',
-                'Content-Type': 'application/json; charset=utf-8',
             }
             if self.cookie:
                 headers['Cookie'] = self.cookie
@@ -353,18 +409,13 @@ class QQClient(BaseMusicClient):
 
             if midurlinfo and midurlinfo[0].get('purl') and sip:
                 purl = midurlinfo[0]['purl']
-                # 优先用 https 的 sip，否则用 http
-                base_sip = ''
-                for s in sip:
-                    if s.startswith('https://'):
-                        base_sip = s
-                        break
-                if not base_sip:
-                    base_sip = sip[1] if len(sip) > 1 else sip[0]
-                audio_url = f"{base_sip}{purl}".replace('http://', 'https://')
-                logger.info(f"[{self.platform_name}] 官方音质 {quality} → {filename}, url长度={len(audio_url)}")
+                # 完全照搬参考项目：sip[1] + purl，再替换 http 为 https
+                sip_index = 1 if len(sip) > 1 else 0
+                music_url = sip[sip_index] + purl
+                music_url = music_url.replace('http://', 'https://')
+                logger.info(f"[{self.platform_name}] 官方音质 {quality} → {filename}, url长度={len(music_url)}")
                 return {
-                    'url': audio_url,
+                    'url': music_url,
                     'quality': quality,
                     'song_id': song_id,
                     'source': 'qq',
