@@ -22,14 +22,13 @@
         />
 
         <!-- 搜索结果面板组件 -->
-        <SearchResult 
+        <SearchResult
           :key="searchResultKey"
           :songs="searchResults"
           :playlists="playlistSearchResults"
-          :albums="albumSearchResults"
-          :artists="artistSearchResults"
           :loading="loading"
           :search-type="currentSearchType"
+          :warnings="searchWarnings"
           @track-play="handlePlaySong"
           @search-type-change="handleSearchTypeChange"
         />
@@ -121,7 +120,7 @@ import musicApi from './services/musicApi.js'
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { settings, loadSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, albumSearchResults, artistSearchResults, playlistInfo, albumInfo
+    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, searchWarnings, playlistInfo
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'

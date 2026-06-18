@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasResults || currentDetail || hasSearchResults" class="search-result-panel">
+  <div v-if="hasResults || currentDetail || hasSearchResults || hasSearched" class="search-result-panel">
     <!-- 返回按钮（二级页面时显示） -->
     <div v-if="currentDetail" class="back-bar">
       <a-button 
@@ -11,8 +11,8 @@
       </a-button>
     </div>
 
-    <!-- 搜索类型Tab（搜索结果不为空时显示） -->
-    <div v-if="hasSearchResults && !currentDetail" class="search-tabs">
+    <!-- 搜索类型Tab（只要搜索过就显示，避免切歌单 tab 时 tabs 消失） -->
+    <div v-if="hasSearched && !currentDetail" class="search-tabs">
       <a-button
         v-for="tab in searchTabs"
         :key="tab.key"
@@ -57,40 +57,45 @@
       @page-change="goToPage"
     />
 
-    <!-- 一级页面：歌手列表 -->
+    <!-- 一级页面：歌曲列表 -->
     <SongList
-      v-show="displayMode === 'artist' && !currentDetail"
-      type="artist"
+      v-show="displayMode === 'search' && songs.length > 0"
+      type="search"
       :items="currentPageData"
-      @item-click="handleItemClick"
       @select="handleSelect"
     />
 
     <!-- 一级页面：歌单列表 -->
     <SongList
-      v-show="displayMode === 'playlist' && !currentDetail"
+      v-show="displayMode === 'playlist' && !currentDetail && playlists.length > 0"
       type="playlist"
       :items="currentPageData"
       @item-click="handleItemClick"
       @select="handleSelect"
     />
 
-    <!-- 一级页面：专辑列表 -->
-    <SongList
-      v-show="displayMode === 'album' && !currentDetail"
-      type="album"
-      :items="currentPageData"
-      @item-click="handleItemClick"
-      @select="handleSelect"
-    />
-
-    <!-- 分页组件（歌手、歌单和专辑搜索结果） - 只有超过1页时才显示 -->
-    <Pagination 
-      v-if="(displayMode === 'playlist' || displayMode === 'album' || displayMode === 'artist') && !currentDetail && totalPages > 1"
+    <!-- 分页组件（歌单搜索结果） - 只有超过1页时才显示 -->
+    <Pagination
+      v-if="displayMode === 'playlist' && !currentDetail && totalPages > 1"
       :total-count="totalCount"
       :page-size="getPageSize()"
       v-model="currentPage"
     />
+
+    <!-- 当前 tab 搜索结果为空时显示提示（避免页面空白白屏） -->
+    <div v-if="!loading && hasSearched && !currentDetail && isCurrentTabEmpty" class="empty-tab-hint">
+      <!-- 酷狗/波点歌单搜索：明确告知不支持 -->
+      <a-empty
+        v-if="displayMode === 'playlist' && isPlaylistSearchUnsupported"
+        description="该平台不支持歌单搜索，请粘贴歌单链接进行解析（网易云/QQ 音乐支持歌单搜索）"
+      >
+        <template #image>
+          <span style="font-size: 48px;">🚫</span>
+        </template>
+      </a-empty>
+      <!-- 普通空结果 -->
+      <a-empty v-else :description="`未找到相关${emptyTabName}`" />
+    </div>
   </div>
 </template>
 
@@ -111,14 +116,6 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  albums: {
-    type: Array,
-    default: () => []
-  },
-  artists: {
-    type: Array,
-    default: () => []
-  },
   loading: {
     type: Boolean,
     default: false
@@ -126,6 +123,10 @@ const props = defineProps({
   searchType: {
     type: String,
     default: 'keyword' // 'keyword' | 'music_link' | 'playlist_link'
+  },
+  warnings: {
+    type: Array,
+    default: () => [] // 后端搜索返回的警告列表，如 ['playlist_search_unsupported']
   }
 })
 
@@ -162,6 +163,24 @@ const getDefaultSearchType = () => {
 }// 当前搜索类型
 const currentSearchType = ref(getDefaultSearchType())
 
+// 是否已搜索过（用于控制空状态显示，避免页面完全空白）
+const hasSearched = ref(false)
+// 监听 props.songs / props.playlists 变化，搜索结束后置为 true
+watch(
+  [() => props.songs, () => props.playlists, () => props.loading],
+  ([songs, playlists, loading]) => {
+    // 只要 props.songs 或 props.playlists 数组长度>0，就说明搜过
+    if (songs.length > 0 || playlists.length > 0) {
+      hasSearched.value = true
+    }
+    // 搜索开始时（loading=true）也置为 true
+    if (loading) {
+      hasSearched.value = true
+    }
+  },
+  { deep: true, immediate: true }
+)
+
 // 二级页面状态
 const currentDetail = ref(null)
 const detailTracks = ref([])
@@ -173,12 +192,8 @@ const detailPageSize = ref(12)
 // 从 localStorage 加载缓存
 const loadDetailCache = () => {
   const storedPlaylist = localStorage.getItem('wan-music-playlist-cache')
-  const storedAlbum = localStorage.getItem('wan-music-album-cache')
-  const storedArtist = localStorage.getItem('wan-music-artist-cache')
   return {
-    playlist: storedPlaylist ? JSON.parse(storedPlaylist) : {},
-    album: storedAlbum ? JSON.parse(storedAlbum) : {},
-    artist: storedArtist ? JSON.parse(storedArtist) : {}
+    playlist: storedPlaylist ? JSON.parse(storedPlaylist) : {}
   }
 }
 
@@ -194,11 +209,7 @@ const cache = ref(loadDetailCache())
 const currentPage = ref(1)
 const pageSize = ref(12)
 
-// 歌手分页配置 - 每页4行，移动端每行2个(8个)，大屏每行4个(16个)
-const artistPageSize = ref(8)
-const artistPageSizeLarge = ref(16)
-
-// 歌单/专辑分页配置 - 每页3行
+// 歌单分页配置 - 每页3行
 const playlistPageSize = ref(6)           // 移动端：3行 × 2列 = 6个
 const playlistPageSizeLarge = ref(12)     // 大屏：3行 × 4列 = 12个
 
@@ -229,7 +240,7 @@ watch(
 )
 
 // 监听searchType变化，更新当前搜索类型
-watch(() => props.searchType, (newType) => {
+watch(() => props.searchType, () => {
   currentSearchType.value = getDefaultSearchType()
 })
 
@@ -238,12 +249,8 @@ const getTabCount = (tabKey) => {
   switch (tabKey) {
     case 'search':
       return props.songs.length
-    case 'artist':
-      return props.artists.length
     case 'playlist':
       return props.playlists.length
-    case 'album':
-      return props.albums.length
     default:
       return 0
   }
@@ -252,12 +259,8 @@ const getTabCount = (tabKey) => {
 // 根据displayMode获取对应的pageSize
 const getPageSize = () => {
   switch (displayMode.value) {
-    case 'artist':
-      // 歌手列表：每页4行，移动端每行2个(8个)，大屏每行4个(16个)
-      return window.innerWidth >= 768 ? artistPageSizeLarge.value : artistPageSize.value
     case 'playlist':
-    case 'album':
-      // 歌单/专辑列表：每页3行，移动端每行2个(6个)，大屏每行4个(12个)
+      // 歌单列表：每页3行，移动端每行2个(6个)，大屏每行4个(12个)
       return window.innerWidth >= 1280 ? playlistPageSizeLarge.value : playlistPageSize.value
     default:
       return pageSize.value
@@ -266,25 +269,34 @@ const getPageSize = () => {
 
 // 是否有搜索结果
 const hasSearchResults = computed(() => {
-  return props.songs.length > 0 || props.artists.length > 0 || props.playlists.length > 0 || props.albums.length > 0
+  return props.songs.length > 0 || props.playlists.length > 0
+})
+
+// 后端是否标记当前请求的歌单搜索平台不支持
+const isPlaylistSearchUnsupported = computed(() => {
+  return props.warnings?.includes('playlist_search_unsupported') || false
 })
 
 const displayMode = computed(() => {
   return currentSearchType.value
 })
 
-const title = computed(() => {
-  const titles = {
-    search: '单曲搜索结果',
-    artist: '歌手搜索结果',
-    playlist: '歌单搜索结果',
-    album: '专辑搜索结果'
-  }
-  return titles[displayMode.value] || '搜索结果'
-})
-
 const totalCount = computed(() => {
   return getTabCount(currentSearchType.value)
+})
+
+// 当前 tab 是否为空（避免页面空白白屏，给用户友好提示）
+const isCurrentTabEmpty = computed(() => {
+  return totalCount.value === 0
+})
+
+// 当前 tab 的名称（用于空状态文案）
+const emptyTabName = computed(() => {
+  const names = {
+    search: '歌曲',
+    playlist: '歌单'
+  }
+  return names[currentSearchType.value] || '结果'
 })
 
 // 分页计算
@@ -297,14 +309,10 @@ const currentPageData = computed(() => {
   const currentPageSize = getPageSize()
   const start = (currentPage.value - 1) * currentPageSize
   const end = start + currentPageSize
-  
+
   switch (currentSearchType.value) {
     case 'playlist':
       return props.playlists.slice(start, end)
-    case 'album':
-      return props.albums.slice(start, end)
-    case 'artist':
-      return props.artists.slice(start, end)
     default:
       return []
   }
@@ -374,14 +382,10 @@ const handleTrackUnavailable = (track) => {
   // 吐司提示已在 SongList 中处理
 }
 
-// 处理列表项点击（解析歌手/歌单/专辑）
+// 处理列表项点击（目前只支持歌单）
 const handleItemClick = async ({ item, action }) => {
-  if (action === 'artist') {
-    await handleParseArtist(item)
-  } else if (action === 'playlist') {
+  if (action === 'playlist') {
     await handleParsePlaylist(item)
-  } else if (action === 'album') {
-    await handleParseAlbum(item)
   }
 }
 
@@ -401,17 +405,17 @@ const handleParsePlaylist = async (item) => {
       loading: false
     }
     detailTracks.value = cached.tracks
-    
+
     notification.success({
       message: '使用缓存数据',
       description: `找到 ${detailTracks.value.length} 首歌曲`,
     })
     return
   }
-  
+
   try {
     const result = await musicApi.getPlaylistById(item.id, item.source || '')
-    
+
     if (result.success && result.data) {
       const playlist = result.data
       currentDetail.value = {
@@ -423,7 +427,7 @@ const handleParsePlaylist = async (item) => {
         loading: false
       }
       detailTracks.value = playlist.tracks || []
-      
+
       cache.value.playlist[item.id] = {
         id: playlist.id,
         name: playlist.name,
@@ -433,7 +437,7 @@ const handleParsePlaylist = async (item) => {
         tracks: detailTracks.value
       }
       saveDetailCache('playlist', cache.value.playlist)
-      
+
       if (detailTracks.value.length > 0) {
         notification.success({
           message: '解析成功',
@@ -441,174 +445,16 @@ const handleParsePlaylist = async (item) => {
         })
       }
     } else {
-      message.error(result.message || '解析失败')
-      currentDetail.value = null
-    }
-  } catch (error) {
-    message.error('解析失败，请稍后重试')
-    currentDetail.value = null
-  }
-}
-
-// 解析专辑
-const handleParseAlbum = async (item) => {
-  resetDetailPagination()
-  currentDetail.value = { ...item, loading: true, isAlbum: true }
-
-  if (settings.enableCache && cache.value.album[item.id]) {
-    const cached = cache.value.album[item.id]
-    currentDetail.value = {
-      id: cached.id,
-      name: cached.name,
-      coverImgUrl: cached.coverImgUrl,
-      artist: cached.artist,
-      creator: cached.artist,
-      trackCount: cached.trackCount,
-      loading: false,
-      isAlbum: true
-    }
-    detailTracks.value = cached.tracks
-    
-    notification.success({
-      message: '使用缓存数据',
-      description: `找到 ${detailTracks.value.length} 首歌曲`,
-    })
-    return
-  }
-  
-  try {
-    const response = await fetch('/album', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `id=${item.id}`
-    })
-    
-    const result = await response.json()
-    
-    if (result.success && result.data && result.data.album) {
-      const album = result.data.album
-      currentDetail.value = {
-        id: album.id,
-        name: album.name,
-        coverImgUrl: album.coverImgUrl,
-        artist: album.artist,
-        creator: album.artist,
-        trackCount: album.songs?.length || 0,
-        loading: false,
-        isAlbum: true
-      }
-      detailTracks.value = album.songs || []
-      
-      cache.value.album[item.id] = {
-        id: album.id,
-        name: album.name,
-        coverImgUrl: album.coverImgUrl,
-        artist: album.artist,
-        trackCount: detailTracks.value.length,
-        tracks: detailTracks.value
-      }
-      saveDetailCache('album', cache.value.album)
-      
-      if (detailTracks.value.length > 0) {
-        notification.success({
-          message: '解析成功',
-          description: `找到 ${detailTracks.value.length} 首歌曲`,
+      // 歌单加载失败：隐私歌单、歌单不存在、登录态失效等
+      const errorMsg = result.error || result.message || '解析失败'
+      if (result.errorType === 'privacy') {
+        message.warning({
+          content: `该歌单已设置隐私保护，无法查看（QQ音乐官方限制）`,
+          duration: 4
         })
+      } else {
+        message.error(errorMsg)
       }
-    } else {
-      message.error(result.message || '解析失败')
-      currentDetail.value = null
-    }
-  } catch (error) {
-    message.error('解析失败，请稍后重试')
-    currentDetail.value = null
-  }
-}
-
-// 解析歌手
-const handleParseArtist = async (item) => {
-  resetDetailPagination()
-
-  // 直接使用卡片中的歌手信息，避免API返回错误的歌手信息
-  currentDetail.value = {
-    id: item.id,
-    name: item.name,
-    coverImgUrl: item.avatarUrl || item.coverImgUrl,
-    artist: item.name,
-    creator: item.name,
-    trackCount: 0,
-    loading: true,
-    isArtist: true
-  }
-  
-  if (settings.enableCache && cache.value.artist[item.id]) {
-    const cached = cache.value.artist[item.id]
-    currentDetail.value = {
-      id: cached.id,
-      name: cached.name,
-      coverImgUrl: cached.avatarUrl || item.coverImgUrl,
-      artist: cached.name,
-      creator: cached.name,
-      trackCount: cached.trackCount,
-      loading: false,
-      isArtist: true
-    }
-    detailTracks.value = cached.tracks
-    
-    notification.success({
-      message: '使用缓存数据',
-      description: `找到 ${detailTracks.value.length} 首歌曲`,
-    })
-    return
-  }
-  
-  try {
-    const response = await fetch('/artist', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `id=${item.id}`
-    })
-    
-    const result = await response.json()
-    
-    if (result.success && result.data) {
-      const artistData = result.data.artist || result.data
-      
-      // 优先使用卡片中的歌手信息，避免API返回错误的歌手（如合唱歌曲的情况）
-      currentDetail.value = {
-        id: item.id,
-        name: item.name,
-        coverImgUrl: item.avatarUrl || item.coverImgUrl,
-        artist: item.name,
-        creator: item.name,
-        trackCount: artistData.songs?.length || artistData.musicCount || 0,
-        loading: false,
-        isArtist: true
-      }
-      detailTracks.value = artistData.songs || []
-      
-      cache.value.artist = cache.value.artist || {}
-      cache.value.artist[item.id] = {
-        id: artistData.id,
-        name: artistData.name || item.name,
-        avatarUrl: artistData.avatarUrl || artistData.picUrl || '',
-        trackCount: detailTracks.value.length,
-        tracks: detailTracks.value
-      }
-      saveDetailCache('artist', cache.value.artist)
-      
-      if (detailTracks.value.length > 0) {
-        notification.success({
-          message: '解析成功',
-          description: `找到 ${detailTracks.value.length} 首歌曲`,
-        })
-      }
-    } else {
-      message.error(result.message || '解析失败')
       currentDetail.value = null
     }
   } catch (error) {
@@ -632,6 +478,11 @@ const goBack = () => {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+}
+.empty-tab-hint {
+  padding: 48px 16px;
+  display: flex;
+  justify-content: center;
 }
 
 /* loading 状态 */

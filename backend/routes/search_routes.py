@@ -58,7 +58,10 @@ def search_playlist():
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
         result = music_service.search(keyword, 2, platform, limit)
-        return jsonify(APIResponse.success(result.get('data', []), "搜索成功"))
+        return jsonify(APIResponse.success({
+            'playlists': result.get('data', []),
+            'warnings': result.get('warnings', [])
+        }, "搜索成功"))
     except Exception as e:
         logger.error(f"搜索歌单失败: {e}")
         return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))

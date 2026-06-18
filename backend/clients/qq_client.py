@@ -7,6 +7,7 @@ https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/qq
 """
 
 import json
+import time
 import urllib.parse
 import logging
 import random
@@ -111,8 +112,12 @@ class QQClient(BaseMusicClient):
         
         try:
             logger.info(f"[QQ] 发送请求到: {url}")
-            resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 
-                                    headers=self.default_search_headers, timeout=10)
+            # 合并 headers：默认 headers + Cookie（Cookie 是登录鉴权关键，必须带）
+            req_headers = dict(self.default_search_headers)
+            if self.cookie:
+                req_headers['Cookie'] = self.cookie
+            resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                                    headers=req_headers, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             logger.info(f"[QQ] API响应状态码: {resp.status_code}")
@@ -183,9 +188,39 @@ class QQClient(BaseMusicClient):
         return []
     
     def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """搜索歌单"""
+        """搜索歌单 - 多重降级策略
+
+        1. 官方 API（u.y.qq.com）— 需要 cookie，偶尔会限流返回空
+        2. 第三方 API（cyapi.top）— 备用，绕过限流
+        3. 都失败返回 []
+        """
+        # ---- 第 1 次：官方 API，带重试 ----
+        for attempt in range(2):
+            try:
+                result = self._search_playlist_official(keyword, limit)
+                if result:
+                    return result
+                logger.warning(f"[{self.platform_name}] 歌单搜索官方 API 返回空 (尝试 {attempt + 1}/2)")
+            except Exception as e:
+                logger.warning(f"[{self.platform_name}] 歌单搜索官方 API 失败 (尝试 {attempt + 1}/2): {e}")
+            time.sleep(0.5)
+
+        # ---- 第 2 次：第三方 API ----
+        try:
+            result = self._search_playlist_fallback(keyword, limit)
+            if result:
+                logger.info(f"[{self.platform_name}] 歌单搜索走第三方 API 成功，返回 {len(result)} 个")
+                return result
+        except Exception as e:
+            logger.warning(f"[{self.platform_name}] 歌单搜索第三方 API 失败: {e}")
+
+        logger.error(f"[{self.platform_name}] 歌单搜索全部失败: keyword={keyword}")
+        return []
+
+    def _search_playlist_official(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """官方 API 搜歌单（u.y.qq.com）"""
         url = "https://u.y.qq.com/cgi-bin/musicu.fcg"
-        
+
         payload = {
             "music.search.SearchCgiService.DoSearchForQQMusicMobile": {
                 "method": "DoSearchForQQMusicMobile",
@@ -201,33 +236,61 @@ class QQClient(BaseMusicClient):
                 }
             }
         }
-        
+
+        # 合并 headers：默认 + Cookie（歌单搜索需要登录态才能拿到 user 自己的私人歌单）
+        req_headers = dict(self.default_search_headers)
+        if self.cookie:
+            req_headers['Cookie'] = self.cookie
+        resp = self.session.post(
+            url,
+            data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            headers=req_headers,
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        playlist_list = self._safe_extract(data, ['music.search.SearchCgiService.DoSearchForQQMusicMobile', 'data', 'body', 'item_songlist'], [])
+
+        playlists = []
+        for item in playlist_list:
+            cover_url = item.get('logo', '')
+
+            playlists.append({
+                'id': item.get('dissid', 0),
+                'name': strip_html_tags(item.get('dissname', '')),
+                'coverImgUrl': cover_url,
+                'description': strip_html_tags(item.get('description', '')),
+                'trackCount': item.get('songnum', 0),
+                'playCount': item.get('listennum', 0),
+                'source': 'qq'
+            })
+        return playlists
+
+    def _search_playlist_fallback(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """第三方 cyapi.top 搜歌单（备用）"""
+        url = f"https://cyapi.top/API/qq_music.php"
+        # cyapi 搜歌单的接口可能与搜歌不同，这里用通用搜索接口搜 type=playlist
         try:
-            resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 
-                                    headers=self.default_search_headers, timeout=10)
+            api_url = f"https://cyapi.top/API/qq_music.php?apikey=1ffdf5733f5d538760e63d7e46ba17438d9f7b9dfc18c51be1109386fd74c3a1&type=json&input={urllib.parse.quote(keyword)}&filter=playlist&num={limit}"
+            resp = self.session.get(api_url, timeout=10)
             resp.raise_for_status()
             data = resp.json()
-            
-            playlist_list = self._safe_extract(data, ['music.search.SearchCgiService.DoSearchForQQMusicMobile', 'data', 'body', 'item_songlist'], [])
-            
-            playlists = []
-            for item in playlist_list:
-                cover_url = item.get('logo', '')
-                
-                playlists.append({
-                    'id': item.get('dissid', 0),
-                    'name': strip_html_tags(item.get('dissname', '')),
-                    'coverImgUrl': cover_url,
-                    'description': strip_html_tags(item.get('description', '')),
-                    'trackCount': item.get('songnum', 0),
-                    'playCount': item.get('listennum', 0),
-                    'source': 'qq'
-                })
-            return playlists
+            if isinstance(data, dict) and data.get('data'):
+                playlists = []
+                for item in data.get('data', [])[:limit]:
+                    playlists.append({
+                        'id': item.get('id', item.get('tid', 0)),
+                        'name': item.get('name', item.get('title', '')),
+                        'coverImgUrl': item.get('cover', item.get('pic', '')),
+                        'description': item.get('desc', item.get('description', '')),
+                        'trackCount': item.get('count', item.get('songnum', 0)),
+                        'playCount': item.get('playCount', item.get('listennum', 0)),
+                        'source': 'qq'
+                    })
+                return playlists
         except Exception as e:
-            logger.debug(f"[{self.platform_name}] 搜索歌单失败: {e}")
-        
-        logger.error(f"[{self.platform_name}] 搜索歌单失败")
+            logger.debug(f"[{self.platform_name}] cyapi 歌单搜索失败: {e}")
         return []
     
     def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
@@ -402,10 +465,10 @@ class QQClient(BaseMusicClient):
                                      headers=headers, timeout=10)
             resp.raise_for_status()
             data = resp.json()
-
-            req1 = data.get('req_1', {}).get('data', {})
-            midurlinfo = req1.get('midurlinfo', [])
-            sip = req1.get('sip', [])
+            logger.info(f"[{self.platform_name}] 官方API resp keys: {list(data.keys())}, req_1 keys: {list(data.get('req_1', {}).keys())}")
+            midurlinfo = data.get('req_1', {}).get('data', {}).get('midurlinfo', [])
+            sip = data.get('req_1', {}).get('data', {}).get('sip', [])
+            logger.info(f"[{self.platform_name}] 官方API midurlinfo={midurlinfo}, sip={sip[:2] if sip else []}")
 
             if midurlinfo and midurlinfo[0].get('purl') and sip:
                 purl = midurlinfo[0]['purl']
@@ -480,7 +543,11 @@ class QQClient(BaseMusicClient):
         }
         
         try:
-            resp = self.session.get(url, params=params, headers={'Referer': 'https://y.qq.com/portal/player.html'}, timeout=10)
+            # 歌曲详情接口需要登录态才能看到 user 收藏、VIP 标识等信息
+            detail_headers = {'Referer': 'https://y.qq.com/portal/player.html'}
+            if self.cookie:
+                detail_headers['Cookie'] = self.cookie
+            resp = self.session.get(url, params=params, headers=detail_headers, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             
@@ -526,12 +593,21 @@ class QQClient(BaseMusicClient):
             resp = self.session.get(basic_url, params=basic_params, headers=headers, timeout=15)
             resp.raise_for_status()
             basic_data = resp.json()
-            
+
+            # 检测隐私保护错误（subcode=4000 = check privacy error）
+            subcode = basic_data.get('subcode', 0)
+            msg = basic_data.get('msg', '')
+            if subcode == 4000 or 'privacy' in msg.lower():
+                logger.warning(f"[{self.platform_name}] 歌单 {playlist_id} 设置了隐私保护: {msg}")
+                return {'__error__': 'privacy', '__message__': f'该歌单已设置隐私保护，无法查看（{msg}）'}
+
             cdlist = basic_data.get('cdlist', [])
             if not cdlist:
-                logger.warning(f"[{self.platform_name}] 歌单 {playlist_id} 返回为空，可能需要登录")
-                return {}
-            
+                logger.warning(f"[{self.platform_name}] 歌单 {playlist_id} 返回为空，code={basic_data.get('code')}, subcode={subcode}, msg={msg}")
+                if subcode and subcode != 0:
+                    return {'__error__': 'api_error', '__message__': f'QQ音乐API错误(subcode={subcode}): {msg}'}
+                return {'__error__': 'empty', '__message__': '歌单不存在或需要登录'}
+
             playlist_info = cdlist[0]
             total_songs = playlist_info.get('songnum', 0)
             songlist = playlist_info.get('songlist', [])
@@ -568,8 +644,12 @@ class QQClient(BaseMusicClient):
                                 }
                             }
                         }
+                        # 歌单分页也要带 cookie
+                        page_headers = dict(self.default_search_headers)
+                        if self.cookie:
+                            page_headers['Cookie'] = self.cookie
                         page_resp = self.session.post(url, data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-                                                headers=self.default_search_headers, timeout=10)
+                                                headers=page_headers, timeout=10)
                         if page_resp.status_code == 200:
                             page_data = page_resp.json()
                             track_list = self._safe_extract(page_data, ['playlist', 'data', 'track_list'], [])

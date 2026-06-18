@@ -129,8 +129,12 @@ const searchCache = {
   album: loadCacheFromStorage('album')
 }
 
+// 判断缓存是否有效：songs 或 playlists 任意一个有数据就算有效
+// 两者都为空视为"缓存数据为空"，调用方应该继续走网络接口
 const isCacheValid = (entry) => {
-  return entry && entry.data?.songs?.length > 0
+  if (!entry || !entry.data) return false
+  const { songs = [], playlists = [], albums = [], artists = [] } = entry.data
+  return songs.length > 0 || playlists.length > 0 || albums.length > 0 || artists.length > 0
 }
 
 const getCachedSearchResult = (type, keyword) => {
@@ -139,6 +143,8 @@ const getCachedSearchResult = (type, keyword) => {
   if (!cache) return null
   const cached = cache.get(keyword)
   if (isCacheValid(cached)) return cached.data
+  // 缓存数据为空（songs 和 playlists 都为空）— 视为无效，强制走网络
+  // 删掉空缓存，避免下次再走无意义的判断逻辑
   if (cached) {
     cache.delete(keyword)
     saveCacheToStorage(type, cache)
@@ -436,6 +442,17 @@ export const getPlaylistById = async (playlistId, source = '') => {
     }
 
     const playlist = result.data.playlist || result.data
+
+    // 后端可能返回带 __error__ 标记的"假数据"（如隐私歌单、歌单不存在等）
+    if (playlist && playlist.__error__) {
+      const errorMsg = playlist.__message__ || '该歌单无法获取'
+      return {
+        success: false,
+        error: errorMsg,
+        errorType: playlist.__error__  // 'privacy' | 'api_error' | 'empty'
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -478,6 +495,16 @@ export const getPlaylistDetail = async (url) => {
     }
 
     const playlist = result.data.playlist || result.data
+
+    // 后端可能返回带 __error__ 标记的"假数据"（如隐私歌单）
+    if (playlist && playlist.__error__) {
+      return {
+        success: false,
+        error: playlist.__message__ || '该歌单无法获取',
+        errorType: playlist.__error__  // 'privacy' | 'api_error' | 'empty'
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -556,8 +583,8 @@ export const unifiedSearch = async (keyword, type = 0, sources = ['netease']) =>
       return { success: false, error: result.message || '搜索失败' }
     }
 
-    // result.data = {type: 0/1/2, data: [...]}，每项带 _type
-    const { type: respType, data: items } = result.data
+    // result.data = {type: 0/1/2, data: [...], warnings: [...]}，每项带 _type
+    const { type: respType, data: items, warnings } = result.data
     const songs = []
     const playlists = []
     for (const item of items || []) {
@@ -568,7 +595,7 @@ export const unifiedSearch = async (keyword, type = 0, sources = ['netease']) =>
       }
     }
 
-    const searchData = { type: respType, songs, playlists }
+    const searchData = { type: respType, songs, playlists, warnings: warnings || [] }
     setCachedSearchResult('unified', cacheKey, searchData)
     return { success: true, data: searchData }
   } catch (error) {

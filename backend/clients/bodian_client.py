@@ -110,35 +110,17 @@ class BodianClient(BaseMusicClient):
             return []
     
     def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """搜索歌单"""
-        params = {
-            "pn": "0",
-            "rn": str(limit),
-            "keyword": keyword,
-            "type": "playlist"
-        }
-        
-        url = "https://bd-api.kuwo.cn/api/search/music/list?" + urlencode(params)
-        
-        try:
-            data = self._get(url)
-            
-            result_list = data.get('data', {}).get('resultList', [])
-            playlists = []
-            for item in result_list:
-                playlists.append({
-                    'id': item.get('id', 0),
-                    'name': item.get('name', ''),
-                    'coverImgUrl': item.get('cover', ''),
-                    'description': item.get('desc', ''),
-                    'trackCount': item.get('songNum', 0),
-                    'playCount': item.get('playCount', 0),
-                    'source': 'bodian'
-                })
-            return playlists
-        except Exception as e:
-            logger.error(f"[{self.platform_name}] 搜索歌单失败: {e}")
-            return []
+        """搜索歌单
+
+        注意：波点（底层酷我）music/list API 的 type=playlist 实际返回的是带 playlist tag 的歌曲，
+        而不是真正的歌单（id 是歌曲 ID，不是歌单 ID；没有 songNum/desc 字段）。
+
+        这里返回空列表，歌单搜索请使用网易云/QQ 音乐。
+        """
+        logger.warning(
+            f"[{self.platform_name}] 歌单搜索暂不支持：酷我 music/list API 不提供真正的歌单搜索接口"
+        )
+        return []
     
     def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""

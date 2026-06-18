@@ -195,7 +195,10 @@
               {{ getSourceInfo(item.source)?.name || item.source }}
             </span>
             <div :class="listType === 'playlist' ? 'playlist-overlay' : 'album-overlay'">
-              <span class="track-count">{{ item.trackCount }} 首</span>
+              <span class="track-count">
+                <template v-if="item.trackCount && item.trackCount > 0">{{ item.trackCount }} 首</template>
+                <template v-else>数量未知</template>
+              </span>
             </div>
           </div>
           <div :class="listType === 'playlist' ? 'playlist-info' : 'album-info'">

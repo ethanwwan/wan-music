@@ -102,6 +102,60 @@ def _detect_audio_type(file_path: str) -> Optional[str]:
         return None
 
 
+# MP3 bitrate index → kbps (MPEG1 Layer 3, sample rate 44100/48000/32000)
+# Layer3 其他 sample rate (22050/24000/16000) 同 index 不同 bitrate
+_MP3_BITRATE_TABLE_V1L3 = {
+    1: 32, 2: 40, 3: 48, 4: 56, 5: 64, 6: 80, 7: 96, 8: 112,
+    9: 128, 10: 160, 11: 192, 12: 224, 13: 256, 14: 320, 15: 0
+}
+
+
+def _detect_mp3_bitrate(file_path: str) -> Optional[int]:
+    """读取第一个 MP3 frame 的 bitrate (kbps)
+
+    返回 None 表示无法识别（不是 MP3 或格式异常）
+    """
+    import logging
+    try:
+        with open(file_path, 'rb') as f:
+            # 至少读 64KB 以确保 ID3v2 tag 后的 frame header 也能读到
+            head = f.read(65536)
+        if len(head) < 4:
+            return None
+        # 跳过 ID3v2 头
+        i = 0
+        if head[:3] == b'ID3':
+            # 注意：+ 优先级低于 |，所以 OR 部分要加括号
+            tag_size = 10 + (((head[6] & 0x7F) << 21) | ((head[7] & 0x7F) << 14) |
+                             ((head[8] & 0x7F) << 7) | (head[9] & 0x7F))
+            i = tag_size
+            logging.getLogger('music').info(f"MP3 bitrate: ID3v2 tag size={tag_size}, head_len={len(head)}")
+        # 找第一个 frame sync (11 bits of 1)
+        while i < len(head) - 4:
+            if head[i] == 0xFF and (head[i + 1] & 0xE0) == 0xE0:
+                h = (head[i] << 24) | (head[i + 1] << 16) | (head[i + 2] << 8) | head[i + 3]
+                version_id = (h >> 19) & 3   # 0=MPEG2.5, 2=MPEG2, 3=MPEG1
+                layer = (h >> 17) & 3         # 1=Layer3
+                br_idx = (h >> 12) & 0xF
+                logging.getLogger('music').info(
+                    f"MP3 bitrate: found frame at {i}, version={version_id}, layer={layer}, br_idx={br_idx}"
+                )
+                if layer == 1:                # Layer3
+                    if version_id == 3:       # MPEG1
+                        result = _MP3_BITRATE_TABLE_V1L3.get(br_idx)
+                        logging.getLogger('music').info(f"MP3 bitrate: result={result}kbps")
+                        return result
+                    elif version_id in (0, 2):  # MPEG2/2.5
+                        table = {1: 8, 2: 16, 3: 24, 4: 32, 5: 40, 6: 48, 7: 56,
+                                 8: 64, 9: 80, 10: 96, 11: 112, 12: 128, 13: 144, 14: 160, 15: 0}
+                        return table.get(br_idx)
+            i += 1
+        return None
+    except Exception as e:
+        logging.getLogger('music').error(f"MP3 bitrate: error={e}")
+        return None
+
+
 def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = ''):
     """给音频文件写入 metadata（mp3/flac/m4a）"""
     try:
@@ -295,20 +349,21 @@ def download_proxy():
         logger.info(f"准备发送: filename={safe_name}, size={file_size}")
 
         # 实际音质推断（用于前端显示真实下载到的音质）
-        # magic bytes 检测结果 + URL 主机名 + quality 关系
+        # 通过 magic bytes + MP3 frame header bitrate 判断真实码率
         actual_quality = quality
         if detected == 'flac' or detected == 'ape':
             actual_quality = 'lossless'
         elif detected == 'mp3':
-            # 区分 320k / 128k（通过 m801/m701 主机名）
-            url_host = (url or '').lower()
-            logger.info(f"音质推断: detected={detected}, url_host={url_host[:80]}")
-            if 'm801' in url_host or 'm802' in url_host or 'm803' in url_host:
+            # 通过 MP3 frame header 读取真实 bitrate（适用于所有平台）
+            mp3_br = _detect_mp3_bitrate(tmp_path)
+            logger.info(f"音质推断: detected=mp3, bitrate={mp3_br}kbps")
+            if mp3_br is not None and mp3_br >= 256:
                 actual_quality = 'exhigh'  # 320k MP3
-            else:
+            elif mp3_br is not None and mp3_br >= 96:
                 actual_quality = 'standard'  # 128k MP3
+            # bitrate 读取失败时保持原 quality（保守处理）
         elif detected == 'm4a':
-            # 网易云 M4A 通常 256k
+            # M4A 通常 256k（AAC）
             actual_quality = 'exhigh'
         # 告诉前端实际拿到的音质（user 可能选了 lossless 但实际只能下到 320k）
         downgraded = (actual_quality != quality)

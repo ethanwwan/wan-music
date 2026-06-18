@@ -27,8 +27,8 @@ export const albumInfo = ref(null)
 
 export const searchResults = ref([])
 export const playlistSearchResults = ref([])
-export const albumSearchResults = ref([])
-export const artistSearchResults = ref([])
+// 后端搜索返回的警告（如 'playlist_search_unsupported'，表示某平台不支持歌单搜索）
+export const searchWarnings = ref([])
 
 // ==================== 计时器 ====================
 
@@ -133,9 +133,10 @@ const handleSearchMode = async (sources, searchType = 0) => {
   loading.value = true
   try {
     const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources)
-    const data = result.success ? result.data : { type: searchType, songs: [], playlists: [] }
+    const data = result.success ? result.data : { type: searchType, songs: [], playlists: [], warnings: [] }
 
     musicInfo.value = { name: musicUrl.value }
+    searchWarnings.value = data.warnings || []
 
     // 根据后端返回的 type 字段决定展示
     if (data.type === 1) {
@@ -151,20 +152,21 @@ const handleSearchMode = async (sources, searchType = 0) => {
       searchResults.value = data.songs || []
       playlistSearchResults.value = data.playlists || []
     }
-    artistSearchResults.value = []
-    albumSearchResults.value = []
 
     const totalCount = (data.songs?.length || 0) + (data.playlists?.length || 0)
     if (totalCount > 0) {
       notifySearchResult(totalCount, result.fromCache)
     } else {
-      message.warning('未找到相关结果')
+      // 如果是平台不支持歌单搜索，由 UI 展示专门提示，这里只 warn 一下
+      if (searchType === 2 && searchWarnings.value.includes('playlist_search_unsupported')) {
+        // UI 会展示专门提示，这里不再通用 warn
+      } else {
+        message.warning('未找到相关结果')
+      }
     }
   } catch (error) {
     searchResults.value = []
-    artistSearchResults.value = []
     playlistSearchResults.value = []
-    albumSearchResults.value = []
     message.error('搜索失败，请稍后重试')
   } finally {
     loading.value = false

@@ -66,22 +66,23 @@ class MusicService:
             song_info = self.get_song_info(resource_id, 'lossless', source_platform)
             if song_info and song_info.get('id'):
                 song_info['_type'] = 'song'
-                return {'type': 1, 'data': [song_info]}
-            return {'type': 1, 'data': [], 'error': '未找到歌曲信息'}
+                return {'type': 1, 'data': [song_info], 'warnings': []}
+            return {'type': 1, 'data': [], 'error': '未找到歌曲信息', 'warnings': []}
 
         if resource_type == 'playlist':
             playlist_info = self.get_playlist_detail(resource_id, source_platform)
             if playlist_info and playlist_info.get('id'):
                 playlist_info['_type'] = 'playlist'
-                return {'type': 2, 'data': [playlist_info]}
-            return {'type': 2, 'data': [], 'error': '未找到歌单信息'}
+                return {'type': 2, 'data': [playlist_info], 'warnings': []}
+            return {'type': 2, 'data': [], 'error': '未找到歌单信息', 'warnings': []}
 
         # 专辑暂未实现
-        return {'type': 0, 'data': [], 'error': f'暂不支持解析{resource_type}类型'}
+        return {'type': 0, 'data': [], 'error': f'暂不支持解析{resource_type}类型', 'warnings': []}
 
     def _search_by_keyword(self, keyword: str, search_type: int, platform: str, limit: int) -> Dict[str, Any]:
         """按关键字搜索"""
         items: List[Dict[str, Any]] = []
+        warnings: List[str] = []
 
         if search_type in (0, 1):
             songs = self.search_songs(keyword, platform, limit)
@@ -95,7 +96,11 @@ class MusicService:
                 p['_type'] = 'playlist'
             items.extend(playlists)
 
-        return {'type': search_type, 'data': items}
+            # 标记歌单搜索不支持的平台（用于前端 UI 提示）
+            if platform in ('kugou', 'bodian'):
+                warnings.append('playlist_search_unsupported')
+
+        return {'type': search_type, 'data': items, 'warnings': warnings}
     
     def get_song_url(self, song_id: str, quality: str = 'high', platform: str = None) -> Dict[str, Any]:
         """获取歌曲播放/下载URL"""

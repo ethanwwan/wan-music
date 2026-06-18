@@ -67,37 +67,18 @@ class KugouClient(BaseMusicClient):
             return []
     
     def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """搜索歌单"""
-        from urllib.parse import urlencode
-        
-        params = {
-            'format': 'json',
-            'keyword': keyword,
-            'platform': 'WebFilter',
-            'page': 1,
-            'pagesize': limit,
-            'type': 'playlist'
-        }
-        
-        url = "https://songsearch.kugou.com/song_search_v2?" + urlencode(params)
-        
-        try:
-            data = self._get(url)
-            playlists = []
-            for item in data.get('data', {}).get('lists', []):
-                playlists.append({
-                    'id': item.get('specialid', 0) or item.get('ID', 0),
-                    'name': item.get('specialname', '') or item.get('SongName', ''),
-                    'coverImgUrl': item.get('cover', '') or item.get('Image', '').replace('{size}', '400'),
-                    'description': item.get('intro', '') or '',
-                    'trackCount': item.get('songcount', 0) or 0,
-                    'playCount': item.get('playcount', 0) or item.get('play_count', 0),
-                    'source': 'kugou'
-                })
-            return playlists
-        except Exception as e:
-            logger.error(f"[{self.platform_name}] 搜索歌单失败: {e}")
-            return []
+        """搜索歌单
+
+        注意：酷狗 songsearch API 的 type=playlist 实际返回的是带 playlist tag 的歌曲，
+        而不是真正的歌单（ID 是歌曲 ID，不是歌单 ID；没有 songcount/playcount 字段）。
+        实际歌单 ID 在搜索接口中无法获取，需通过其他途径（如分享链接）。
+
+        这里返回空列表，歌单搜索请使用网易云/QQ 音乐。
+        """
+        logger.warning(
+            f"[{self.platform_name}] 歌单搜索暂不支持：酷狗 songsearch API 不提供真正的歌单搜索接口"
+        )
+        return []
     
     def _get_song_meta_info(self, song_id: str) -> Dict[str, Any]:
         """获取歌曲元信息"""
