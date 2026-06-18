@@ -165,8 +165,9 @@ class MusicService:
                 'url': url_data.get('url', ''),
                 'quality': quality,
                 'lyric': lyric,
-                'source': url_data.get('source', 'netease'),
-                'fileType': url_data.get('type', 'mp3')  # 文件类型（mp3/flac等）
+                'source': url_data.get('source', 'netease')
+                # 不再返回 fileType：后端用 magic bytes 检测真实类型
+                # （避免 client 误报 fileType 误导用户）
             }
         except Exception as e:
             logger.error(f"获取歌曲信息失败: {e}")

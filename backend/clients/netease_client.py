@@ -106,34 +106,79 @@ class NeteaseClient(BaseMusicClient):
         self._load_local_cookies()
     
     def _load_local_cookies(self):
-        """加载本地cookie文件"""
+        """加载本地cookie文件（按优先级依次尝试多个位置）
+
+        候选路径：
+          1. clients/cookie/netease_cookie.txt     （与本文件同级的 cookie 目录）
+          2. cookie/netease_cookie.txt             （backend 下的 cookie 目录，原设计位置）
+          3. netease_cookie.txt                    （backend 根目录，旧位置）
+          4. cookie.txt                            （backend 根目录下的简写名）
+        """
         import os
-        cookie_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), APIConstants.COOKIE_FILE_PATH)
-        if os.path.exists(cookie_path):
-            try:
-                with open(cookie_path, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-                    cookie_count = 0
-                    for line in lines:
-                        line = line.strip()
-                        # 跳过注释行和空行
-                        if not line or line.startswith('#'):
-                            continue
-                        # 解析cookie对
-                        for cookie_pair in line.split(';'):
-                            cookie_pair = cookie_pair.strip()
-                            if '=' in cookie_pair:
-                                key, value = cookie_pair.split('=', 1)
-                                self.session.cookies.set(key.strip(), value.strip())
-                                cookie_count += 1
-                    if cookie_count > 0:
-                        logger.info(f"[{self.platform_name}] 成功加载本地cookie文件，共 {cookie_count} 个cookie")
-                    else:
-                        logger.debug(f"[{self.platform_name}] 本地cookie文件为空或只有注释")
-            except Exception as e:
-                logger.error(f"[{self.platform_name}] 加载本地cookie文件失败: {e}")
-        else:
-            logger.debug(f"[{self.platform_name}] 本地cookie文件不存在: {cookie_path}")
+        # cookie 候选路径（按优先级排序）
+        candidates = [
+            os.path.join(os.path.dirname(__file__), 'cookie', 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(__file__), '..', 'cookie', 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(__file__), '..', 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(__file__), '..', 'cookie.txt'),
+        ]
+
+        # 找第一个存在的
+        cookie_path = None
+        for cand in candidates:
+            cand_abs = os.path.abspath(cand)
+            if os.path.exists(cand_abs):
+                cookie_path = cand_abs
+                break
+
+        if cookie_path is None:
+            logger.warning(
+                f"[{self.platform_name}] cookie 文件不存在，已尝试以下位置:\n  " +
+                "\n  ".join(os.path.abspath(c) for c in candidates) +
+                "\n  提示: 在任一位置创建 netease_cookie.txt 并填入网易云 MUSIC_U 即可启用 VIP 无损/HiRes"
+            )
+            return
+
+        try:
+            with open(cookie_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            cookie_count = 0
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                for cookie_pair in line.split(';'):
+                    cookie_pair = cookie_pair.strip()
+                    if '=' in cookie_pair:
+                        key, value = cookie_pair.split('=', 1)
+                        self.session.cookies.set(key.strip(), value.strip())
+                        cookie_count += 1
+
+            if cookie_count > 0:
+                has_music_u = 'MUSIC_U' in self.session.cookies
+                self._last_cookie_mtime = os.path.getmtime(cookie_path)
+                logger.info(
+                    f"[{self.platform_name}] 从 {cookie_path} 加载 {cookie_count} 个 cookie"
+                    f"{'（含 MUSIC_U = VIP 身份）' if has_music_u else '（无 MUSIC_U）'}"
+                )
+            else:
+                logger.warning(
+                    f"[{self.platform_name}] {cookie_path} 文件为空或没有有效内容（只有注释？）"
+                )
+        except Exception as e:
+            logger.error(f"[{self.platform_name}] 加载本地 cookie 文件失败: {e}")
+
+    def reload_cookies(self):
+        """重新加载 cookie 文件（清空 session.cookies 后再读）
+
+        用于用户修改 cookie 文件后动态生效，不需要重启后端
+        """
+        # 只清空业务 cookie，保留 DEFAULT_COOKIES 中的客户端标识
+        for key in list(self.session.cookies.keys()):
+            if key not in APIConstants.DEFAULT_COOKIES:
+                del self.session.cookies[key]
+        self._load_local_cookies()
     
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """搜索歌曲"""
@@ -192,32 +237,44 @@ class NeteaseClient(BaseMusicClient):
             return []
     
     def _get_song_url_official(self, song_id: int, quality: str) -> Optional[str]:
-        """使用官方API获取歌曲URL"""
+        """使用官方API获取歌曲URL（GET 简单 API，无需 eapi 加密）
+
+        注意：eapi 加密版的接口（/eapi/song/enhance/player/url/v1）在匿名用户下
+        会忽略 level 字段并强制返回 320k MP3，而简单的 GET API 能正确返回码率。
+        改用 GET 后可与第三方接口（xuanluoge）保持同等音质。
+        """
         try:
-            payload = {
-                "ids": [song_id],
-                "level": quality,
-                "encodeType": "flac" if quality in ['lossless', 'hires', 'jymaster'] else "mp3"
+            # level → br 码率（bps）映射
+            br_map = {
+                'standard': 128000,
+                'exhigh': 320000,
+                'lossless': 999000,
+                'hires': 999000,
+                'jymaster': 999000,
             }
-            params = CryptoUtils.encrypt_params(APIConstants.SONG_URL_V1, payload)
-            
+            br = br_map.get(quality, 999000)
+
+            params = {
+                'id': str(song_id),
+                'ids': f'[{song_id}]',
+                'br': br,
+            }
             headers = {
                 'User-Agent': APIConstants.USER_AGENT,
                 'Referer': APIConstants.REFERER,
-                'Content-Type': 'application/x-www-form-urlencoded'
             }
-            
-            response = self.session.post(
-                APIConstants.SONG_URL_V1,
-                data=f"params={params}",
+            response = self.session.get(
+                'https://music.163.com/api/song/enhance/player/url',
+                params=params,
                 headers=headers,
                 timeout=15
             )
             response.raise_for_status()
             data = response.json()
-            
+
             if data.get('data') and len(data['data']) > 0:
-                url = data['data'][0].get('url')
+                item = data['data'][0]
+                url = item.get('url')
                 if url and url.startswith('http'):
                     return url
             return None
@@ -297,14 +354,15 @@ class NeteaseClient(BaseMusicClient):
             quality = get_default_quality()
         
         source_func_map = {
-            'official': self._get_song_url_official,
-            'xuanluoge': self._get_song_url_xuanluoge,
+            'official': self._get_song_url_official,    # 官方 API（VIP cookie 拿 HiRes）
+            'xuanluoge': self._get_song_url_xuanluoge,  # 第三方：官方失败时降级
             'haitangw': self._get_song_url_haitangw,
             'meting': self._get_song_url_meting
         }
-        
+
+        # 用户要求：优先使用官方 API，官方失败时降级到第三方
         sources_to_try = ['official', 'xuanluoge', 'haitangw', 'meting']
-        
+
         for source in sources_to_try:
             download_url = source_func_map[source](song_id, quality)
             if download_url:
@@ -314,8 +372,9 @@ class NeteaseClient(BaseMusicClient):
                     'api_source': source,
                     'song_id': song_id,
                     'source': 'netease'
+                    # 注意：网易云 URL 不带文件后缀，文件真实类型由后端下载后用 magic bytes 检测
                 }
-        
+
         return {}  # 返回空字典而不是抛异常，保持与其他客户端一致
     
     def get_song_info(self, song_id: int) -> Dict[str, Any]:

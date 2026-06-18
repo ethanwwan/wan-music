@@ -508,7 +508,17 @@ const downloadSingle = async (track) => {
 
     const blob = await response.blob()
     saveBlob(blob, filename)
-    message.success(`已下载：${track.name}`)
+
+    // 提示 user 实际下载到的音质（避免选了"无损"但拿到 MP3 时困惑）
+    const actualQuality = response.headers.get('X-Actual-Quality')
+    const downgraded = response.headers.get('X-Quality-Downgraded') === '1'
+    if (downgraded) {
+      const qualityMap = { lossless: '无损', exhigh: '320k', standard: '128k' }
+      const actualLabel = qualityMap[actualQuality] || actualQuality
+      message.warning(`《${track.name}》请求 ${qualityMap[qualityValue] || qualityValue}，实际下载 ${actualLabel}（需 VIP 才能听无损）`)
+    } else {
+      message.success(`已下载：${track.name}`)
+    }
   } catch (error) {
     const errorMsg = error?.message || String(error) || '未知错误'
     if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲') || errorMsg.includes('版权')) {

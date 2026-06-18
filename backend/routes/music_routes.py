@@ -1,5 +1,6 @@
 """音乐相关路由"""
 from flask import Blueprint, request, jsonify, send_file, Response
+from typing import Optional
 import logging
 import os
 import tempfile
@@ -56,6 +57,49 @@ def _get_extension(url: str, fallback: str = '.mp3') -> str:
         if url_path.endswith(ext):
             return ext
     return fallback
+
+
+def _detect_audio_type(file_path: str) -> Optional[str]:
+    """通过文件 magic bytes 检测真实音频类型
+
+    支持检测：FLAC / MP3 / WAV / OGG / M4A(MP4) / APE
+    返回: 'flac' / 'mp3' / 'wav' / 'ogg' / 'm4a' / 'ape' / None
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            head = f.read(16)
+        if len(head) < 4:
+            return None
+
+        # FLAC: 'fLaC' (66 4c 61 43)
+        if head[:4] == b'fLaC':
+            return 'flac'
+
+        # RIFF / WAV: 'RIFF'....'WAVE' (52 49 46 46)
+        if head[:4] == b'RIFF' and head[8:12] == b'WAVE':
+            return 'wav'
+
+        # OGG: 'OggS' (4f 67 67 53)
+        if head[:4] == b'OggS':
+            return 'ogg'
+
+        # MP4/M4A: 'ftyp' at offset 4 (66 74 79 70)
+        if head[4:8] == b'ftyp':
+            return 'm4a'
+
+        # APE: 'APETAGEX' (41 50 45 54 41 47 45 58)
+        if head[:8] == b'APETAGEX':
+            return 'ape'
+
+        # MP3: ID3v2 头 ('ID3') 或帧同步 0xFFEx/0xFFFx
+        if head[:3] == b'ID3':
+            return 'mp3'
+        if len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+            return 'mp3'
+
+        return None
+    except Exception:
+        return None
 
 
 def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = ''):
@@ -199,7 +243,6 @@ def download_proxy():
     extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
     if not extension.startswith('.'):
         extension = '.' + extension
-    mime_type = EXT_MIME_TYPES.get(extension, 'audio/mpeg')
 
     # 1. 下载到临时文件
     fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-')
@@ -212,6 +255,19 @@ def download_proxy():
             for chunk in resp.iter_content(chunk_size=65536):
                 if chunk:
                     f.write(chunk)
+
+        # 1.5 下载完成后，用 magic bytes 检测真实文件类型，覆盖可能错误的扩展名
+        # （例如网易云 URL 不带后缀，但服务器返回的可能是 FLAC/MP3/M4A 中任一种）
+        detected = _detect_audio_type(tmp_path)
+        if detected and '.' + detected != extension:
+            new_path = os.path.splitext(tmp_path)[0] + '.' + detected
+            try:
+                os.rename(tmp_path, new_path)
+                tmp_path = new_path
+                extension = '.' + detected
+            except Exception:
+                pass
+        mime_type = EXT_MIME_TYPES.get(extension, 'audio/mpeg')
 
         # 2. 可选写 metadata
         if write_metadata:
@@ -237,11 +293,34 @@ def download_proxy():
                             extension, filename_format)
         )
         logger.info(f"准备发送: filename={safe_name}, size={file_size}")
+
+        # 实际音质推断（用于前端显示真实下载到的音质）
+        # magic bytes 检测结果 + URL 主机名 + quality 关系
+        actual_quality = quality
+        if detected == 'flac' or detected == 'ape':
+            actual_quality = 'lossless'
+        elif detected == 'mp3':
+            # 区分 320k / 128k（通过 m801/m701 主机名）
+            url_host = (url or '').lower()
+            logger.info(f"音质推断: detected={detected}, url_host={url_host[:80]}")
+            if 'm801' in url_host or 'm802' in url_host or 'm803' in url_host:
+                actual_quality = 'exhigh'  # 320k MP3
+            else:
+                actual_quality = 'standard'  # 128k MP3
+        elif detected == 'm4a':
+            # 网易云 M4A 通常 256k
+            actual_quality = 'exhigh'
+        # 告诉前端实际拿到的音质（user 可能选了 lossless 但实际只能下到 320k）
+        downgraded = (actual_quality != quality)
+
         return Response(file_data, status=200, headers={
             'Content-Type': mime_type,
             'Content-Disposition': _build_content_disposition(safe_name),
             'Content-Length': str(file_size),
             'Accept-Ranges': 'none',
+            'X-Actual-Quality': actual_quality,
+            'X-Quality-Downgraded': '1' if downgraded else '0',
+            'X-Actual-FileType': detected or extension.lstrip('.'),
         })
     except Exception as e:
         _safe_remove(tmp_path)
@@ -294,6 +373,17 @@ def _process_song(item: dict, settings: dict) -> dict | None:
             except Exception as e:
                 _safe_remove(tmp_path)
                 raise e
+
+            # 下载完成后用 magic bytes 检测真实类型，覆盖错误扩展名
+            detected = _detect_audio_type(tmp_path)
+            if detected and '.' + detected != extension:
+                new_path = os.path.splitext(tmp_path)[0] + '.' + detected
+                try:
+                    os.rename(tmp_path, new_path)
+                    tmp_path = new_path
+                    extension = '.' + detected
+                except Exception:
+                    pass
 
             # 写 metadata
             lyric = song_info.get('lyric', '') or ''
@@ -786,3 +876,48 @@ def get_data_sources():
     except Exception as e:
         logger.error(f"获取数据源列表失败: {e}")
         return jsonify(APIResponse.error(f"获取数据源列表失败: {str(e)}", 500))
+
+
+# ==================== 网易云 Cookie 状态 ====================
+
+@music_bp.route('/api/netease/cookie/status', methods=['GET'])
+def get_netease_cookie_status():
+    """查看当前网易云 cookie 状态（不返回具体值，不写文件）
+
+    每次调用都会**检查文件 mtime**，如果文件被修改会自动 reload 到 session。
+    """
+    from clients.netease_client import APIConstants
+    import os
+    try:
+        # 候选路径（与 netease_client._load_local_cookies 保持一致）
+        candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'clients', 'cookie', 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookie', 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'netease_cookie.txt'),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookie.txt'),
+        ]
+        active_path = next((c for c in candidates if os.path.exists(c)), None)
+        from clients.music_client import music_client
+        netease = music_client._get_client('netease') if hasattr(music_client, '_get_client') else None
+        cookies = dict(netease.session.cookies) if netease else {}
+
+        # 自动 reload：如果文件 mtime 比上次加载新，就重新加载
+        if active_path and netease and hasattr(netease, '_last_cookie_mtime'):
+            current_mtime = os.path.getmtime(active_path)
+            if current_mtime > netease._last_cookie_mtime:
+                logger.info(f"检测到 cookie 文件已修改，自动 reload...")
+                netease.reload_cookies()
+                cookies = dict(netease.session.cookies)
+
+        has_music_u = 'MUSIC_U' in cookies
+        return jsonify(APIResponse.success({
+            'active_path': active_path,
+            'candidates': candidates,
+            'file_exists': active_path is not None,
+            'cookie_keys': list(cookies.keys()),
+            'has_music_u': has_music_u,
+            'is_vip': has_music_u,
+            'cookie_count': len(cookies)
+        }, "Cookie 状态查询成功"))
+    except Exception as e:
+        return jsonify(APIResponse.error(f"查询失败: {str(e)}", 500))

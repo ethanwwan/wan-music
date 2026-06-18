@@ -3,8 +3,7 @@
  * 通过后端API实现多平台音乐搜索和解析
  */
 
-import { embedMetadata } from './metadataWriter.js'
-import { saveBlob, ensureBlobType, sanitizeFilename } from '../utils/downloadHelper.js'
+import { saveBlob, sanitizeFilename } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
 import { getQualityLabel } from '../config/qualityLevels.js'
 
@@ -74,13 +73,6 @@ const PLATFORM_KEYWORDS = [
   { platform: 'bodian', keywords: ['bodian'] },
   { platform: 'netease', keywords: ['music.163.com'] }
 ]
-
-/** MIME 类型映射 */
-const MIME_TYPES = {
-  '.mp3': 'audio/mpeg',
-  '.flac': 'audio/flac',
-  '.m4a': 'audio/mp4'
-}
 
 // ==================== 工具函数 ====================
 
@@ -382,88 +374,49 @@ export const getLyrics = async (musicId) => {
 
 // ==================== 下载 ====================
 
-/** 流式下载文件并返回 Blob */
-const streamDownload = async (url, onProgress = null) => {
-  const response = await fetch(url, { cache: 'no-store', mode: 'cors' })
-  if (!response.ok) throw new Error(`下载失败: ${response.statusText}`)
-
-  const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10)
-  const reader = response.body.getReader()
-  const chunks = []
-  let downloadedBytes = 0
-  const startTime = Date.now()
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    downloadedBytes += value.length
-
-    if (onProgress && contentLength > 0) {
-      const elapsed = (Date.now() - startTime) / 1000
-      const speed = elapsed > 0 ? downloadedBytes / elapsed / 1024 : 0
-      const remainingBytes = contentLength - downloadedBytes
-      const eta = speed > 0 ? Math.ceil(remainingBytes / speed / 1024) : 0
-      onProgress({
-        downloadedBytes,
-        totalBytes: contentLength,
-        percentage: Math.round((downloadedBytes / contentLength) * 100),
-        speed: speed.toFixed(1),
-        eta
-      })
-    }
-  }
-
-  return new Blob(chunks, { type: response.headers.get('Content-Type') })
-}
-
-/** 生成下载文件名 */
-const buildFilename = (musicInfo, filenameFormat, extension) => {
-  if (filenameFormat === 'artist-song') {
-    return `${musicInfo.artist} - ${musicInfo.name}${extension}`
-  }
-  if (filenameFormat === 'song') {
-    return `${musicInfo.name}${extension}`
-  }
-  return `${musicInfo.name} - ${musicInfo.artist}${extension}`
-}
-
-/** 写入音频元数据（如果启用） */
-const applyAudioMetadata = async (audioBuffer, musicInfo, extension, writeMetadata) => {
-  if (!writeMetadata || (extension !== '.mp3' && extension !== '.flac')) {
-    return audioBuffer
-  }
-  try {
-    return await embedMetadata(audioBuffer, {
-      name: musicInfo.name,
-      artist: musicInfo.artist,
-      album: musicInfo.album,
-      year: new Date().getFullYear().toString(),
-      lyrics: musicInfo.lrc,
-      cover: musicInfo.cover
-    }, extension)
-  } catch {
-    return audioBuffer
-  }
-}
-
-/** 下载音乐 */
+/**
+ * 下载音乐
+ * 1. 调用后端 /download 路由（后端用 magic bytes 检测真实类型，返回正确的 Content-Disposition）
+ * 2. 从 Content-Disposition 提取文件名
+ * 3. 保存到本地
+ *
+ * @param {Object} musicInfo 歌曲信息（id/name/artist/album/source）
+ * @param {Object} downloadSettings 保留兼容
+ * @param {Function} onProgress 保留兼容
+ */
 export const downloadMusic = async (musicInfo, downloadSettings = {}, onProgress = null) => {
-  const { filenameFormat = 'song-artist', writeMetadata = false } = downloadSettings
-  const extension = musicInfo.fileExtension || '.mp3'
-  const filename = buildFilename(musicInfo, filenameFormat, extension)
+  const params = new URLSearchParams({
+    id: String(musicInfo.id),
+    quality: musicInfo.quality || 'lossless',
+    source: musicInfo.source || '',
+    name: musicInfo.name || 'song',
+    artist: musicInfo.artist || musicInfo.artists || '',
+    album: musicInfo.album || '',
+    filenameFormat: downloadSettings?.filenameFormat || 'song-artist',
+    writeMetadata: String(downloadSettings?.writeMetadata ?? false)
+  })
 
-  try {
-    let audioBuffer = await (await streamDownload(musicInfo.url, onProgress)).arrayBuffer()
-    audioBuffer = await applyAudioMetadata(audioBuffer, musicInfo, extension, writeMetadata)
-
-    const mime = MIME_TYPES[extension] || 'audio/mpeg'
-    const typedBlob = ensureBlobType(new Blob([audioBuffer], { type: mime }), mime)
-    saveBlob(typedBlob, sanitizeFilename(filename))
-    return true
-  } catch (error) {
-    throw new Error(`下载失败: ${error.message}`)
+  const response = await fetch(`/download?${params.toString()}`)
+  if (!response.ok) {
+    let errMsg = '下载失败'
+    try {
+      const err = await response.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
   }
+
+  // 从 Content-Disposition 提取文件名（后端已用 magic bytes 检测正确类型）
+  const cd = response.headers.get('Content-Disposition') || ''
+  const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i)
+  const asciiMatch = cd.match(/filename="?([^";]+)"?/i)
+  let filename = utf8Match ? decodeURIComponent(utf8Match[1])
+              : asciiMatch ? asciiMatch[1]
+              : `${musicInfo.name || 'song'}.mp3`
+
+  const blob = await response.blob()
+  saveBlob(blob, sanitizeFilename(filename))
+  return true
 }
 
 // ==================== 歌单 ====================
