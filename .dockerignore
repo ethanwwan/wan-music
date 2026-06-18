@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+venv/
+env/
+.env
+.env.local
+
+# Node / 前端
+**/node_modules
+**/dist
+**/.nuxt
+**/.next
+**/.vite
+
+# 测试
+**/tests
+**/test-results
+**/playwright-report
+**/test-output
+**/coverage
+
+# Cookie / 凭据（绝不能进入镜像）
+**/cookie/
+**/*_cookie.txt
+**/.env*
