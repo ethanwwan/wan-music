@@ -22,29 +22,14 @@
               <span class="meta-separator">•</span>
               <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
             </div>
-            <!-- 下载进度条 -->
-            <div v-if="downloadProgress.isDownloading" class="download-progress-bar">
-              <a-progress 
-                :percent="downloadProgress.percentage" 
-                :status="downloadProgress.status"
-                :stroke-width="6"
-                :show-text="false"
-              />
-              <div class="progress-info">
-                <span class="current-song">正在下载：{{ downloadProgress.currentSong || '准备中...' }}</span>
-                <span class="progress-text">{{ downloadProgress.completed }}/{{ downloadProgress.total }} ({{ downloadProgress.percentage }}%)</span>
-              </div>
-            </div>
           </div>
         </div>
         <div class="header-right">
-          <a-button 
-            type="primary" 
-            @click="handleBatchDownload" 
-            :disabled="downloadProgress.isDownloading"
-            :loading="downloadProgress.isDownloading"
+          <a-button
+            type="primary"
+            @click="handleBatchDownload"
           >
-            {{ downloadProgress.isDownloading ? '下载中...' : '批量打包下载' }}
+            打包下载
           </a-button>
         </div>
       </div>
@@ -330,17 +315,6 @@ const isTrackUnavailable = (track) => {
   return track.unavailable || unavailableTrackIds.value.has(track.id)
 }
 
-// 下载进度状态
-const downloadProgress = ref({
-  isDownloading: false,
-  percentage: 0,
-  status: '',
-  currentSong: '',
-  total: 0,
-  completed: 0,
-  failed: 0
-})
-
 // 工具方法
 
 const getCover = (track) => {
@@ -560,18 +534,7 @@ const handleBatchDownload = async () => {
     return
   }
 
-  // 重置下载进度
-  downloadProgress.value = {
-    isDownloading: true,
-    percentage: 0,
-    status: 'info',
-    currentSong: '准备中...',
-    total: musicList.length,
-    completed: 0,
-    failed: 0
-  }
-
-  // 使用下载队列（不阻塞 UI，下载进度在 Drawer 中查看）
+  // 把任务加入下载队列（进度在 Drawer 中查看，不在此处阻塞）
   const { startBatchDownload } = useBatchDownload()
   try {
     await startBatchDownload({
@@ -584,13 +547,7 @@ const handleBatchDownload = async () => {
         downloadLrcFile: settings.downloadLrcFile === true
       }
     })
-    // 任务已加入队列，前端不再等待；用户在 Drawer 中查看
-    downloadProgress.value.isDownloading = false
-    downloadProgress.value.status = 'success'
-    downloadProgress.value.percentage = 5  // 后端刚开始
   } catch (error) {
-    downloadProgress.value.isDownloading = false
-    downloadProgress.value.status = 'exception'
     const errorMsg = error?.message || String(error) || '未知错误'
     message.error(`加入下载队列失败: ${errorMsg}`)
   }
@@ -692,38 +649,6 @@ const handleItemClick = (item, action) => {
 
 .header-right {
   flex-shrink: 0;
-}
-
-/* 下载进度条 */
-.download-progress-bar {
-  margin-top: 1rem;
-  width: 100%;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 0.35rem;
-  font-size: 13px;
-  width: 100%;
-}
-
-.current-song {
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  margin-right: 1rem;
-}
-
-.progress-text {
-  color: var(--color-primary);
-  font-weight: 600;
-  flex-shrink: 0;
-  text-align: right;
 }
 
 /* 表格容器 */
