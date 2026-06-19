@@ -225,6 +225,7 @@ import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import { saveBlob } from '../utils/downloadHelper.js'
+import { useBatchDownload } from '../composables/useBatchDownload.js'
 import Pagination from './Pagination.vue'
 import { dataSources } from '../utils/dataSourceConfig.js'
 
@@ -543,68 +544,55 @@ const handleBatchDownload = async () => {
     return
   }
 
+  // 不做过滤：所有歌曲都尝试，后端自动跳过无版权的
+  const musicList = props.items
+    .filter(t => t.id)
+    .map(track => ({
+      id: track.id,
+      name: track.name,
+      artist: getArtist(track),
+      album: getAlbum(track),
+      source: track.source || ''
+    }))
+
+  if (musicList.length === 0) {
+    message.error('没有可下载的歌曲（缺少ID）')
+    return
+  }
+
+  // 重置下载进度
+  downloadProgress.value = {
+    isDownloading: true,
+    percentage: 0,
+    status: 'info',
+    currentSong: '准备中...',
+    total: musicList.length,
+    completed: 0,
+    failed: 0
+  }
+
+  // 使用下载队列（不阻塞 UI，下载进度在 Drawer 中查看）
+  const { startBatchDownload } = useBatchDownload()
   try {
-    downloadProgress.value = {
-      isDownloading: true,
-      percentage: 0,
-      status: '',
-      currentSong: '',
-      total: props.items.length,
-      completed: 0,
-      failed: 0
-    }
-
-    message.info(`开始批量下载 ${props.items.length} 首歌曲...`)
-
-    // 不做过滤：所有歌曲都尝试，后端自动跳过无版权的
-    const musicList = props.items
-      .filter(t => t.id)
-      .map(track => ({
-        id: track.id,
-        name: track.name,
-        artist: getArtist(track),
-        album: getAlbum(track),
-        source: track.source || ''
-      }))
-
-    if (musicList.length === 0) {
-      throw new Error('没有可下载的歌曲（缺少ID）')
-    }
-
-    const result = await batchDownloadMusic(
-      musicList,
-      props.detailInfo?.name || '',
-      {
+    await startBatchDownload({
+      playlistName: props.detailInfo?.name || '歌单',
+      items: musicList,
+      settings: {
         selectedQuality: settings.selectedQuality || 'lossless',
         filenameFormat: settings.filenameFormat || 'song-artist',
         writeMetadata: settings.writeMetadata !== false,
         downloadLrcFile: settings.downloadLrcFile === true
-      },
-      (progress) => {
-        downloadProgress.value.percentage = progress.percentage
-        downloadProgress.value.currentSong = progress.current
-        downloadProgress.value.completed = progress.completed
-        downloadProgress.value.failed = progress.failed
-        downloadProgress.value.total = progress.total
       }
-    )
-
+    })
+    // 任务已加入队列，前端不再等待；用户在 Drawer 中查看
     downloadProgress.value.isDownloading = false
-    downloadProgress.value.status = (result.failed === 0 || result.completed > 0) ? 'success' : 'warning'
-    downloadProgress.value.percentage = 100
-
-    if (result.completed > 0) {
-      const errorText = result.errors?.length > 0 ? `\n失败：${result.errors.slice(0, 3).map(e => e.name).join('、')}${result.errors.length > 3 ? '...' : ''}` : ''
-      message.success(`批量下载完成！共下载 ${result.completed} 首${result.failed > 0 ? `，${result.failed} 首失败` : ''}${errorText}`)
-    } else {
-      message.error('所有歌曲都下载失败')
-    }
-
+    downloadProgress.value.status = 'success'
+    downloadProgress.value.percentage = 5  // 后端刚开始
   } catch (error) {
     downloadProgress.value.isDownloading = false
     downloadProgress.value.status = 'exception'
     const errorMsg = error?.message || String(error) || '未知错误'
-    message.error(`批量下载失败: ${errorMsg}`)
+    message.error(`加入下载队列失败: ${errorMsg}`)
   }
 }
 

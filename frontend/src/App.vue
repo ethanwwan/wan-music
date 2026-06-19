@@ -94,6 +94,9 @@
       <!-- 设置对话框 -->
       <SettingsDialog v-model:open="showSettingsDialog" />
 
+      <!-- 下载队列抽屉 -->
+      <DownloadDrawer />
+
       <!-- 底部播放器 -->
       <MusicPlayer :current-song="currentSong" :autoplay="true" @play-error="handlePlayError" />
     </a-layout>
@@ -114,6 +117,7 @@ import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
 import SongList from './components/SongList.vue'
+import DownloadDrawer from './components/DownloadDrawer.vue'
 
 // 导入工具函数
 import musicApi from './services/musicApi.js'
@@ -124,6 +128,7 @@ import {
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
+import { downloadQueueStore as queueStore } from './stores/downloadQueue.js'
 
 
 // 响应式数据
@@ -290,6 +295,8 @@ onMounted(() => {
   initDeviceDetection()
   initThemeFromLocalStorage()
   themeToken.colorPrimary = DEFAULT_THEME_COLOR
+  // 启动下载队列同步（从 localStorage + 后端拉取）
+  queueStore.init()
 })
 
 onUnmounted(() => {

@@ -480,7 +480,10 @@ def _process_song(item: dict, settings: dict) -> dict | None:
 
 
 def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
-    """后台批量下载任务（Phase 1 并发下载 → Phase 2 单线程打包）"""
+    """后台批量下载任务（Phase 1 并发下载 → Phase 2 单线程打包）
+
+    支持取消：通过设置 task['cancelled'] = True 触发取消
+    """
     with batch_tasks_lock:
         task = batch_tasks.get(task_id)
     if not task:
@@ -493,6 +496,13 @@ def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
     with ThreadPoolExecutor(max_workers=BATCH_MAX_WORKERS) as executor:
         future_to_item = {executor.submit(_process_song, item, settings): item for item in items}
         for future in as_completed(future_to_item):
+            # 检查是否被取消
+            with batch_tasks_lock:
+                if task.get('cancelled'):
+                    # 取消未开始的 future
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+
             item = future_to_item[future]
             try:
                 result = future.result()
@@ -512,9 +522,20 @@ def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
                 })
 
             with batch_tasks_lock:
+                if task.get('cancelled'):
+                    break
                 task['completed'] = len(completed_results)
                 task['failed'] = len(failed_items)
                 task['current'] = item.get('name', '')
+
+    # 检查是否被取消
+    with batch_tasks_lock:
+        if task.get('cancelled'):
+            task['status'] = 'cancelled'
+            # 清理已下载的临时文件
+            for r in completed_results:
+                _safe_remove(r.get('tmp_path', ''))
+            return
 
     # Phase 2: 单线程打包到磁盘 zip
     fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
@@ -535,6 +556,7 @@ def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
             task['status'] = 'done'
             task['zip_path'] = zip_path
             task['errors'] = failed_items
+            task['completed_at'] = time.time()
 
         # 启动延迟清理（10 分钟未下载则清理）
         def _cleanup_task():
@@ -588,7 +610,10 @@ def download_batch_start():
             'current': '',
             'zip_path': None,
             'zip_name': zip_name,
-            'errors': []
+            'errors': [],
+            'cancelled': False,
+            'created_at': time.time(),
+            'completed_at': 0,
         }
 
     thread = threading.Thread(target=_run_batch_task, args=(task_id, items, zip_name, settings))
@@ -596,6 +621,85 @@ def download_batch_start():
     thread.start()
 
     return jsonify(APIResponse.success({'task_id': task_id, 'total': len(items)}, "任务已启动"))
+
+
+def _task_to_dict(task_id: str, task: dict) -> dict:
+    """将内部任务状态转换为对外暴露的字典（不包含 zip_path 等敏感字段）"""
+    return {
+        'task_id': task_id,
+        'status': task['status'],
+        'name': task.get('zip_name', ''),
+        'total': task['total'],
+        'completed': task['completed'],
+        'failed': task['failed'],
+        'current': task.get('current', ''),
+        'errors': task.get('errors', []),
+        'error': task.get('error', ''),
+        'created_at': task.get('created_at', 0),
+        'completed_at': task.get('completed_at', 0),
+    }
+
+
+@music_bp.route('/download/batch/list', methods=['GET'])
+def download_batch_list():
+    """列出所有批量下载任务（用于前端恢复/同步）
+
+    返回按创建时间倒序的任务列表
+    """
+    with batch_tasks_lock:
+        items = [
+            _task_to_dict(tid, t)
+            for tid, t in batch_tasks.items()
+        ]
+
+    # 倒序：最新的在前
+    items.sort(key=lambda x: x.get('created_at', 0), reverse=True)
+    return jsonify(APIResponse.success(items, "查询成功"))
+
+
+@music_bp.route('/download/batch/info/<task_id>', methods=['GET'])
+def download_batch_info(task_id):
+    """查询单个任务信息"""
+    with batch_tasks_lock:
+        task = batch_tasks.get(task_id)
+    if not task:
+        return jsonify(APIResponse.error("任务不存在或已过期", 404))
+    return jsonify(APIResponse.success(_task_to_dict(task_id, task), "查询成功"))
+
+
+@music_bp.route('/download/batch/<task_id>', methods=['DELETE'])
+def download_batch_delete(task_id):
+    """取消/删除批量下载任务
+
+    - 任务进行中：标记 cancelled，清理已下载文件
+    - 任务已完成：清理 zip 文件
+    """
+    with batch_tasks_lock:
+        task = batch_tasks.get(task_id)
+
+    if not task:
+        return jsonify(APIResponse.error("任务不存在或已过期", 404))
+
+    # 标记取消
+    with batch_tasks_lock:
+        task['cancelled'] = True
+        status = task['status']
+        zip_path = task.get('zip_path')
+
+    # 同步清理 zip 文件
+    if zip_path and os.path.exists(zip_path):
+        _safe_remove(zip_path)
+
+    # 等待短暂时间让后台线程检测到取消（如果还在运行）
+    # 不阻塞响应，最多等 0.5s
+    if status == 'running':
+        time.sleep(0.3)
+
+    # 从字典中移除
+    with batch_tasks_lock:
+        batch_tasks.pop(task_id, None)
+
+    return jsonify(APIResponse.success({'task_id': task_id, 'previous_status': status}, "任务已取消"))
 
 
 @music_bp.route('/download/batch/progress/<task_id>', methods=['GET'])

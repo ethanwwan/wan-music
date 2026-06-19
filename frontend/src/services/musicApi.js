@@ -620,11 +620,159 @@ export const searchPlaylist = async (keyword, sources = ['netease']) => {
 // ==================== 批量下载 ====================
 
 /**
- * 批量下载音乐（异步任务 + SSE 实时进度）
- * 流程：
- *   1. POST /download/batch/start 启动任务，返回 task_id
- *   2. EventSource 订阅 /download/batch/progress/<id> 实时进度
- *   3. 任务完成时 fetch /download/batch/file/<id> 下载 zip
+ * 启动批量下载任务（异步，立即返回 task_id）
+ * 后端会启动后台线程执行下载，前端通过 SSE 订阅进度
+ *
+ * @param {Array} items [{id, name, artist, album, source, quality}, ...]
+ * @param {string} name 任务名（用于 zip 文件名）
+ * @param {Object} settings {writeMetadata, filenameFormat, downloadLrcFile}
+ * @returns {Promise<{success, data: {task_id, total}, message}>}
+ */
+export const startBatchTask = async (items, name = 'playlist', settings = {}) => {
+  const resp = await fetch('/download/batch/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, name, settings })
+  })
+  if (!resp.ok) {
+    let errMsg = '启动批量下载失败'
+    try {
+      const err = await resp.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
+  }
+  return await resp.json()
+}
+
+/**
+ * 列出所有批量下载任务（按创建时间倒序）
+ * 用于刷新页面后恢复任务列表
+ */
+export const getBatchList = async () => {
+  const resp = await fetch('/download/batch/list')
+  if (!resp.ok) throw new Error('查询任务列表失败')
+  return await resp.json()
+}
+
+/**
+ * 查询单个任务信息（一次性查询，不订阅 SSE）
+ */
+export const getBatchInfo = async (taskId) => {
+  const resp = await fetch(`/download/batch/info/${taskId}`)
+  if (!resp.ok) throw new Error('查询任务失败')
+  return await resp.json()
+}
+
+/**
+ * 取消/删除批量下载任务
+ * - 任务进行中：标记 cancelled，清理已下载文件
+ * - 任务已完成：清理 zip 文件
+ */
+export const cancelBatchTask = async (taskId) => {
+  const resp = await fetch(`/download/batch/${taskId}`, { method: 'DELETE' })
+  if (!resp.ok) {
+    let errMsg = '取消任务失败'
+    try {
+      const err = await resp.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
+  }
+  return await resp.json()
+}
+
+/**
+ * 订阅批量下载进度（SSE）
+ * 返回 unsubscribe 函数
+ *
+ * @param {string} taskId
+ * @param {Object} callbacks { onProgress, onComplete, onError }
+ * @returns {Function} unsubscribe
+ */
+export const subscribeBatchTask = (taskId, callbacks = {}) => {
+  const { onProgress, onComplete, onError } = callbacks
+  const es = new EventSource(`/download/batch/progress/${taskId}`)
+  let closed = false
+
+  es.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      if (data.error) {
+        onError?.(new Error(data.error))
+        close()
+        return
+      }
+      if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
+        onComplete?.(data)
+        close()
+        return
+      }
+      onProgress?.(data)
+    } catch (err) {
+      onError?.(err)
+      close()
+    }
+  }
+
+  es.onerror = () => {
+    // SSE 错误不一定是真错（可能正在重连），但已断流则报错
+    if (es.readyState === EventSource.CLOSED) {
+      onError?.(new Error('SSE 连接已断开'))
+      close()
+    }
+  }
+
+  function close() {
+    if (closed) return
+    closed = true
+    es.close()
+  }
+
+  return close
+}
+
+/**
+ * 下载已打包好的 zip 文件
+ * @param {string} taskId
+ * @returns {Promise<{blob, filename}>}
+ */
+export const downloadBatchFile = async (taskId) => {
+  const resp = await fetch(`/download/batch/file/${taskId}`)
+  if (!resp.ok) {
+    let errMsg = '下载 zip 失败'
+    try {
+      const err = await resp.json()
+      errMsg = err.message || errMsg
+    } catch {}
+    throw new Error(errMsg)
+  }
+  const blob = await resp.blob()
+  // 从 Content-Disposition 提取文件名
+  const disposition = resp.headers.get('Content-Disposition') || ''
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  const asciiMatch = disposition.match(/filename="?([^";]+)"?/i)
+  let filename = 'playlist.zip'
+  if (utf8Match) {
+    filename = decodeURIComponent(utf8Match[1])
+  } else if (asciiMatch) {
+    filename = asciiMatch[1]
+  }
+  return { blob, filename }
+}
+
+/**
+ * 触发浏览器下载 zip（包装 downloadBatchFile + saveBlob）
+ */
+export const downloadBatchAsZip = async (taskId) => {
+  const { blob, filename } = await downloadBatchFile(taskId)
+  saveBlob(blob, filename)
+  return filename
+}
+
+/**
+ * 批量下载音乐（一体化便捷 API：启动 → 订阅 → 下载）
+ * 简单场景使用（无队列管理）；复杂场景建议用 startBatchTask + subscribeBatchTask
  *
  * @param {Array} musicList 歌曲列表（需含 id, name, artist, album, source）
  * @param {string} playlistName 歌单名称（用于 zip 文件名）
@@ -665,36 +813,15 @@ export const batchDownloadMusic = async (musicList, playlistName = '', downloadS
   }
 
   // 1. 启动任务
-  const startResp = await fetch('/download/batch/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, name: playlistName || 'playlist', settings })
-  })
-  if (!startResp.ok) {
-    let errMsg = '启动批量下载失败'
-    try {
-      const err = await startResp.json()
-      errMsg = err.message || errMsg
-    } catch {}
-    throw new Error(errMsg)
-  }
-  const startData = await startResp.json()
-  const taskId = startData.data.task_id
+  const startResult = await startBatchTask(items, playlistName || 'playlist', settings)
+  const taskId = startResult.data.task_id
 
   sendProgress({ completed: 0, failed: 0, percentage: 5, current: '后端下载中...' })
 
   // 2. SSE 订阅进度
   const finalState = await new Promise((resolve, reject) => {
-    const es = new EventSource(`/download/batch/progress/${taskId}`)
-
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        if (data.error) {
-          es.close()
-          reject(new Error(data.error))
-          return
-        }
+    const unsubscribe = subscribeBatchTask(taskId, {
+      onProgress: (data) => {
         const percentage = data.total > 0
           ? Math.round((data.completed / data.total) * 90) + 5
           : 5
@@ -704,20 +831,16 @@ export const batchDownloadMusic = async (musicList, playlistName = '', downloadS
           percentage,
           current: data.current
         })
-        if (data.status === 'done' || data.status === 'error') {
-          es.close()
-          resolve(data)
-        }
-      } catch (err) {
-        es.close()
+      },
+      onComplete: (data) => {
+        unsubscribe()
+        resolve(data)
+      },
+      onError: (err) => {
+        unsubscribe()
         reject(err)
       }
-    }
-
-    es.onerror = () => {
-      es.close()
-      reject(new Error('SSE 连接失败'))
-    }
+    })
   })
 
   if (finalState.status === 'error') {
@@ -726,37 +849,15 @@ export const batchDownloadMusic = async (musicList, playlistName = '', downloadS
 
   // 3. 下载 zip
   sendProgress({ completed: total, failed: finalState.failed, percentage: 95, current: '下载中...' })
-  const fileResp = await fetch(`/download/batch/file/${taskId}`)
-  if (!fileResp.ok) {
-    let errMsg = '下载 zip 失败'
-    try {
-      const err = await fileResp.json()
-      errMsg = err.message || errMsg
-    } catch {}
-    throw new Error(errMsg)
-  }
-
-  const blob = await fileResp.blob()
-
-  // 从 Content-Disposition 提取文件名
-  const disposition = fileResp.headers.get('Content-Disposition') || ''
-  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
-  const asciiMatch = disposition.match(/filename="?([^";]+)"?/i)
-  let zipFilename = 'playlist.zip'
-  if (utf8Match) {
-    zipFilename = decodeURIComponent(utf8Match[1])
-  } else if (asciiMatch) {
-    zipFilename = asciiMatch[1]
-  }
-
-  saveBlob(blob, zipFilename)
+  const filename = await downloadBatchAsZip(taskId)
   sendProgress({ completed: total, failed: finalState.failed, percentage: 100, current: '完成' })
 
   return {
     total,
     completed: finalState.completed,
     failed: finalState.failed,
-    errors: finalState.errors || []
+    errors: finalState.errors || [],
+    filename
   }
 }
 
