@@ -4,7 +4,7 @@
  */
 
 export const APP_CONFIG = {
-  appName: '网易云音乐解析器',
+  appName: 'Wan Music',
   version: '2.0.0',
   author: 'Suxiaoqinx',
 

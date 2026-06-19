@@ -1,7 +1,7 @@
 <template>
   <footer class="footer-container">
     <div class="footer-content">
-      <p class="footer-text">© 2026 网易云解析工具. All rights reserved.</p>
+      <p class="footer-text">© 2026 Wan Music. All rights reserved.</p>
       <p class="footer-text">开源项目 | 仅供学习</p>
       <p class="footer-text">Version 1.3.6 · 构建时间: 2026.5.24</p>
     </div>

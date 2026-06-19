@@ -11,11 +11,11 @@ import { defineProps } from 'vue'
 defineProps({
   title: {
     type: String,
-    default: '网易云音乐解析工具'
+    default: 'Wan Music - 多平台音乐下载'
   },
   subtitle: {
     type: String,
-    default: '实时解析网易云音乐单曲、获取真实下载地址及封面信息。'
+    default: '支持网易云 / QQ 音乐 / 酷狗 / 波点，搜索歌曲/歌单，解析真实下载地址。'
   }
 })
 </script>

@@ -146,7 +146,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '在此输入网易云音乐单曲链接或ID'
+    default: '输入歌曲名/歌单名，或粘贴单曲/歌单链接（支持多平台）'
   },
   loading: {
     type: Boolean,
