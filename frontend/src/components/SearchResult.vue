@@ -74,6 +74,12 @@
       @select="handleSelect"
     />
 
+    <!-- tab 加载中（歌单 tab 切换时显示 loading，覆盖列表） -->
+    <div v-if="tabLoading && !currentDetail && displayMode === 'playlist'" class="tab-loading-view">
+      <div class="loading-spinner"></div>
+      <span class="loading-text">加载歌单中...</span>
+    </div>
+
     <!-- 分页组件（歌单搜索结果） - 只有超过1页时才显示 -->
     <Pagination
       v-if="displayMode === 'playlist' && !currentDetail && totalPages > 1"
@@ -117,6 +123,10 @@ const props = defineProps({
     default: () => []
   },
   loading: {
+    type: Boolean,
+    default: false
+  },
+  tabLoading: {
     type: Boolean,
     default: false
   },
@@ -486,7 +496,9 @@ const goBack = () => {
 }
 
 /* loading 状态 */
-.loading-view {
+.loading-view,
+.searching-view,
+.tab-loading-view {
   display: flex;
   flex-direction: column;
   justify-content: center;

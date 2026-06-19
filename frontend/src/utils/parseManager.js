@@ -15,6 +15,7 @@ const getApiVersionLabel = () => ''  // 已废弃：不再显示接口版本
 
 export const musicUrl = ref('')
 export const loading = ref(false)
+export const tabLoading = ref(false)  // tab 切换专用 loading（与搜索按钮独立）
 export const musicInfo = ref(null)
 
 export const playlistUrl = ref('')
@@ -128,7 +129,7 @@ const notifySearchResult = (count, fromCache = false) => {
   })
 }
 
-/** 处理搜索模式的搜索逻辑 */
+/** 处理搜索模式的搜索逻辑（搜索按钮点击时调用，loading 影响搜索按钮） */
 const handleSearchMode = async (sources, searchType = 0) => {
   loading.value = true
   try {
@@ -170,6 +171,41 @@ const handleSearchMode = async (sources, searchType = 0) => {
     message.error('搜索失败，请稍后重试')
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * tab 切换时调用：只更新对应 tab 的数据，不影响搜索按钮的 loading
+ * @param {Array} sources
+ * @param {number} searchType 1=歌曲 2=歌单
+ */
+export const searchByTab = async (sources, searchType) => {
+  if (!musicUrl.value.trim()) {
+    message.warning('请输入内容')
+    return
+  }
+  // 加载前先清空旧数据（避免和 loading 视图重叠）
+  if (searchType === 1) {
+    searchResults.value = []
+  } else if (searchType === 2) {
+    playlistSearchResults.value = []
+  }
+  tabLoading.value = true
+  try {
+    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources)
+    const data = result.success ? result.data : { type: searchType, songs: [], playlists: [], warnings: [] }
+    searchWarnings.value = data.warnings || []
+
+    if (searchType === 1) {
+      searchResults.value = data.songs || []
+    } else if (searchType === 2) {
+      playlistSearchResults.value = data.playlists || []
+    }
+  } catch (error) {
+    // 错误时保持空数组
+    message.error('加载失败，请稍后重试')
+  } finally {
+    tabLoading.value = false
   }
 }
 

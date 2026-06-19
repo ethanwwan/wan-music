@@ -27,6 +27,7 @@
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :loading="loading"
+          :tab-loading="tabLoading"
           :search-type="currentSearchType"
           :warnings="searchWarnings"
           @track-play="handlePlaySong"
@@ -124,7 +125,7 @@ import musicApi from './services/musicApi.js'
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { settings, loadSettings } from './utils/settingsManager.js'
 import {
-    musicUrl, loading, musicInfo, parseMusic, cleanupTimer, searchResults, playlistSearchResults, searchWarnings, playlistInfo
+    musicUrl, loading, tabLoading, musicInfo, parseMusic, searchByTab, cleanupTimer, searchResults, playlistSearchResults, searchWarnings, playlistInfo
   } from './utils/parseManager.js'
 import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
 import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
@@ -220,13 +221,9 @@ const handlePageChange = (page) => {
 }
 
 const handleSearchTypeChange = async (searchType) => {
-  console.log('Search type changed to:', searchType)
-  console.log('musicUrl.value at tab switch:', musicUrl.value)
-  const quality = settings.selectedQuality || 'lossless'
-  // 将 SearchResult 的 tab key 转成后端 type
-  // 'search' → 1 (歌曲), 'playlist' → 2 (歌单)
+  // tab 切换：调用 searchByTab（独立 loading，不影响搜索按钮）
   const backendType = searchType === 'playlist' ? 2 : 1
-  await parseMusic(quality, 'search', currentSources.value, backendType)
+  await searchByTab(currentSources.value, backendType)
 }
 
 // 处理歌曲播放 - 只播放当前点击的歌曲
