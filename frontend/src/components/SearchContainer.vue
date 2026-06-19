@@ -13,8 +13,10 @@
           @click="openDownloadDrawer"
           title="下载队列"
         >
-          <svg focusable="false" data-icon="download" width="1em" height="1em" fill="currentColor" aria-hidden="true" viewBox="64 64 896 896">
-            <path d="M505.7 661a8 8 0 0112.6 0l112 141.7a8 8 0 01-12.6 10.3L536 712.7V864a8 8 0 01-16 0V712.7L406.3 813a8 8 0 01-12.6-10.3l112-141.7zM273 552.5V328c0-13.3 10.7-24 24-24h48c13.3 0 24 10.7 24 24v224.5h46.2c16.7 0 25.6 19.5 14.6 32.4l-159.4 187c-9.6 11.3-26.5 11.3-36.1 0l-159.4-187c-11-12.9-2.1-32.4 14.6-32.4H273z"/>
+          <svg focusable="false" data-icon="download" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           <!-- 任务徽章（进行中 + 已完成） -->
           <span
@@ -408,11 +410,15 @@ defineExpose({
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--color-text-secondary);
+  color: var(--color-on-surface);
   transition: all 0.2s;
   padding: 0;
-  font-size: 18px;
+  font-size: 20px;
   position: relative;
+}
+
+.icon-btn svg {
+  display: block;
 }
 
 .icon-btn:hover {
