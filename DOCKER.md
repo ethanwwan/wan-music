@@ -30,8 +30,8 @@
 git clone https://github.com/<your-username>/wan-music.git
 cd wan-music
 
-# 复制环境变量
-cp .env.example .env
+# .env 已包含默认配置，按需修改
+cat .env
 
 # 构建并启动
 docker compose up -d --build

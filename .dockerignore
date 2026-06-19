@@ -58,4 +58,9 @@ env/
 # Cookie / 凭据（绝不能进入镜像）
 **/cookie/
 **/*_cookie.txt
-**/.env*
+# .env 是配置模板（要进镜像）
+# .env.local 是个人覆盖（不进镜像）
+.env.local
+.env.*.local
+backend/.env
+frontend/.env

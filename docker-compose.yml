@@ -19,10 +19,14 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      # 容器内端口（构建时 ARG）
+      args:
+        PORT: ${CONTAINER_PORT:-5002}
     container_name: wan-music
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-5002}:5002"
+      # 主机端口:容器端口
+      - "${HOST_PORT:-5002}:${CONTAINER_PORT:-5002}"
     environment:
       # 时区
       - TZ=${TZ:-Asia/Shanghai}
@@ -30,13 +34,16 @@ services:
       - PYTHONUNBUFFERED=1
       # Flask 配置
       - FLASK_ENV=production
+      # 容器内端口（必须与 build.args.PORT 和 ports 右边一致）
+      - PORT=${CONTAINER_PORT:-5002}
     volumes:
       # 持久化 cookie 文件（容器重建后保留登录态）
       - cookie-data:/app/clients/cookie
       # 可选：挂载自定义日志目录
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      # 端口从 $PORT 读取（运行时环境变量）
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT:-5002}/health"]
       interval: 30s
       timeout: 10s
       retries: 3

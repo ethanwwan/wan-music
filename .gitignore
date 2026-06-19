@@ -22,7 +22,8 @@ logs/
 .tmp/
 
 # 环境变量
-.env
+# .env 是配置模板，已加入 git 跟踪
+# 如需个人配置覆盖，复制为 .env.local（被忽略）
 .env.local
 .env.*.local
 
@@ -58,4 +59,3 @@ env/
 # Cookie / 凭据（绝不能进入仓库）
 **/cookie/
 **/*_cookie.txt
-**/.env*
