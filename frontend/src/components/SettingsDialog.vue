@@ -1,19 +1,13 @@
 <template>
   <a-drawer
-    v-model:open="drawerVisible"
-    width="450px"
+    :open="drawerVisible"
+    @update:open="handleOpenChange"
+    title="设置"
     placement="right"
-    :closable="true"
-    :mask-closable="true"
-    :header-style="{ display: 'none' }"
+    :width="420"
+    :destroy-on-close="false"
     class="settings-drawer"
   >
-    <!-- 自定义头部 -->
-    <div class="custom-header">
-      <span class="header-title">设置</span>
-      <CloseOutlined class="close-icon" @click="drawerVisible = false" />
-    </div>
-    
     <div class="settings-content">
       <!-- 音质设置 -->
       <div class="setting-section">
@@ -25,9 +19,9 @@
               @change="handleSave"
               :style="{ width: '160px' }"
             >
-              <a-select-option 
-                v-for="option in getQualityOptions()" 
-                :key="option.value" 
+              <a-select-option
+                v-for="option in getQualityOptions()"
+                :key="option.value"
                 :value="option.value"
               >
                 {{ option.label }}
@@ -100,10 +94,10 @@
           <a-form-item label="缓存大小">
             <div class="cache-info">
               <span class="size-text">{{ cacheSize }}</span>
-              <a-button 
-                type="primary" 
+              <a-button
+                type="primary"
                 danger
-                size="small" 
+                size="small"
                 :loading="clearingCache"
                 class="clear-cache-btn"
                 @click="handleClearCache"
@@ -119,13 +113,20 @@
         </a-form>
       </div>
     </div>
+
+    <!-- 底部：关闭按钮（与下载队列抽屉一致） -->
+    <template #footer>
+      <div class="drawer-footer">
+        <a-button @click="handleClose">关闭</a-button>
+      </div>
+    </template>
   </a-drawer>
 </template>
 
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { CloseOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { getQualityOptions } from '../config/qualityLevels.js'
@@ -148,7 +149,7 @@ const calculateCacheSize = () => {
   } catch (e) {
     console.warn('读取 localStorage 失败:', e)
   }
-  
+
   if (totalSize < 1024) {
     return `${totalSize} B`
   } else if (totalSize < 1024 * 1024) {
@@ -171,7 +172,7 @@ const handleClearCache = async () => {
     okType: 'danger',
     onOk: async () => {
       clearingCache.value = true
-      
+
       try {
         localStorage.clear()
         sessionStorage.clear()
@@ -211,36 +212,25 @@ const handleClose = () => {
   handleSave()
   drawerVisible.value = false
 }
+
+const handleOpenChange = (value) => {
+  // 抽屉关闭时自动保存
+  if (!value) {
+    handleSave()
+  }
+  emit('update:open', value)
+}
 </script>
 
 <style scoped>
-.custom-header {
+.settings-drawer :deep(.ant-drawer-body) {
+  padding: 16px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-}
-
-.header-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-on-surface);
-}
-
-.close-icon {
-  font-size: 20px;
-  color: var(--color-on-surface-variant);
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.close-icon:hover {
-  color: var(--color-on-surface);
+  flex-direction: column;
 }
 
 .settings-content {
-  padding: 16px 0;
-  height: calc(100% - 57px);
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -268,6 +258,8 @@ const handleClose = () => {
   font-weight: 600;
   color: var(--color-on-surface);
   margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-subtle, #e5e7eb);
 }
 
 .settings-form {
@@ -330,5 +322,10 @@ const handleClose = () => {
 
 .clear-cache-btn :deep(.ant-btn-icon) {
   font-size: 14px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
 }
 </style>
