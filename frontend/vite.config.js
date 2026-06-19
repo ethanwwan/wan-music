@@ -32,7 +32,17 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       host: '0.0.0.0',
-      port: vitePort
+      port: vitePort,
+      // preview server 也支持 proxy（用于 npm run preview:full）
+      // 这样 npm run preview:full 可以同时跑前端预览 + 后端
+      proxy: {
+        '/search': { target: proxyTarget, changeOrigin: true },
+        '/song': { target: proxyTarget, changeOrigin: true },
+        '/playlist': { target: proxyTarget, changeOrigin: true },
+        '/download': { target: proxyTarget, changeOrigin: true },
+        '/api': { target: proxyTarget, changeOrigin: true },
+        '/health': { target: proxyTarget, changeOrigin: true }
+      }
     },
     build: {
       // 把环境变量注入到前端（必须以 VITE_ 开头才能暴露给客户端）
