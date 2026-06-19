@@ -176,15 +176,20 @@ const currentSearchType = ref(getDefaultSearchType())
 // 是否已搜索过（用于控制空状态显示，避免页面完全空白）
 const hasSearched = ref(false)
 // 监听 props.songs / props.playlists 变化，搜索结束后置为 true
+// 关键：只在 loading 从 true → false 转换时置 true
+//      （避免点击搜索按钮时 hasSearched 立即变 true 导致 tab 提前展示）
+let prevLoading = false
 watch(
   [() => props.songs, () => props.playlists, () => props.loading],
   ([songs, playlists, loading]) => {
-    // 只要 props.songs 或 props.playlists 数组长度>0，就说明搜过
-    if (songs.length > 0 || playlists.length > 0) {
+    // 搜索完成（loading 从 true 变 false）的瞬间才标记为已搜过
+    if (prevLoading && !loading) {
       hasSearched.value = true
     }
-    // 搜索开始时（loading=true）也置为 true
-    if (loading) {
+    prevLoading = loading
+
+    // 有结果时也置 true（兼容切歌单 tab 时保持 tab 显示）
+    if (songs.length > 0 || playlists.length > 0) {
       hasSearched.value = true
     }
   },
