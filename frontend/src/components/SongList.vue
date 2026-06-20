@@ -34,16 +34,42 @@
         </div>
       </div>
 
+
+
       <!-- 歌曲表格 -->
       <div v-if="paginatedTracks.length > 0" class="tracks-table-wrapper">
         <table class="tracks-table">
           <thead>
             <tr>
-              <th class="col-index">序号</th>
+              <th v-if="isSelectMode" class="col-select">
+                <a-checkbox 
+                  :checked="isAllSelected"
+                  :indeterminate="isPartiallySelected"
+                  @change="handleSelectAll"
+                />
+              </th>
+              <th class="col-index">
+                <template v-if="isSelectMode">
+                  已选 {{ (selectedTrackIds?.length || 0) }}/{{ (sortedTracks?.length || 0) }}
+                </template>
+                <template v-else>
+                  序号
+                </template>
+              </th>
               <th class="col-cover"></th>
               <th class="col-name">歌名</th>
               <th class="col-artist">歌手</th>
-              <th class="col-action">操作</th>
+              <th class="col-action">
+                <template v-if="!isSelectMode">
+                  <a-button size="small" @click="enterSelectMode">批量操作</a-button>
+                </template>
+                <template v-else>
+                  <a-space :size="8">
+                    <a-button size="small" type="primary" :disabled="(selectedTrackIds?.length || 0) === 0" @click="handleBatchDownloadSelected">下载选中</a-button>
+                    <a-button size="small" @click="exitSelectMode">取消</a-button>
+                  </a-space>
+                </template>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -53,10 +79,17 @@
               class="track-row"
               :class="{ 
                 'selected': selectedTrack && selectedTrack.id === track.id,
-                'unavailable': isTrackUnavailable(track)
+                'unavailable': isTrackUnavailable(track),
+                'selected-for-batch': isSelectMode && selectedTrackIds.value?.includes(track.id)
               }"
               @click="handleTrackClick(track)"
             >
+              <td v-if="isSelectMode" class="col-select">
+                <a-checkbox 
+                  :checked="isTrackSelected(track)"
+                  @change="() => toggleSelectTrack(track)"
+                />
+              </td>
               <td class="col-index">
                 <span>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
               </td>
@@ -207,9 +240,8 @@
 import { ref, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
-import { batchDownloadMusic, parseMusicInfo } from '../services/musicApi.js'
+import { parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
-import { saveBlob } from '../utils/downloadHelper.js'
 import { useBatchDownload } from '../composables/useBatchDownload.js'
 import Pagination from './Pagination.vue'
 import { dataSources } from '../utils/dataSourceConfig.js'
@@ -293,8 +325,31 @@ const selectedTrack = ref(null)
 const parsingTrackId = ref(null)
 const parsingType = ref(null)
 
+// 批量选择状态
+const isSelectMode = ref(false)
+const selectedTrackIds = ref([])
+
 // 不可用歌曲ID集合（用于跟踪无版权歌曲）
 const unavailableTrackIds = shallowRef(new Set())
+
+// 是否全选
+const isAllSelected = computed(() => {
+  if (selectedTrackIds.value.length === 0 || sortedTracks.value.length === 0) return false
+  return selectedTrackIds.value.length === sortedTracks.value.length
+})
+
+// 是否部分选择（用于 checkbox indeterminate 状态）
+const isPartiallySelected = computed(() => {
+  if (sortedTracks.value.length === 0) return false
+  return selectedTrackIds.value.length > 0 && selectedTrackIds.value.length < sortedTracks.value.length
+})
+
+// 检查歌曲是否被选中
+const isTrackSelected = (track) => {
+  const ids = selectedTrackIds.value
+  if (!ids || !Array.isArray(ids)) return false
+  return ids.includes(track.id)
+}
 
 // 标记歌曲为不可用（无版权）
 const markTrackUnavailable = (track) => {
@@ -377,8 +432,90 @@ const handleTrackClick = (track) => {
     message.warning(`《${track.name}》因版权问题暂时无法播放`)
     return
   }
+  
+  // 如果在批量选择模式下，点击行切换选择状态
+  if (isSelectMode.value) {
+    toggleSelectTrack(track)
+    return
+  }
+  
   selectedTrack.value = track
   emit('track-selected', track)
+}
+
+// 切换单首歌曲选择
+const toggleSelectTrack = (track) => {
+  const currentIds = selectedTrackIds.value
+  if (currentIds.includes(track.id)) {
+    // 取消选中
+    selectedTrackIds.value = currentIds.filter(id => id !== track.id)
+  } else {
+    // 添加选中
+    selectedTrackIds.value = [...currentIds, track.id]
+    isSelectMode.value = true
+  }
+}
+
+// 全选/取消全选
+const handleSelectAll = (event) => {
+  const checked = typeof event === 'boolean' ? event : (event?.target?.checked ?? false)
+  if (checked) {
+    // 全选：选中所有歌曲（跨分页）
+    const allIds = sortedTracks.value.map(t => t.id)
+    selectedTrackIds.value = [...allIds]
+    isSelectMode.value = true
+  } else {
+    // 取消全选：只是清除选中状态，不退出选择模式
+    selectedTrackIds.value = []
+  }
+}
+
+// 下载选中的歌曲
+const handleBatchDownloadSelected = async () => {
+  if (selectedTrackIds.value.length === 0) {
+    message.warning('请先选择要下载的歌曲')
+    return
+  }
+  
+  // 过滤出选中的歌曲
+  const selectedTracks = sortedTracks.value.filter(t => selectedTrackIds.value.includes(t.id))
+  const musicList = selectedTracks.map(track => ({
+    id: track.id,
+    name: track.name,
+    artist: getArtist(track),
+    album: getAlbum(track),
+    source: track.source || ''
+  }))
+  
+  try {
+    const { startBatchDownload } = useBatchDownload()
+    await startBatchDownload({
+      playlistName: '批量下载',
+      items: musicList,
+      settings: {
+        selectedQuality: settings.selectedQuality || 'lossless',
+        filenameFormat: settings.filenameFormat || 'song-artist',
+        writeMetadata: settings.writeMetadata !== false,
+        downloadLrcFile: settings.downloadLrcFile === true
+      }
+    })
+    // 下载后退出选择模式
+    exitSelectMode()
+  } catch (error) {
+    const errorMsg = error?.message || String(error) || '未知错误'
+    message.error(`下载失败：${errorMsg}`)
+  }
+}
+
+// 进入批量选择模式
+const enterSelectMode = () => {
+  isSelectMode.value = true
+}
+
+// 退出批量选择模式
+const exitSelectMode = () => {
+  isSelectMode.value = false
+  selectedTrackIds.value = []
 }
 
 /**
@@ -449,54 +586,23 @@ const downloadSingle = async (track) => {
   parsingType.value = 'download'
 
   try {
-    const qualityValue = settings.selectedQuality || 'lossless'
-    const params = new URLSearchParams({
-      id: String(track.id),
-      quality: qualityValue,
-      source: track.source || '',
-      name: track.name || 'song',
-      artist: getArtist(track) || '',
-      album: getAlbum(track) || ''
+    const { startBatchDownload } = useBatchDownload()
+    await startBatchDownload({
+      playlistName: track.name,
+      items: [{
+        id: track.id,
+        name: track.name,
+        artist: getArtist(track),
+        album: getAlbum(track),
+        source: track.source || ''
+      }],
+      settings: {
+        selectedQuality: settings.selectedQuality || 'lossless',
+        filenameFormat: settings.filenameFormat || 'song-artist',
+        writeMetadata: settings.writeMetadata !== false,
+        downloadLrcFile: settings.downloadLrcFile === true
+      }
     })
-
-    const response = await fetch(`/download?${params.toString()}`)
-    if (!response.ok) {
-      let errMsg = '下载失败'
-      try {
-        const err = await response.json()
-        errMsg = err.message || errMsg
-      } catch {}
-      throw new Error(errMsg)
-    }
-
-    // 从 Content-Disposition 提取文件名
-    const disposition = response.headers.get('Content-Disposition') || ''
-    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
-    const asciiMatch = disposition.match(/filename="?([^";]+)"?/i)
-    let filename = ''
-    if (utf8Match) {
-      filename = decodeURIComponent(utf8Match[1])
-    } else if (asciiMatch) {
-      filename = asciiMatch[1]
-    }
-    if (!filename) {
-      const ext = (disposition.match(/\.([a-z0-9]+)['"]?$/i) || [])[1] || 'mp3'
-      filename = `${track.name}.${ext}`
-    }
-
-    const blob = await response.blob()
-    saveBlob(blob, filename)
-
-    // 提示 user 实际下载到的音质（避免选了"无损"但拿到 MP3 时困惑）
-    const actualQuality = response.headers.get('X-Actual-Quality')
-    const downgraded = response.headers.get('X-Quality-Downgraded') === '1'
-    if (downgraded) {
-      const qualityMap = { lossless: '无损', exhigh: '320k', standard: '128k' }
-      const actualLabel = qualityMap[actualQuality] || actualQuality
-      message.warning(`《${track.name}》请求 ${qualityMap[qualityValue] || qualityValue}，实际下载 ${actualLabel}（需 VIP 才能听无损）`)
-    } else {
-      message.success(`已下载：${track.name}`)
-    }
   } catch (error) {
     const errorMsg = error?.message || String(error) || '未知错误'
     if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲') || errorMsg.includes('版权')) {
@@ -582,6 +688,21 @@ const handleItemClick = (item, action) => {
 /* 详情页面模式 */
 .detail-view {
   padding: 0;
+}
+
+
+
+
+
+/* 选择列 */
+.col-select {
+  width: 40px;
+  text-align: center;
+}
+
+/* 选中状态样式 */
+.track-row.selected-for-batch {
+  background: var(--color-primary-light);
 }
 
 .detail-header {

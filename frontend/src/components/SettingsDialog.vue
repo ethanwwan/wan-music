@@ -71,7 +71,7 @@
               @change="handleSave"
             />
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>批量下载时同时生成独立的LRC歌词文件</a-tag>
+              <a-tag color="blue" bordered>开启后，下载歌曲时会自动转换为ZIP打包</a-tag>
             </div>
           </a-form-item>
         </a-form>
@@ -209,14 +209,13 @@ const handleSave = () => {
 }
 
 const handleClose = () => {
-  handleSave()
+  saveSettings()
   drawerVisible.value = false
 }
 
 const handleOpenChange = (value) => {
-  // 抽屉关闭时自动保存
   if (!value) {
-    handleSave()
+    saveSettings()
   }
   emit('update:open', value)
 }

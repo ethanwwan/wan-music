@@ -11,48 +11,61 @@
     <!-- 头部：统计 + 清理按钮 -->
     <div class="drawer-header">
       <div class="stats">
-        <span class="stat-item">
-          <span class="stat-dot stat-running"></span>
+        <a-tag color="blue">
+          <component :is="LoadingOutlined" class="mr-1" />
           进行中 {{ store.activeCount.value }}
-        </span>
-        <span class="stat-item">
-          <span class="stat-dot stat-done"></span>
+        </a-tag>
+        <a-tag color="green">
+          <component :is="CheckCircleOutlined" class="mr-1" />
           已完成 {{ store.completedCount.value }}
-        </span>
+        </a-tag>
       </div>
       <a-button
         v-if="hasCompleted"
         size="small"
         type="text"
+        danger
         @click="handleClearCompleted"
-        :disabled="clearing"
+        :loading="clearing"
       >
+        <component :is="TrashOutlined" class="mr-1" />
         清理已完成
       </a-button>
     </div>
 
     <!-- 任务列表 -->
     <div v-if="store.taskList.value.length === 0" class="empty-state">
-      <div class="empty-icon">📥</div>
-      <p class="empty-text">暂无下载任务</p>
-      <p class="empty-hint">批量下载时会显示在这里</p>
+      <div class="empty-container">
+        <div class="empty-icon-wrapper">
+          <div class="empty-icon-bg"></div>
+          <component :is="DownloadOutlined" class="empty-icon" />
+        </div>
+        <div class="empty-content">
+          <h3 class="empty-title">暂无下载任务</h3>
+          <p class="empty-desc">批量下载歌曲时，任务会显示在这里</p>
+        </div>
+      </div>
     </div>
 
     <div v-else class="task-list">
-      <div
+      <a-card
         v-for="task in store.taskList.value"
         :key="task.task_id"
-        class="task-item"
-        :class="`status-${task.status}`"
+        :class="`task-card status-${task.status}`"
+        hoverable
+        :bordered="false"
       >
         <!-- 任务头部：名称 + 状态 -->
         <div class="task-head">
-          <div class="task-name" :title="task.name">
-            {{ task.name || '未命名任务' }}
+          <div class="task-name-wrapper">
+            <component :is="MusicOutlined" class="task-icon" />
+            <span class="task-name" :title="task.name">
+              {{ task.name || '未命名任务' }}
+            </span>
           </div>
-          <div class="task-status-badge" :class="`badge-${task.status}`">
+          <a-tag :color="getStatusColor(task.status)">
             {{ statusLabel(task.status) }}
-          </div>
+          </a-tag>
         </div>
 
         <!-- 进度条 -->
@@ -61,46 +74,55 @@
           :percent="getPercentage(task)"
           :status="getProgressStatus(task.status)"
           :stroke-color="getProgressColor(task.status)"
-          size="small"
-        />
-        <a-progress
-          v-else
-          :percent="0"
           :show-info="false"
-          size="small"
+          class="task-progress"
         />
 
         <!-- 进度详情 -->
         <div class="task-detail">
-          <span class="detail-item">
-            ✅ {{ task.completed }} / {{ task.total }}
-          </span>
-          <span v-if="task.failed > 0" class="detail-item failed">
-            ❌ {{ task.failed }} 失败
-          </span>
-          <span v-if="task.current && task.status === 'running'" class="detail-item current">
-            🎵 {{ task.current }}
-          </span>
+          <a-space :size="12">
+            <span class="detail-item">
+              <component :is="CheckCircleOutlined" class="success-icon" />
+              {{ task.completed }} / {{ task.total }}
+            </span>
+            <span v-if="task.failed > 0" class="detail-item failed">
+              <component :is="CloseCircleOutlined" class="error-icon" />
+              {{ task.failed }} 失败
+            </span>
+            <span v-if="task.current && task.status === 'running'" class="detail-item current">
+              <component :is="HeadphonesOutlined" class="current-icon" />
+              {{ task.current }}
+            </span>
+          </a-space>
         </div>
 
         <!-- 错误信息 -->
-        <div v-if="task.errors && task.errors.length > 0" class="task-errors">
-          <a-collapse ghost>
-            <a-collapse-panel :header="`${task.errors.length} 首失败`">
-              <div
-                v-for="(err, i) in task.errors.slice(0, 10)"
-                :key="i"
-                class="error-item"
-              >
-                <span class="error-name">{{ err.name }}</span>
-                <span class="error-reason">{{ err.reason }}</span>
-              </div>
-              <div v-if="task.errors.length > 10" class="error-more">
-                还有 {{ task.errors.length - 10 }} 首...
-              </div>
-            </a-collapse-panel>
-          </a-collapse>
-        </div>
+        <a-collapse
+          v-if="task.errors && task.errors.length > 0"
+          :default-active-key="['errors-' + task.task_id]"
+          :bordered="false"
+          class="task-errors"
+        >
+          <a-collapse-panel :key="'errors-' + task.task_id" :header="`${task.errors.length} 首失败`">
+            <a-list
+              :data-source="task.errors.slice(0, 10)"
+              :size="small"
+              class="error-list"
+            >
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <a-list-item-meta-title class="error-name">{{ item.name }}</a-list-item-meta-title>
+                    <a-list-item-meta-description class="error-reason">{{ item.reason }}</a-list-item-meta-description>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+            <div v-if="task.errors.length > 10" class="error-more">
+              还有 {{ task.errors.length - 10 }} 首...
+            </div>
+          </a-collapse-panel>
+        </a-collapse>
 
         <!-- 操作按钮 -->
         <div class="task-actions">
@@ -112,6 +134,7 @@
             @click="handleCancel(task)"
             :loading="cancellingId === task.task_id"
           >
+            <component :is="StopOutlined" class="mr-1" />
             取消
           </a-button>
 
@@ -123,38 +146,44 @@
               @click="handleDownload(task)"
               :loading="downloadingId === task.task_id"
             >
-              💾 下载 zip
+              下载
             </a-button>
             <a-button
               size="small"
               @click="handleRemove(task)"
             >
+              <component :is="DeleteOutlined" class="mr-1" />
               删除
             </a-button>
           </template>
 
-          <!-- 失败/取消：删除 + 重试 -->
+          <!-- 失败/取消：删除 -->
           <template v-else>
             <a-button
               size="small"
               @click="handleRemove(task)"
             >
+              <component :is="DeleteOutlined" class="mr-1" />
               删除
             </a-button>
           </template>
 
           <!-- 错误信息：显示在右侧 -->
           <span v-if="task.error" class="error-msg" :title="task.error">
+            <component :is="AlertCircleOutlined" class="error-icon" />
             {{ task.error }}
           </span>
         </div>
-      </div>
+      </a-card>
     </div>
 
     <!-- 底部：关闭按钮 -->
     <template #footer>
       <div class="drawer-footer">
-        <a-button @click="store.closeDrawer()">关闭</a-button>
+        <a-button @click="store.closeDrawer()">
+          <component :is="CloseOutlined" class="mr-1" />
+          关闭
+        </a-button>
       </div>
     </template>
   </a-drawer>
@@ -163,6 +192,21 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import * as icons from '@ant-design/icons-vue'
+const {
+  DownloadOutlined,
+  LoadingOutlined,
+  CheckCircleOutlined,
+  MusicOutlined,
+  CloseCircleOutlined,
+  HeadphonesOutlined,
+  StopOutlined,
+  CloudDownloadOutlined,
+  DeleteOutlined,
+  AlertCircleOutlined = icons.WarningOutlined,
+  CloseOutlined,
+  TrashOutlined
+} = icons
 import { downloadQueueStore as store } from '../stores/downloadQueue.js'
 
 const cancellingId = ref(null)
@@ -186,6 +230,17 @@ const statusLabel = (status) => {
   return labels[status] || status
 }
 
+const getStatusColor = (status) => {
+  const colors = {
+    running: 'blue',
+    done: 'green',
+    error: 'error',
+    cancelled: 'default',
+    pending: 'orange'
+  }
+  return colors[status] || 'default'
+}
+
 const getPercentage = (task) => {
   if (task.total === 0) return 0
   return Math.round((task.completed / task.total) * 100)
@@ -200,7 +255,7 @@ const getProgressStatus = (status) => {
 
 const getProgressColor = (status) => {
   if (status === 'cancelled') return '#999'
-  return undefined  // 使用默认主题色
+  return undefined
 }
 
 const handleCancel = async (task) => {
@@ -257,7 +312,6 @@ const handleClearCompleted = async () => {
 }
 
 onMounted(() => {
-  // 抽屉打开时主动同步一次（确保最新状态）
   store.syncWithBackend()
 })
 </script>
@@ -267,7 +321,8 @@ onMounted(() => {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  height: 100%;
 }
 
 .drawer-header {
@@ -280,58 +335,89 @@ onMounted(() => {
 
 .stats {
   display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--color-text-secondary, #6b7280);
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.stat-running {
-  background: #3b82f6;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.stat-done {
-  background: #10b981;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  gap: 8px;
 }
 
 .empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 60px 20px;
-  color: var(--color-text-muted, #9ca3af);
+}
+
+.empty-icon-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.empty-icon-bg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .empty-icon {
   font-size: 48px;
-  margin-bottom: 12px;
+  color: #fff;
+  z-index: 1;
+  animation: float 3s ease-in-out infinite;
 }
 
-.empty-text {
+.empty-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-on-surface, #111827);
+  margin: 0;
+}
+
+.empty-desc {
   font-size: 14px;
-  margin: 4px 0;
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-muted, #9ca3af);
+  margin: 0;
+  max-width: 280px;
 }
 
-.empty-hint {
-  font-size: 12px;
-  margin: 4px 0;
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.85;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .task-list {
@@ -342,30 +428,24 @@ onMounted(() => {
   flex: 1;
 }
 
-.task-item {
-  background: var(--color-surface-container, #f9fafb);
-  border: 1px solid var(--color-border-subtle, #e5e7eb);
-  border-radius: 8px;
-  padding: 12px;
-  transition: all 0.2s;
+.task-card {
+  transition: all 0.3s ease;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.task-item:hover {
-  border-color: var(--color-primary, #3b82f6);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+.task-card.status-running {
+  border-left: 4px solid #3b82f6;
 }
 
-.task-item.status-running {
-  border-left: 3px solid #3b82f6;
+.task-card.status-done {
+  border-left: 4px solid #10b981;
 }
 
-.task-item.status-done {
-  border-left: 3px solid #10b981;
-}
-
-.task-item.status-error,
-.task-item.status-cancelled {
-  border-left: 3px solid #9ca3af;
+.task-card.status-error,
+.task-card.status-cancelled {
+  border-left: 4px solid #9ca3af;
   opacity: 0.85;
 }
 
@@ -373,55 +453,44 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.task-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.task-icon {
+  font-size: 18px;
+  color: #3b82f6;
 }
 
 .task-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-on-surface, #111827);
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-right: 8px;
 }
 
-.task-status-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.badge-running {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.badge-done {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.badge-error,
-.badge-cancelled {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
-.badge-pending {
-  background: #fef3c7;
-  color: #92400e;
+.task-progress {
+  margin-bottom: 8px;
 }
 
 .task-detail {
+  margin-bottom: 12px;
+}
+
+.detail-item {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
-  color: var(--color-text-muted, #6b7280);
-  margin-top: 6px;
-  flex-wrap: wrap;
+  color: var(--color-text-secondary, #6b7280);
 }
 
 .detail-item.failed {
@@ -430,19 +499,29 @@ onMounted(() => {
 
 .detail-item.current {
   color: #3b82f6;
-  max-width: 200px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-errors {
-  margin-top: 8px;
+.success-icon {
+  color: #10b981;
 }
 
-.task-errors :deep(.ant-collapse) {
-  background: transparent;
-  border: none;
+.error-icon {
+  color: #ef4444;
+}
+
+.current-icon {
+  color: #3b82f6;
+}
+
+.task-errors {
+  margin-bottom: 12px;
+  background: #fef2f2;
+  border-radius: 8px;
+  padding: 8px;
 }
 
 .task-errors :deep(.ant-collapse-header) {
@@ -451,26 +530,25 @@ onMounted(() => {
   color: #ef4444;
 }
 
-.error-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 2px 0;
-  color: var(--color-text-secondary, #6b7280);
+.task-errors :deep(.ant-collapse-content) {
+  padding: 8px 0 !important;
+}
+
+.error-list :deep(.ant-list-item) {
+  padding: 4px 0 !important;
 }
 
 .error-name {
-  max-width: 50%;
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .error-reason {
-  color: #ef4444;
   font-size: 11px;
-  max-width: 50%;
-  text-align: right;
+  color: #ef4444;
 }
 
 .error-more {
@@ -483,9 +561,10 @@ onMounted(() => {
 .task-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
   align-items: center;
   flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle, #e5e7eb);
 }
 
 .error-msg {
@@ -496,6 +575,10 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .drawer-footer {

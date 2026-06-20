@@ -65,8 +65,8 @@ app.register_blueprint(music_bp)
 
 @app.route('/')
 def index():
-    """首页"""
-    return render_template('index.html')
+    """首页 - 重定向到API文档"""
+    return redirect('/docs')
 
 
 @app.route('/favicon.ico')

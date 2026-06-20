@@ -270,6 +270,7 @@ def download_proxy():
       - lrc: 歌词（可选，用于 metadata）
       - filenameFormat: song-artist / artist-song / song（默认 song-artist）
       - writeMetadata: true/false（默认 true）
+      - downloadLrc: true/false（是否同时下载歌词，打包为 ZIP）
     """
     song_id = request.args.get('id', '').strip()
     quality = request.args.get('quality', 'lossless').strip()
@@ -280,6 +281,7 @@ def download_proxy():
     lyric = request.args.get('lrc', '')
     filename_format = request.args.get('filenameFormat', 'song-artist').strip()
     write_metadata = request.args.get('writeMetadata', 'true').lower() != 'false'
+    download_lrc = request.args.get('downloadLrc', 'false').lower() == 'true'
 
     if not song_id:
         return APIResponse.json_error("缺少歌曲 id 参数", 400)
@@ -333,19 +335,67 @@ def download_proxy():
                 lyric or song_info.get('lyric', '')
             )
 
-        # 3. 发送文件：先读取文件到内存，再通过 Response 返回
-        # 避免 send_file 内部流式读取与文件删除的时序问题
-        # 确保 Content-Length 精确匹配实际文件大小
-        with open(tmp_path, 'rb') as f:
-            file_data = f.read()
-        file_size = len(file_data)
-        logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
-
+        # 构建文件名
         safe_name = _sanitize_filename(
             _build_filename(artist or song_info.get('artists', ''),
                             name or song_info.get('name', 'song'),
                             extension, filename_format)
         )
+
+        # 如果需要同时下载歌词，打包为 ZIP
+        if download_lrc:
+            import zipfile
+            
+            # 获取歌词
+            lrc_content = ''
+            try:
+                if not lyric:
+                    lrc_content = music_service.get_lyric(song_id, source)
+                else:
+                    lrc_content = lyric
+            except Exception as e:
+                logger.warning(f"获取歌词失败: {e}")
+                lrc_content = ''
+
+            # 创建 ZIP 文件
+            fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-')
+            os.close(fd)
+            _register_temp_file(zip_path)
+
+            try:
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    # 添加音频文件
+                    zf.write(tmp_path, os.path.basename(safe_name))
+                    
+                    # 添加歌词文件
+                    if lrc_content:
+                        lrc_filename = os.path.splitext(safe_name)[0] + '.lrc'
+                        zf.writestr(lrc_filename, lrc_content)
+                
+                # 读取 ZIP 文件
+                with open(zip_path, 'rb') as f:
+                    file_data = f.read()
+                file_size = len(file_data)
+                logger.info(f"创建 ZIP 完成，大小: {file_size} bytes")
+                
+                safe_name = os.path.splitext(safe_name)[0] + '.zip'
+                mime_type = 'application/zip'
+                
+            finally:
+                # 清理临时文件
+                try:
+                    os.unlink(zip_path)
+                except:
+                    pass
+        else:
+            # 3. 发送文件：先读取文件到内存，再通过 Response 返回
+            # 避免 send_file 内部流式读取与文件删除的时序问题
+            # 确保 Content-Length 精确匹配实际文件大小
+            with open(tmp_path, 'rb') as f:
+                file_data = f.read()
+            file_size = len(file_data)
+            logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
+
         logger.info(f"准备发送: filename={safe_name}, size={file_size}")
 
         # 实际音质推断（用于前端显示真实下载到的音质）
