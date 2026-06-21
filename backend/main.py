@@ -44,7 +44,7 @@ else:
     if dev_env.exists():
         load_dotenv(dev_env, override=True)
 
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect
 from flask_cors import CORS
 
 from routes import search_bp, music_bp
