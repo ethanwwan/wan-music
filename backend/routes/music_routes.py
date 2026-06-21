@@ -14,9 +14,9 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
 
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, USLT, error as ID3Error
-from mutagen.flac import FLAC
-from mutagen.mp4 import MP4
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, USLT, APIC, error as ID3Error
+from mutagen.flac import FLAC, Picture
+from mutagen.mp4 import MP4, MP4Cover
 
 from services.music_service import music_service
 from utils.api_response import APIResponse
@@ -156,9 +156,30 @@ def _detect_mp3_bitrate(file_path: str) -> Optional[int]:
         return None
 
 
-def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = ''):
-    """给音频文件写入 metadata（mp3/flac/m4a）"""
+def _download_cover(cover_url: str, max_size: int = 524288) -> bytes | None:
+    """下载封面图片（限制大小，默认 500KB）"""
+    if not cover_url:
+        return None
     try:
+        resp = requests.get(cover_url, timeout=10, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
+        resp.raise_for_status()
+        content = b''
+        for chunk in resp.iter_content(chunk_size=8192):
+            content += chunk
+            if len(content) > max_size:
+                logger.warning(f"封面图片超过大小限制 ({max_size} bytes)")
+                return None
+        return content
+    except Exception as e:
+        logger.warning(f"下载封面失败: {e}")
+        return None
+
+
+def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = '', cover_url: str = ''):
+    """给音频文件写入 metadata（mp3/flac/m4a），支持封面图片"""
+    try:
+        cover_data = _download_cover(cover_url) if cover_url else None
+        
         if extension == '.mp3':
             try:
                 audio = ID3(file_path)
@@ -168,10 +189,13 @@ def _write_metadata(file_path: str, extension: str, name: str, artist: str, albu
             audio.delall('TPE1')
             audio.delall('TALB')
             audio.delall('USLT')
+            audio.delall('APIC')  # 清除现有封面
             if name: audio.add(TIT2(encoding=3, text=[name]))
             if artist: audio.add(TPE1(encoding=3, text=[artist]))
             if album: audio.add(TALB(encoding=3, text=[album]))
             if lyric: audio.add(USLT(encoding=3, lang='chi', desc='', text=lyric))
+            if cover_data:
+                audio.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=cover_data))
             audio.save(file_path)
         elif extension == '.flac':
             audio = FLAC(file_path)
@@ -179,6 +203,14 @@ def _write_metadata(file_path: str, extension: str, name: str, artist: str, albu
             audio['artist'] = artist
             audio['album'] = album
             if lyric: audio['lyrics'] = lyric
+            if cover_data:
+                audio.clear_pictures()
+                picture = Picture()
+                picture.data = cover_data
+                picture.type = 3  # Front cover
+                picture.mime = 'image/jpeg'
+                picture.desc = 'Cover'
+                audio.add_picture(picture)
             audio.save()
         elif extension in ('.m4a', '.mp4'):
             audio = MP4(file_path)
@@ -186,6 +218,8 @@ def _write_metadata(file_path: str, extension: str, name: str, artist: str, albu
             audio['\xa9ART'] = [artist]
             audio['\xa9alb'] = [album]
             if lyric: audio['\xa9lyr'] = [lyric]
+            if cover_data:
+                audio['covr'] = [MP4Cover(cover_data, MP4Cover.FORMAT_JPEG)]
             audio.save()
     except Exception as e:
         logger.warning(f"写入 metadata 失败 ({extension}): {e}")
@@ -332,7 +366,8 @@ def download_proxy():
                 name or song_info.get('name', ''),
                 artist or song_info.get('artists', ''),
                 album or song_info.get('album', ''),
-                lyric or song_info.get('lyric', '')
+                lyric or song_info.get('lyric', ''),
+                song_info.get('picUrl', '')
             )
 
         # 构建文件名
@@ -498,7 +533,8 @@ def _process_song(item: dict, settings: dict) -> dict | None:
                     name or song_info.get('name', ''),
                     artist or song_info.get('artists', ''),
                     album or song_info.get('album', ''),
-                    lyric
+                    lyric,
+                    song_info.get('picUrl', '')
                 )
 
             arcname = _sanitize_filename(
