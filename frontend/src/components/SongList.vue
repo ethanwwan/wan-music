@@ -58,7 +58,7 @@
               </th>
               <th class="col-cover"></th>
               <th class="col-name">歌名</th>
-              <th class="col-artist">歌手</th>
+              <th class="col-album">专辑名</th>
               <th class="col-action">
                 <template v-if="!isSelectMode">
                   <a-button size="small" @click="enterSelectMode">批量操作</a-button>
@@ -108,17 +108,20 @@
                 </div>
               </td>
               <td class="col-name">
-                <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ track.name }}</span>
-                <span v-if="isTrackUnavailable(track)" class="unavailable-reason">无版权</span>
-                <span 
-                  v-if="track.source" 
-                  class="source-tag"
-                  :style="{ backgroundColor: getSourceInfo(track.source)?.color + '20', color: getSourceInfo(track.source)?.color }"
-                >
-                  {{ getSourceInfo(track.source)?.name || track.source }}
-                </span>
+                <div class="track-name-row">
+                  <span class="track-name" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ track.name }}</span>
+                  <span v-if="isTrackUnavailable(track)" class="unavailable-reason">无版权</span>
+                  <span
+                    v-if="track.source"
+                    class="source-tag"
+                    :style="{ backgroundColor: getSourceInfo(track.source)?.color + '20', color: getSourceInfo(track.source)?.color }"
+                  >
+                    {{ getSourceInfo(track.source)?.name || track.source }}
+                  </span>
+                </div>
+                <div class="track-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</div>
               </td>
-              <td class="col-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</td>
+              <td class="col-album" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getAlbum(track) }}</td>
               <td class="col-action">
                 <a-button 
                   type="text"
@@ -834,20 +837,48 @@ const handleItemClick = (item, action) => {
 }
 
 .col-name {
-  min-width: 200px;
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.track-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  margin-bottom: 2px;
+  overflow: hidden;
 }
 
 .track-name {
   font-size: 14px;
   font-weight: 500;
   color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.col-artist,
+.track-artist {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .col-album {
   font-size: 14px;
   color: var(--color-text-muted);
   min-width: 150px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tracks-table td.col-action {
@@ -905,7 +936,8 @@ const handleItemClick = (item, action) => {
 }
 
 .track-row.unavailable .track-name,
-.track-row.unavailable .col-artist {
+.track-row.unavailable .track-artist,
+.track-row.unavailable .col-album {
   color: #999 !important;
 }
 
@@ -932,12 +964,14 @@ const handleItemClick = (item, action) => {
 
 .source-tag {
   display: inline-block;
-  margin-left: 8px;
-  padding: 4px;
+  margin-left: 0;
+  padding: 2px 6px;
   font-size: 10px;
   border-radius: 4px;
   vertical-align: middle;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 暗色模式 */
@@ -950,7 +984,8 @@ const handleItemClick = (item, action) => {
 }
 
 .dark .track-row.unavailable .track-name,
-.dark .track-row.unavailable .col-artist {
+.dark .track-row.unavailable .track-artist,
+.dark .track-row.unavailable .col-album {
   color: #666 !important;
 }
 
