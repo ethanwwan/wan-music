@@ -9,18 +9,25 @@ import time
 import uuid
 import json
 import threading
-import re
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
 
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, USLT, APIC, error as ID3Error
-from mutagen.flac import FLAC, Picture
-from mutagen.mp4 import MP4, MP4Cover
-
 from services.music_service import music_service
 from utils.api_response import APIResponse
 from utils.url_parser import parse_url, is_music_url, is_playlist_url, is_album_url
+from utils.filename import (
+    sanitize_filename as _sanitize_filename,
+    build_filename as _build_filename,
+    build_content_disposition as _build_content_disposition,
+)
+from utils.audio_utils import (
+    get_extension as _get_extension,
+    detect_audio_type as _detect_audio_type,
+    detect_mp3_bitrate as _detect_mp3_bitrate,
+    safe_remove as _safe_remove,
+)
+from utils.metadata import write_metadata as _write_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -45,195 +52,6 @@ BATCH_TASK_TTL = 600  # 任务完成后 10 分钟清理
 BATCH_MAX_WORKERS = 6  # 并发下载线程数
 
 
-def _sanitize_filename(name: str) -> str:
-    """清理文件名中的非法字符"""
-    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip()
-
-
-def _get_extension(url: str, fallback: str = '.mp3') -> str:
-    """从 URL 后缀推断文件扩展名"""
-    url_path = url.split('?')[0].split('#')[0].lower()
-    for ext in ['.flac', '.m4a', '.mp4', '.aac', '.mp3', '.ogg', '.wav']:
-        if url_path.endswith(ext):
-            return ext
-    return fallback
-
-
-def _detect_audio_type(file_path: str) -> Optional[str]:
-    """通过文件 magic bytes 检测真实音频类型
-
-    支持检测：FLAC / MP3 / WAV / OGG / M4A(MP4) / APE
-    返回: 'flac' / 'mp3' / 'wav' / 'ogg' / 'm4a' / 'ape' / None
-    """
-    try:
-        with open(file_path, 'rb') as f:
-            head = f.read(16)
-        if len(head) < 4:
-            return None
-
-        # FLAC: 'fLaC' (66 4c 61 43)
-        if head[:4] == b'fLaC':
-            return 'flac'
-
-        # RIFF / WAV: 'RIFF'....'WAVE' (52 49 46 46)
-        if head[:4] == b'RIFF' and head[8:12] == b'WAVE':
-            return 'wav'
-
-        # OGG: 'OggS' (4f 67 67 53)
-        if head[:4] == b'OggS':
-            return 'ogg'
-
-        # MP4/M4A: 'ftyp' at offset 4 (66 74 79 70)
-        if head[4:8] == b'ftyp':
-            return 'm4a'
-
-        # APE: 'APETAGEX' (41 50 45 54 41 47 45 58)
-        if head[:8] == b'APETAGEX':
-            return 'ape'
-
-        # MP3: ID3v2 头 ('ID3') 或帧同步 0xFFEx/0xFFFx
-        if head[:3] == b'ID3':
-            return 'mp3'
-        if len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
-            return 'mp3'
-
-        return None
-    except Exception:
-        return None
-
-
-# MP3 bitrate index → kbps (MPEG1 Layer 3, sample rate 44100/48000/32000)
-# Layer3 其他 sample rate (22050/24000/16000) 同 index 不同 bitrate
-_MP3_BITRATE_TABLE_V1L3 = {
-    1: 32, 2: 40, 3: 48, 4: 56, 5: 64, 6: 80, 7: 96, 8: 112,
-    9: 128, 10: 160, 11: 192, 12: 224, 13: 256, 14: 320, 15: 0
-}
-
-
-def _detect_mp3_bitrate(file_path: str) -> Optional[int]:
-    """读取第一个 MP3 frame 的 bitrate (kbps)
-
-    返回 None 表示无法识别（不是 MP3 或格式异常）
-    """
-    import logging
-    try:
-        with open(file_path, 'rb') as f:
-            # 至少读 64KB 以确保 ID3v2 tag 后的 frame header 也能读到
-            head = f.read(65536)
-        if len(head) < 4:
-            return None
-        # 跳过 ID3v2 头
-        i = 0
-        if head[:3] == b'ID3':
-            # 注意：+ 优先级低于 |，所以 OR 部分要加括号
-            tag_size = 10 + (((head[6] & 0x7F) << 21) | ((head[7] & 0x7F) << 14) |
-                             ((head[8] & 0x7F) << 7) | (head[9] & 0x7F))
-            i = tag_size
-            logging.getLogger('music').info(f"MP3 bitrate: ID3v2 tag size={tag_size}, head_len={len(head)}")
-        # 找第一个 frame sync (11 bits of 1)
-        while i < len(head) - 4:
-            if head[i] == 0xFF and (head[i + 1] & 0xE0) == 0xE0:
-                h = (head[i] << 24) | (head[i + 1] << 16) | (head[i + 2] << 8) | head[i + 3]
-                version_id = (h >> 19) & 3   # 0=MPEG2.5, 2=MPEG2, 3=MPEG1
-                layer = (h >> 17) & 3         # 1=Layer3
-                br_idx = (h >> 12) & 0xF
-                logging.getLogger('music').info(
-                    f"MP3 bitrate: found frame at {i}, version={version_id}, layer={layer}, br_idx={br_idx}"
-                )
-                if layer == 1:                # Layer3
-                    if version_id == 3:       # MPEG1
-                        result = _MP3_BITRATE_TABLE_V1L3.get(br_idx)
-                        logging.getLogger('music').info(f"MP3 bitrate: result={result}kbps")
-                        return result
-                    elif version_id in (0, 2):  # MPEG2/2.5
-                        table = {1: 8, 2: 16, 3: 24, 4: 32, 5: 40, 6: 48, 7: 56,
-                                 8: 64, 9: 80, 10: 96, 11: 112, 12: 128, 13: 144, 14: 160, 15: 0}
-                        return table.get(br_idx)
-            i += 1
-        return None
-    except Exception as e:
-        logging.getLogger('music').error(f"MP3 bitrate: error={e}")
-        return None
-
-
-def _download_cover(cover_url: str, max_size: int = 3145728) -> bytes | None:
-    """下载封面图片（限制大小，默认 3MB）"""
-    if not cover_url:
-        return None
-    try:
-        resp = requests.get(cover_url, timeout=10, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
-        resp.raise_for_status()
-        content = b''
-        for chunk in resp.iter_content(chunk_size=8192):
-            content += chunk
-            if len(content) > max_size:
-                logger.warning(f"封面图片超过大小限制 ({max_size} bytes)")
-                return None
-        return content
-    except Exception as e:
-        logger.warning(f"下载封面失败: {e}")
-        return None
-
-
-def _write_metadata(file_path: str, extension: str, name: str, artist: str, album: str, lyric: str = '', cover_url: str = ''):
-    """给音频文件写入 metadata（mp3/flac/m4a），支持封面图片"""
-    try:
-        cover_data = _download_cover(cover_url) if cover_url else None
-        
-        if extension == '.mp3':
-            try:
-                audio = ID3(file_path)
-            except ID3Error:
-                audio = ID3()
-            audio.delall('TIT2')
-            audio.delall('TPE1')
-            audio.delall('TALB')
-            audio.delall('USLT')
-            audio.delall('APIC')  # 清除现有封面
-            if name: audio.add(TIT2(encoding=3, text=[name]))
-            if artist: audio.add(TPE1(encoding=3, text=[artist]))
-            if album: audio.add(TALB(encoding=3, text=[album]))
-            if lyric: audio.add(USLT(encoding=3, lang='chi', desc='', text=lyric))
-            if cover_data:
-                audio.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='Cover', data=cover_data))
-            audio.save(file_path)
-        elif extension == '.flac':
-            audio = FLAC(file_path)
-            audio['title'] = name
-            audio['artist'] = artist
-            audio['album'] = album
-            if lyric: audio['lyrics'] = lyric
-            if cover_data:
-                audio.clear_pictures()
-                picture = Picture()
-                picture.data = cover_data
-                picture.type = 3  # Front cover
-                picture.mime = 'image/jpeg'
-                picture.desc = 'Cover'
-                audio.add_picture(picture)
-            audio.save()
-        elif extension in ('.m4a', '.mp4'):
-            audio = MP4(file_path)
-            audio['\xa9nam'] = [name]
-            audio['\xa9ART'] = [artist]
-            audio['\xa9alb'] = [album]
-            if lyric: audio['\xa9lyr'] = [lyric]
-            if cover_data:
-                audio['covr'] = [MP4Cover(cover_data, MP4Cover.FORMAT_JPEG)]
-            audio.save()
-    except Exception as e:
-        logger.warning(f"写入 metadata 失败 ({extension}): {e}")
-
-
-def _safe_remove(path: str):
-    """安全删除文件（忽略错误）"""
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-    except Exception:
-        pass
-
-
 # Flask 请求上下文清理钩子
 def _register_temp_file(tmp_path: str):
     """注册临时文件到当前请求，请求结束后会自动清理"""
@@ -251,43 +69,6 @@ def _cleanup_temp_files(exception=None):
         for path in list(g._temp_files):
             _safe_remove(path)
         g._temp_files.clear()
-
-
-def _build_filename(artist: str, name: str, extension: str, filename_format: str = 'song-artist') -> str:
-    """根据文件命名格式构造文件名
-
-    filename_format: 'song-artist' (默认) | 'artist-song' | 'song'
-    """
-    if filename_format == 'artist-song':
-        return f"{artist} - {name}{extension}" if artist else f"{name}{extension}"
-    elif filename_format == 'song':
-        return f"{name}{extension}"
-    else:  # 'song-artist'
-        return f"{name} - {artist}{extension}" if artist else f"{name}{extension}"
-
-
-def _build_content_disposition(filename: str) -> str:
-    """构造 Content-Disposition 头（兼容 UTF-8 和 ASCII）
-    - 主用 filename*=UTF-8''...（现代浏览器都支持，保留中文）
-    - 兼容老浏览器用 ASCII fallback（仅保留 ASCII 可打印部分，合并多余空白）
-    """
-    from urllib.parse import quote
-    try:
-        filename.encode('ascii')
-        return f'attachment; filename="{filename}"'
-    except UnicodeEncodeError:
-        # 分离扩展名
-        m = re.search(r'(\.[A-Za-z0-9]+)$', filename)
-        ext = m.group(1) if m else ''
-        name_no_ext = filename[:m.start()] if m else filename
-        # 提取 ASCII 可打印部分
-        ascii_part = re.sub(r'[^\x20-\x7e]', '', name_no_ext).strip()
-        ascii_part = re.sub(r'\s+', ' ', ascii_part)
-        if len(ascii_part) > 80:
-            ascii_part = ascii_part[:80]
-        ascii_fallback = (ascii_part or 'download') + ext
-        quoted = quote(filename, safe="!#$&+-.^_`|~")
-        return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quoted}"
 
 
 @music_bp.route('/download', methods=['GET'])
@@ -367,7 +148,9 @@ def download_proxy():
                 artist or song_info.get('artists', ''),
                 album or song_info.get('album', ''),
                 lyric or song_info.get('lyric', ''),
-                song_info.get('picUrl', '')
+                song_info.get('picUrl', ''),
+                platform=song_info.get('source', source or ''),
+                song_id=song_info.get('id', song_id)
             )
 
         # 构建文件名
@@ -534,7 +317,9 @@ def _process_song(item: dict, settings: dict) -> dict | None:
                     artist or song_info.get('artists', ''),
                     album or song_info.get('album', ''),
                     lyric,
-                    song_info.get('picUrl', '')
+                    song_info.get('picUrl', ''),
+                    platform=song_info.get('source', source or ''),
+                    song_id=song_info.get('id', song_id)
                 )
 
             arcname = _sanitize_filename(
