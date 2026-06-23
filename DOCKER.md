@@ -68,13 +68,13 @@ WAN_MUSIC_IMAGE=ghcr.io/<your-username>/wan-music:v1.0.0 \
 
 ### 触发条件
 
-| 事件 | 触发结果 |
-|------|---------|
-| `git push origin main` | 构建并推送 `:latest` + `:sha-<short>` |
-| `git push origin v1.2.3` | 构建并推送 `:v1.2.3` + `:1.2` + `:1` + `:latest`（如果 main 落后） |
-| `git push origin v1.2.3-rc1` | 构建并推送 `:v1.2.3-rc1`（预发布）|
-| `pull_request` | 只构建不推送（用于验证）|
-| `workflow_dispatch` | 手动指定 tag |
+| 事件                           | 触发结果                                                    |
+| ---------------------------- | ------------------------------------------------------- |
+| `git push origin main`       | 构建并推送 `:latest` + `:sha-<short>`                        |
+| `git push origin v1.2.3`     | 构建并推送 `:v1.2.3` + `:1.2` + `:1` + `:latest`（如果 main 落后） |
+| `git push origin v1.2.3-rc1` | 构建并推送 `:v1.2.3-rc1`（预发布）                                |
+| `pull_request`               | 只构建不推送（用于验证）                                            |
+| `workflow_dispatch`          | 手动指定 tag                                                |
 
 ### 发布新版本流程
 
@@ -110,18 +110,19 @@ git push origin v1.0.0
 
 ### 标签说明
 
-| 标签 | 来源 | 示例 |
-|------|------|------|
-| `v1.2.3` | 完整版本 | `v1.2.3` |
-| `1.2` | 主.次版本 | `1.2` |
-| `1` | 主版本 | `1` |
-| `latest` | 最新稳定版（仅 main 分支的 tag）| `latest` |
-| `sha-abc1234` | main 分支 commit | `sha-abc1234` |
+| 标签            | 来源                    | 示例            |
+| ------------- | --------------------- | ------------- |
+| `v1.2.3`      | 完整版本                  | `v1.2.3`      |
+| `1.2`         | 主.次版本                 | `1.2`         |
+| `1`           | 主版本                   | `1`           |
+| `latest`      | 最新稳定版（仅 main 分支的 tag） | `latest`      |
+| `sha-abc1234` | main 分支 commit        | `sha-abc1234` |
 
 ### 多架构支持
 
 镜像同时支持 `linux/amd64` 和 `linux/arm64`：
-- Intel/AMD 服务器（x86_64）
+
+- Intel/AMD 服务器（x86\_64）
 - Apple Silicon Mac（M1/M2/M3）
 - AWS Graviton
 - Raspberry Pi 4+
@@ -178,13 +179,13 @@ curl http://localhost:5002/health
 
 ## 安全
 
-| 措施 | 说明 |
-|------|------|
-| 非 root 用户 | 容器内使用 `wanmusic` 用户运行 |
-| Trivy 扫描 | 每次构建自动扫描高危漏洞 |
-| 多阶段构建 | 不包含构建工具，减小攻击面 |
-| .dockerignore | 排除 cookie/.env 等敏感文件 |
-| 自动标签 | 镜像元数据符合 OCI 标准 |
+| 措施            | 说明                    |
+| ------------- | --------------------- |
+| 非 root 用户     | 容器内使用 `wanmusic` 用户运行 |
+| Trivy 扫描      | 每次构建自动扫描高危漏洞          |
+| 多阶段构建         | 不包含构建工具，减小攻击面         |
+| .dockerignore | 排除 cookie/.env 等敏感文件  |
+| 自动标签          | 镜像元数据符合 OCI 标准        |
 
 ## 故障排查
 
@@ -260,3 +261,4 @@ docker run -d \
   --cleanup \
   --schedule "0 0 4 * * *"  # 每天凌晨 4 点检查更新
 ```
+

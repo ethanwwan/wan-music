@@ -102,8 +102,21 @@ def _write_flac(file_path, name, artist, album, lyric, cover_data, platform, son
     audio['title'] = name
     audio['artist'] = artist
     audio['album'] = album
+
+    # 清除所有可能的歌词字段（不区分大小写，避免 LYRICS/lyrics/Lyrics 重复）
+    lyrics_keys = [k for k in audio.keys() if k.lower() in ('lyrics', 'lyric')]
+    for k in lyrics_keys:
+        del audio[k]
+
     if lyric:
         audio['lyrics'] = lyric
+
+    # 清除已存在的 platform/song_id 字段，避免重复
+    if 'PLATFORM' in audio:
+        del audio['PLATFORM']
+    if 'SONG_ID' in audio:
+        del audio['SONG_ID']
+
     if platform:
         audio['PLATFORM'] = str(platform)
     if song_id:
@@ -131,21 +144,22 @@ def _write_m4a(file_path, name, artist, album, lyric, cover_data, platform, song
         audio['\xa9lyr'] = [lyric]
 
     # 写入 platform 和 song_id 到 freeform 原子
+    # 先清除已存在的，避免重复
     if platform:
         platform_key = '----:com.apple.iTunes:PLATFORM'
-        if platform_key not in audio:
-            audio[platform_key] = []
-        audio[platform_key].append(
+        if platform_key in audio:
+            del audio[platform_key]
+        audio[platform_key] = [
             mutagen.mp4.MP4FreeForm(str(platform).encode('utf-8'))
-        )
+        ]
 
     if song_id:
         song_id_key = '----:com.apple.iTunes:SONG_ID'
-        if song_id_key not in audio:
-            audio[song_id_key] = []
-        audio[song_id_key].append(
+        if song_id_key in audio:
+            del audio[song_id_key]
+        audio[song_id_key] = [
             mutagen.mp4.MP4FreeForm(str(song_id).encode('utf-8'))
-        )
+        ]
 
     if cover_data:
         audio['covr'] = [MP4Cover(cover_data, MP4Cover.FORMAT_JPEG)]
@@ -197,7 +211,11 @@ def read_metadata(file_path: str) -> dict:
             metadata['name'] = audio.get('title', [''])[0]
             metadata['artist'] = audio.get('artist', [''])[0]
             metadata['album'] = audio.get('album', [''])[0]
-            metadata['lyric'] = audio.get('lyrics', [''])[0]
+            # 不区分大小写读取歌词字段（兼容 LYRICS/lyrics/Lyrics）
+            for k in audio.keys():
+                if k.lower() in ('lyrics', 'lyric') and audio[k]:
+                    metadata['lyric'] = audio[k][0]
+                    break
             metadata['platform'] = audio.get('PLATFORM', [''])[0]
             metadata['song_id'] = audio.get('SONG_ID', [''])[0]
             if audio.pictures:
