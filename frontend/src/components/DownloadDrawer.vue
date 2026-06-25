@@ -89,6 +89,9 @@
               <component :is="CloseCircleOutlined" class="error-icon" />
               {{ task.failed }} 失败
             </span>
+            <span v-if="task.file_size > 0" class="detail-item">
+              {{ formatFileSize(task.file_size) }}
+            </span>
             <span v-if="task.current && task.status === 'running'" class="detail-item current">
               <component :is="HeadphonesOutlined" class="current-icon" />
               {{ task.current }}
@@ -256,6 +259,14 @@ const getProgressStatus = (status) => {
 const getProgressColor = (status) => {
   if (status === 'cancelled') return '#999'
   return undefined
+}
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }
 
 const handleCancel = async (task) => {

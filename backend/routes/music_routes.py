@@ -85,7 +85,6 @@ def download_proxy():
       - lrc: 歌词（可选，用于 metadata）
       - filenameFormat: song-artist / artist-song / song（默认 song-artist）
       - writeMetadata: true/false（默认 true）
-      - downloadLrc: true/false（是否同时下载歌词，打包为 ZIP）
     """
     song_id = request.args.get('id', '').strip()
     quality = request.args.get('quality', 'lossless').strip()
@@ -96,7 +95,6 @@ def download_proxy():
     lyric = request.args.get('lrc', '')
     filename_format = request.args.get('filenameFormat', 'song-artist').strip()
     write_metadata = request.args.get('writeMetadata', 'true').lower() != 'false'
-    download_lrc = request.args.get('downloadLrc', 'false').lower() == 'true'
 
     if not song_id:
         return APIResponse.json_error("缺少歌曲 id 参数", 400)
@@ -160,59 +158,13 @@ def download_proxy():
                             extension, filename_format)
         )
 
-        # 如果需要同时下载歌词，打包为 ZIP
-        if download_lrc:
-            import zipfile
-            
-            # 获取歌词
-            lrc_content = ''
-            try:
-                if not lyric:
-                    lrc_content = music_service.get_lyric(song_id, source)
-                else:
-                    lrc_content = lyric
-            except Exception as e:
-                logger.warning(f"获取歌词失败: {e}")
-                lrc_content = ''
-
-            # 创建 ZIP 文件
-            fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-')
-            os.close(fd)
-            _register_temp_file(zip_path)
-
-            try:
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    # 添加音频文件
-                    zf.write(tmp_path, os.path.basename(safe_name))
-                    
-                    # 添加歌词文件
-                    if lrc_content:
-                        lrc_filename = os.path.splitext(safe_name)[0] + '.lrc'
-                        zf.writestr(lrc_filename, lrc_content)
-                
-                # 读取 ZIP 文件
-                with open(zip_path, 'rb') as f:
-                    file_data = f.read()
-                file_size = len(file_data)
-                logger.info(f"创建 ZIP 完成，大小: {file_size} bytes")
-                
-                safe_name = os.path.splitext(safe_name)[0] + '.zip'
-                mime_type = 'application/zip'
-                
-            finally:
-                # 清理临时文件
-                try:
-                    os.unlink(zip_path)
-                except:
-                    pass
-        else:
-            # 3. 发送文件：先读取文件到内存，再通过 Response 返回
-            # 避免 send_file 内部流式读取与文件删除的时序问题
-            # 确保 Content-Length 精确匹配实际文件大小
-            with open(tmp_path, 'rb') as f:
-                file_data = f.read()
-            file_size = len(file_data)
-            logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
+        # 3. 发送文件：先读取文件到内存，再通过 Response 返回
+        # 避免 send_file 内部流式读取与文件删除的时序问题
+        # 确保 Content-Length 精确匹配实际文件大小
+        with open(tmp_path, 'rb') as f:
+            file_data = f.read()
+        file_size = len(file_data)
+        logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
 
         logger.info(f"准备发送: filename={safe_name}, size={file_size}")
 
@@ -257,7 +209,7 @@ def _process_song(item: dict, settings: dict) -> dict | None:
     """处理单首歌曲：下载音频 + 写 metadata + 返回结果
 
     settings: {
-      writeMetadata, filenameFormat, downloadLrcFile
+      writeMetadata, filenameFormat
     }
     返回：{ 'tmp_path', 'arcname', 'lrc_content', 'name' } 或 None
     """
@@ -336,10 +288,6 @@ def _process_song(item: dict, settings: dict) -> dict | None:
                 'name': name
             }
 
-            # 可选：下载 LRC 歌词文件
-            if settings.get('downloadLrcFile', False) and lyric:
-                result['lrc_content'] = lyric
-
             return result
         except Exception as e:
             last_error = e
@@ -408,26 +356,35 @@ def _run_batch_task(task_id: str, items: list, zip_name: str, settings: dict):
                 _safe_remove(r.get('tmp_path', ''))
             return
 
-    # Phase 2: 单线程打包到磁盘 zip
-    fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
-    os.close(fd)
-
+    # Phase 2: 单曲直接保留，多首打包 zip
     try:
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-            for result in completed_results:
-                # 1. 写入音频文件
-                zf.write(result['tmp_path'], result['arcname'])
+        if len(completed_results) == 1:
+            # 单曲：直接使用已下载的文件，不需要 ZIP
+            result = completed_results[0]
+            final_path = result['tmp_path']
+            # 重命名为带正确扩展名的文件
+            final_name = result['arcname']
+            with batch_tasks_lock:
+                task['status'] = 'done'
+                task['zip_path'] = final_path
+                task['zip_name'] = final_name
+                task['single_file'] = True
+                task['errors'] = failed_items
+                task['completed_at'] = time.time()
+        else:
+            # 多首：打包 ZIP
+            fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
+            os.close(fd)
 
-                # 2. 可选：写入 LRC 歌词文件
-                if result.get('lrc_content'):
-                    lrc_name = result['arcname'].rsplit('.', 1)[0] + '.lrc'
-                    zf.writestr(lrc_name, result['lrc_content'])
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for result in completed_results:
+                    zf.write(result['tmp_path'], result['arcname'])
 
-        with batch_tasks_lock:
-            task['status'] = 'done'
-            task['zip_path'] = zip_path
-            task['errors'] = failed_items
-            task['completed_at'] = time.time()
+            with batch_tasks_lock:
+                task['status'] = 'done'
+                task['zip_path'] = zip_path
+                task['errors'] = failed_items
+                task['completed_at'] = time.time()
 
         # 启动延迟清理（10 分钟未下载则清理）
         def _cleanup_task():
@@ -454,12 +411,11 @@ def download_batch_start():
 
     请求体：
       {
-        "items": [{"id", "quality", "source", "name", "artist", "album"}, ...],
+        "items": [{"id", "quality", "source", "name", "artist", "album", "qualityMap"}, ...],
         "name": "歌单名",
         "settings": {
           "writeMetadata": true,
-          "filenameFormat": "song-artist",
-          "downloadLrcFile": false
+          "filenameFormat": "song-artist"
         }
       }
     """
@@ -470,6 +426,14 @@ def download_batch_start():
 
     if not items:
         return jsonify(APIResponse.error("缺少 items 参数", 400))
+
+    # 从 qualityMap 估算总文件大小
+    estimated_file_size = 0
+    for item in items:
+        qm = item.get('qualityMap') or {}
+        quality = item.get('quality', 'lossless')
+        if quality in qm:
+            estimated_file_size += qm[quality].get('size', 0)
 
     task_id = f"task_{uuid.uuid4().hex[:16]}"
     with batch_tasks_lock:
@@ -485,13 +449,14 @@ def download_batch_start():
             'cancelled': False,
             'created_at': time.time(),
             'completed_at': 0,
+            'file_size': estimated_file_size,
         }
 
     thread = threading.Thread(target=_run_batch_task, args=(task_id, items, zip_name, settings))
     thread.daemon = True
     thread.start()
 
-    return jsonify(APIResponse.success({'task_id': task_id, 'total': len(items)}, "任务已启动"))
+    return jsonify(APIResponse.success({'task_id': task_id, 'total': len(items), 'file_size': estimated_file_size}, "任务已启动"))
 
 
 def _task_to_dict(task_id: str, task: dict) -> dict:
@@ -508,6 +473,8 @@ def _task_to_dict(task_id: str, task: dict) -> dict:
         'error': task.get('error', ''),
         'created_at': task.get('created_at', 0),
         'completed_at': task.get('completed_at', 0),
+        'single_file': task.get('single_file', False),
+        'file_size': task.get('file_size', 0),
     }
 
 
@@ -596,7 +563,8 @@ def download_batch_progress(task_id):
                 'total': task['total'],
                 'completed': task['completed'],
                 'failed': task['failed'],
-                'current': task['current']
+                'current': task['current'],
+                'file_size': task.get('file_size', 0)
             }
 
             if task['status'] == 'done':
@@ -635,12 +603,26 @@ def download_batch_file(task_id):
     if not zip_path or not os.path.exists(zip_path):
         return jsonify(APIResponse.error("文件不存在", 404))
 
-    response = send_file(
-        zip_path,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=f"{task.get('zip_name', 'playlist')}.zip"
-    )
+    is_single = task.get('single_file', False)
+    if is_single:
+        # 单曲：直接返回音频文件
+        ext = os.path.splitext(zip_path)[1]
+        mime_type = EXT_MIME_TYPES.get(ext, 'audio/mpeg')
+        download_name = task.get('zip_name', 'song' + ext)
+        response = send_file(
+            zip_path,
+            mimetype=mime_type,
+            as_attachment=True,
+            download_name=download_name
+        )
+    else:
+        # 多首：返回 ZIP
+        response = send_file(
+            zip_path,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f"{task.get('zip_name', 'playlist')}.zip"
+        )
 
     # 响应关闭后清理
     def cleanup():

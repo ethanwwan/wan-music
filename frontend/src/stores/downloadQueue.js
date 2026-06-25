@@ -78,6 +78,7 @@ const addTask = async (items, name = 'playlist', settings = {}) => {
     completed: 0,
     failed: 0,
     current: '准备中...',
+    file_size: result.data.file_size || 0,
     errors: [],
     error: '',
     created_at: Date.now() / 1000,
@@ -108,7 +109,8 @@ const subscribeTask = (taskId) => {
         status: data.status,
         completed: data.completed,
         failed: data.failed,
-        current: data.current
+        current: data.current,
+        file_size: data.file_size || 0
       })
     },
     onComplete: (data) => {
@@ -118,7 +120,8 @@ const subscribeTask = (taskId) => {
         failed: data.failed,
         errors: data.errors || [],
         current: data.status === 'done' ? '完成' : '已取消',
-        completed_at: Date.now() / 1000
+        completed_at: Date.now() / 1000,
+        file_size: data.file_size || 0
       })
       subscriptions.delete(taskId)
     },
@@ -160,7 +163,8 @@ const refreshTask = async (taskId) => {
           current: found.current || '',
           errors: found.errors || [],
           error: found.error || '',
-          completed_at: found.completed_at || 0
+          completed_at: found.completed_at || 0,
+          file_size: found.file_size || 0
         })
         // 如果是进行中，重新订阅
         if (found.status === 'running') {
@@ -214,7 +218,8 @@ const syncWithBackend = async () => {
           errors: bt.errors || [],
           error: bt.error || '',
           created_at: bt.created_at || Date.now() / 1000,
-          completed_at: bt.completed_at || 0
+          completed_at: bt.completed_at || 0,
+          file_size: bt.file_size || 0
         })
       } else {
         // 同步最新进度
@@ -228,7 +233,8 @@ const syncWithBackend = async () => {
             current: bt.current || '',
             errors: bt.errors || [],
             error: bt.error || '',
-            completed_at: bt.completed_at || 0
+            completed_at: bt.completed_at || 0,
+            file_size: bt.file_size || 0
           })
         }
       }
@@ -357,6 +363,7 @@ const init = async () => {
       completed: 0,
       failed: 0,
       current: '同步中...',
+      file_size: 0,
       errors: [],
       error: '',
       created_at: item.created_at,

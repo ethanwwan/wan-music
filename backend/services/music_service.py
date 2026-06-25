@@ -16,10 +16,10 @@ class MusicService:
     def __init__(self):
         self.music_client = music_client
 
-    def search_songs(self, keyword: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_songs(self, keyword: str, platform: str = None, limit: int = 50, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲"""
         try:
-            return search_music(keyword, platform, limit)
+            return search_music(keyword, platform, limit, quality=quality)
         except Exception as e:
             logger.error(f"搜索歌曲失败: {e}")
             return []
@@ -32,7 +32,7 @@ class MusicService:
             logger.error(f"搜索歌单失败: {e}")
             return []
 
-    def search(self, keyword: str, search_type: int = 0, platform: str = None, limit: int = 20) -> Dict[str, Any]:
+    def search(self, keyword: str, search_type: int = 0, platform: str = None, limit: int = 20, quality: str = 'lossless') -> Dict[str, Any]:
         """
         统一搜索方法
 
@@ -54,7 +54,7 @@ class MusicService:
             return self._search_by_url(parsed)
 
         # 2. 关键字搜索
-        return self._search_by_keyword(keyword, search_type, platform, limit)
+        return self._search_by_keyword(keyword, search_type, platform, limit, quality)
 
     def _search_by_url(self, parsed: Dict[str, str]) -> Dict[str, Any]:
         """根据解析后的 URL 信息获取详情"""
@@ -79,13 +79,13 @@ class MusicService:
         # 专辑暂未实现
         return {'type': 0, 'data': [], 'error': f'暂不支持解析{resource_type}类型', 'warnings': []}
 
-    def _search_by_keyword(self, keyword: str, search_type: int, platform: str, limit: int) -> Dict[str, Any]:
+    def _search_by_keyword(self, keyword: str, search_type: int, platform: str, limit: int, quality: str = 'lossless') -> Dict[str, Any]:
         """按关键字搜索"""
         items: List[Dict[str, Any]] = []
         warnings: List[str] = []
 
         if search_type in (0, 1):
-            songs = self.search_songs(keyword, platform, limit)
+            songs = self.search_songs(keyword, platform, limit, quality=quality)
             for s in songs:
                 s['_type'] = 'song'
             items.extend(songs)

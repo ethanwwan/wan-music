@@ -21,9 +21,86 @@ from typing import Dict, List, Optional, Any
 from urllib.parse import urlencode, quote
 
 from .base_client import BaseMusicClient
-from .quality_config import QualityLevel
+from .quality_config import QualityLevel, match_quality
 
 logger = logging.getLogger(__name__)
+
+
+# 波点 audios level -> 统一 quality key 映射
+_BODIAN_LEVEL_MAP = {
+    'dtsx': 'dolby',
+    'bcms': 'sky',
+    'zply': 'jymaster',
+    'zpga501': 'jyeffect',
+    'zpga201': 'jyeffect',
+    'zp': 'hires',
+}
+# 波点 format+bitrate -> 统一 quality key 映射
+_BODIAN_FORMAT_MAP = {
+    ('flac', 2000): 'lossless',
+    ('ogg', 192): 'exhigh',
+    ('ogg', 100): 'standard',
+    ('mp3', 320): 'exhigh',
+    ('mp3', 128): 'standard',
+    ('aac', 48): 'standard',
+}
+
+
+def _parse_size_str(size_str: str) -> int:
+    """解析 '10.77Mb' 格式为字节数"""
+    try:
+        s = size_str.strip().lower()
+        if s.endswith('mb'):
+            return int(float(s[:-2]) * 1024 * 1024)
+        elif s.endswith('kb'):
+            return int(float(s[:-2]) * 1024)
+        elif s.endswith('gb'):
+            return int(float(s[:-2]) * 1024 * 1024 * 1024)
+        return int(float(s))
+    except:
+        return 0
+
+
+_QUALITY_PRIORITY = ['jymaster', 'jyeffect', 'hires', 'lossless', 'dolby', 'sky', 'exhigh', 'standard']
+
+
+def _extract_pay_and_quality(item: dict, quality: str = 'lossless') -> dict:
+    """从波点音乐搜索结果中提取统一的 payInfo 和 qualityMap"""
+    pay_info_obj = item.get('payInfo', {}) if isinstance(item.get('payInfo'), dict) else {}
+    fee_type = pay_info_obj.get('feeType', {}) if isinstance(pay_info_obj.get('feeType'), dict) else {}
+    is_vip = fee_type.get('vip', '0') == '1'
+    is_song_paid = fee_type.get('song', '0') == '1'
+
+    if is_vip:
+        pay_info = {'free': False, 'vipOnly': True, 'label': 'VIP'}
+    elif is_song_paid:
+        pay_info = {'free': False, 'vipOnly': False, 'label': '付费'}
+    else:
+        pay_info = {'free': True, 'vipOnly': False, 'label': '免费'}
+
+    quality_map = {}
+    seenQualities = set()
+    for audio in item.get('audios', []):
+        level = audio.get('level', '')
+        fmt = audio.get('format', '')
+        bitrate = audio.get('bitrate', '0')
+        size = _parse_size_str(audio.get('size', '0'))
+
+        q_key = _BODIAN_LEVEL_MAP.get(level)
+        if not q_key:
+            q_key = _BODIAN_FORMAT_MAP.get((fmt, int(bitrate) if bitrate.isdigit() else 0))
+        if not q_key:
+            continue
+        if q_key in seenQualities:
+            continue
+        if size <= 0:
+            continue
+        seenQualities.add(q_key)
+        quality_map[q_key] = {'bitrate': int(bitrate) if bitrate.isdigit() else 0, 'size': size}
+
+    best = match_quality(quality_map, quality)
+
+    return {'payInfo': pay_info, 'qualityMap': quality_map, 'bestQuality': best}
 
 
 class BodianClient(BaseMusicClient):
@@ -75,7 +152,7 @@ class BodianClient(BaseMusicClient):
             seed += hashlib.md5(f"{body_text}kuwotest".encode("utf-8")).hexdigest()
         return hashlib.md5(f"{seed}{path}".encode("utf-8")).hexdigest()
     
-    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲"""
         params = {
             "pn": str(offset),
@@ -94,6 +171,7 @@ class BodianClient(BaseMusicClient):
             result_list = data.get('data', {}).get('resultList', [])
             songs = []
             for item in result_list:
+                pq = _extract_pay_and_quality(item, quality)
                 songs.append({
                     'id': item.get('id', ''),
                     'name': item.get('name', ''),
@@ -102,7 +180,7 @@ class BodianClient(BaseMusicClient):
                     'picUrl': item.get('albumPic', ''),
                     'artist_string': item.get('artist', ''),
                     'source': 'bodian',
-                    'freeSign': item.get('freeSign', '')
+                    **pq,
                 })
             return songs
         except Exception as e:
@@ -123,24 +201,32 @@ class BodianClient(BaseMusicClient):
         return []
     
     def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取歌曲播放/下载URL"""
-        apis = [
-            f"https://kw-api.cenguigui.cn/?id={song_id}&type=song&level=lossless&format=json",
-            f"https://mobi.kuwo.cn/mobi.s?f=web&user={random.randint(1000000, 10000000)}&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type=convert_url_with_sign&br=2000kflac&rid={song_id}",
-        ]
-        
-        headers = {"User-Agent": "Dart/2.19 (dart:io)", "plat": "ar", "channel": "aliopen"}
-        
-        for api_url in apis:
+        """获取歌曲播放/下载URL
+
+        参考 musicdl bodian.py 的 API 链：
+        1. 第三方 API 先尝试（cggapi → tianbaoapi）— 无 token 时优先
+        2. 官方 API（/api/play/music/v2/checkRight → /api/play/music/v2/audioUrl）
+        """
+        third_party = self._get_song_url_third_party(song_id, quality)
+        if third_party and third_party.get('url'):
+            return third_party
+
+        official = self._get_song_url_official(song_id, quality)
+        if official and official.get('url'):
+            return official
+
+        return {}
+
+    def _get_song_url_third_party(self, song_id: str, quality: str = 'lossless') -> Dict[str, Any]:
+        """第三方API获取歌曲URL（按 musicdl 优先级）"""
+        for api_name, api_func in self._third_party_apis(song_id):
             try:
-                resp = requests.get(api_url, headers=headers, timeout=10)
-                try:
-                    data = resp.json()
-                except:
-                    continue
-                
-                download_url = data.get('data', {}).get('url', '')
-                if download_url and download_url.startswith('http'):
+                resp = requests.get(api_func, headers=self.default_download_headers, timeout=10)
+                data = resp.json()
+
+                download_url = data.get('data', {}).get('url', '') or data.get('url', '')
+                if download_url and str(download_url).startswith('http'):
+                    logger.info(f"[{self.platform_name}] 第三方API({api_name})成功: {download_url[:80]}...")
                     return {
                         'url': download_url,
                         'quality': quality,
@@ -148,30 +234,92 @@ class BodianClient(BaseMusicClient):
                         'source': 'bodian'
                     }
             except Exception as e:
-                logger.debug(f"[{self.platform_name}] 尝试API失败 {api_url}: {e}")
+                logger.debug(f"[{self.platform_name}] 第三方API({api_name})失败: {e}")
                 continue
-        
-        return self._get_song_url_official(song_id, quality)
-    
-    def _get_song_url_official(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
-        """使用官方API获取歌曲URL"""
+
+        return {}
+
+    def _third_party_apis(self, song_id: str):
+        """返回第三方 API 列表（按 musicdl 优先级：cggapi → tianbaoapi）"""
+        return [
+            ('cggapi', f"https://kw-api.cenguigui.cn/?id={song_id}&type=song&level=lossless&format=json"),
+            ('tianbaoapi', f"https://mobi.kuwo.cn/mobi.s?f=web&user={random.randint(1000000, 10000000)}&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type=convert_url_with_sign&br=2000kflac&rid={song_id}"),
+        ]
+
+    def _get_song_url_official(self, song_id: str, quality: str = 'lossless') -> Dict[str, Any]:
+        """使用官方API获取歌曲URL
+
+        参考 musicdl _parsewithofficialapiv1：
+        1. POST /api/play/music/v2/checkRight（检查权限）
+           - status=3 → 试听 URL（audition.https）
+        2. POST /api/play/music/v2/audioUrl（获取完整 URL）
+        """
         try:
+            # Step 1: checkRight
+            free_sign = ""
             params = {
                 "uid": self.auth_info['uid'],
                 "token": self.auth_info['token'],
                 "timestamp": str(int(time.time() * 1000)),
                 "musicId": str(song_id),
-                "freeSign": ""
+                "freeSign": free_sign
             }
-            payload = json.dumps({"musicId": song_id, "freeSign": ""}, ensure_ascii=False, separators=(",", ":"))
-            params["sign"] = self._signquery("/api/play/music/v2/checkRight", params, body_text=payload)
-            
-            data = self._get('https://bd-api.kuwo.cn/api/play/music/v2/checkRight', params=params)
-            
-            status = data.get('data', {}).get('status')
+            payload = json.dumps({"musicId": song_id, "freeSign": free_sign}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            params["sign"] = self._signquery("/api/play/music/v2/checkRight", params, body_text=payload.decode("utf-8"))
+
+            resp = self.session.post(
+                'https://bd-api.kuwo.cn/api/play/music/v2/checkRight',
+                params=params,
+                data=payload,
+                headers=self.default_download_headers,
+                timeout=10
+            )
+            resp.raise_for_status()
+            download_result = resp.json()
+
+            status = download_result.get('data', {}).get('status')
             if status in {3, '3'}:
-                download_url = data.get('data', {}).get('audition', {}).get('https', '')
-                if download_url:
+                # 试听 URL
+                download_url = (download_result.get('data', {}).get('audition', {}).get('https')
+                                or download_result.get('data', {}).get('audition', {}).get('url'))
+                if download_url and str(download_url).startswith('http'):
+                    logger.info(f"[{self.platform_name}] 官方API(checkRight)成功: {download_url[:80]}...")
+                    return {
+                        'url': download_url,
+                        'quality': quality,
+                        'song_id': song_id,
+                        'source': 'bodian'
+                    }
+            else:
+                # VIP 用户，获取完整 URL
+                fmt, br = "flac", "2000kflac"
+                params2 = {
+                    "uid": self.auth_info['uid'],
+                    "token": self.auth_info['token'],
+                    "timestamp": str(int(time.time() * 1000)),
+                    "devId": self.auth_info['dev_id'],
+                    "musicId": str(song_id),
+                    "format": fmt,
+                    "br": br,
+                    "freeSign": free_sign
+                }
+                payload2 = json.dumps({"devId": self.auth_info['dev_id'], "musicId": song_id, "format": fmt, "br": br, "freeSign": free_sign}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                params2["sign"] = self._signquery("/api/play/music/v2/audioUrl", params2, body_text=payload2.decode("utf-8"))
+
+                resp2 = self.session.post(
+                    'https://bd-api.kuwo.cn/api/play/music/v2/audioUrl',
+                    params=params2,
+                    data=payload2,
+                    headers={**self.default_download_headers, "uid": self.auth_info['uid'], "token": self.auth_info['token']},
+                    timeout=10
+                )
+                resp2.raise_for_status()
+                download_result2 = resp2.json()
+
+                download_url = (download_result2.get('data', {}).get('audioHttpsUrl')
+                                or download_result2.get('data', {}).get('audioUrl'))
+                if download_url and str(download_url).startswith('http'):
+                    logger.info(f"[{self.platform_name}] 官方API(audioUrl)成功: {download_url[:80]}...")
                     return {
                         'url': download_url,
                         'quality': quality,
@@ -180,7 +328,7 @@ class BodianClient(BaseMusicClient):
                     }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] 官方API获取歌曲URL失败: {e}")
-        
+
         return {}
     
     def get_song_info(self, song_id: str) -> Dict[str, Any]:

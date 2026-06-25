@@ -19,12 +19,48 @@ from hashlib import md5
 from enum import Enum
 
 from .base_client import BaseMusicClient
-from .quality_config import QualityLevel
+from .quality_config import QualityLevel, match_quality
 
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 logger = logging.getLogger(__name__)
+
+# 网易云原始 key → 统一 quality key
+_NETEASE_QUALITY_MAP = {
+    'l': 'standard',
+    'm': 'exhigh',
+    'h': 'lossless',
+    'sq': 'hires',
+    'hr': 'hires',
+}
+
+# 统一音质优先级（从高到低）
+_QUALITY_PRIORITY = ['jymaster', 'jyeffect', 'hires', 'lossless', 'dolby', 'sky', 'exhigh', 'standard']
+
+
+def _extract_pay_and_quality(track: dict, quality: str = 'lossless') -> dict:
+    """从网易云歌曲对象中提取统一的 payInfo 和 qualityMap"""
+    fee = track.get('fee', 0)
+    if fee == 0 or fee == 4:
+        pay_info = {'free': True, 'vipOnly': False, 'label': '免费'}
+    elif fee == 8:
+        pay_info = {'free': False, 'vipOnly': True, 'label': 'VIP'}
+    else:
+        pay_info = {'free': False, 'vipOnly': True, 'label': '付费'}
+
+    quality_map = {}
+    for key in ['l', 'm', 'h', 'sq', 'hr']:
+        q = track.get(key)
+        if q and q.get('size'):
+            unified_key = _NETEASE_QUALITY_MAP.get(key, key)
+            quality_map[unified_key] = {
+                'bitrate': q.get('br', 0),
+                'size': q.get('size', 0),
+            }
+
+    best = match_quality(quality_map, quality)
+    return {'payInfo': pay_info, 'qualityMap': quality_map, 'bestQuality': best}
 
 
 class NeteaseAPISource(Enum):
@@ -98,6 +134,7 @@ class NeteaseClient(BaseMusicClient):
         super().__init__()
         self.platform_name = "网易云音乐"
         self.platform_id = "netease"
+        self._has_cookie = False
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             'Referer': 'https://music.163.com/'
@@ -157,6 +194,7 @@ class NeteaseClient(BaseMusicClient):
 
             if cookie_count > 0:
                 has_music_u = 'MUSIC_U' in self.session.cookies
+                self._has_cookie = True
                 self._last_cookie_mtime = os.path.getmtime(cookie_path)
                 logger.info(
                     f"[{self.platform_name}] 从 {cookie_path} 加载 {cookie_count} 个 cookie"
@@ -178,9 +216,10 @@ class NeteaseClient(BaseMusicClient):
         for key in list(self.session.cookies.keys()):
             if key not in APIConstants.DEFAULT_COOKIES:
                 del self.session.cookies[key]
+        self._has_cookie = False
         self._load_local_cookies()
     
-    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲"""
         url = APIConstants.SEARCH_API
         params = {
@@ -194,6 +233,7 @@ class NeteaseClient(BaseMusicClient):
             data = self._get(url, params=params)
             songs = []
             for item in data.get('result', {}).get('songs', []):
+                pq = _extract_pay_and_quality(item, quality)
                 songs.append({
                     'id': item['id'],
                     'name': item['name'],
@@ -201,7 +241,9 @@ class NeteaseClient(BaseMusicClient):
                     'album': item['al']['name'],
                     'picUrl': item['al']['picUrl'],
                     'artist_string': '/'.join([a['name'] for a in item['ar']]),
-                    'source': 'netease'
+                    'source': 'netease',
+                    'duration': item.get('dt', 0),
+                    **pq,
                 })
             return songs
         except Exception as e:
@@ -360,8 +402,11 @@ class NeteaseClient(BaseMusicClient):
             'meting': self._get_song_url_meting
         }
 
-        # 用户要求：优先使用官方 API，官方失败时降级到第三方
-        sources_to_try = ['official', 'xuanluoge', 'haitangw', 'meting']
+        # 没有 cookie 时跳过官方 API，直接使用第三方
+        if self._has_cookie:
+            sources_to_try = ['official', 'xuanluoge', 'haitangw', 'meting']
+        else:
+            sources_to_try = ['xuanluoge', 'haitangw', 'meting']
 
         for source in sources_to_try:
             download_url = source_func_map[source](song_id, quality)
@@ -390,6 +435,7 @@ class NeteaseClient(BaseMusicClient):
                 # 注意：这里使用 artists 和 album 字段，而不是 ar 和 al
                 artists = song.get('artists', song.get('ar', []))
                 album_info = song.get('album', song.get('al', {}))
+                pq = _extract_pay_and_quality(song)
                 return {
                     'id': song.get('id', 0),
                     'name': song.get('name', ''),
@@ -398,7 +444,8 @@ class NeteaseClient(BaseMusicClient):
                     'picUrl': album_info.get('picUrl', ''),
                     'duration': song.get('duration') or song.get('dt') or 0,
                     'source': 'netease',
-                    'api_source': 'official'
+                    'api_source': 'official',
+                    **pq,
                 }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
@@ -472,13 +519,15 @@ class NeteaseClient(BaseMusicClient):
                 playlist_info = data.get('playlist', data)
                 tracks = []
                 for track in playlist_info.get('tracks', []):
+                    pq = _extract_pay_and_quality(track)
                     tracks.append({
                         'id': track.get('id', 0),
                         'name': track.get('name', ''),
                         'artists': '/'.join([a['name'] for a in track.get('ar', [])]),
                         'album': track.get('al', {}).get('name', ''),
                         'picUrl': track.get('al', {}).get('picUrl', ''),
-                        'source': 'netease'
+                        'source': 'netease',
+                        **pq,
                     })
                 return {
                     'id': playlist_info.get('id', 0),

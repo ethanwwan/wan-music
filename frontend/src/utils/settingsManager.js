@@ -4,9 +4,6 @@ import { reactive, watch } from 'vue'
 export const defaultSettings = {
   filenameFormat: 'song-artist', // song-artist, artist-song, song
   writeMetadata: true, // 是否写入元数据（默认开启）
-  downloadLrcFile: true, // 是否同时下载独立的LRC歌词文件
-  zipDownload: false, // 是否压缩下载（已移除，批量下载始终打包为ZIP）
-  srtLyricsDownload: false, // 歌词格式（已移除，统一使用LRC）
   layoutMode: 'single-column', // 布局模式: dual-column, single-column
   // 播放链接缓存设置
   enableCache: true, // 是否启用缓存（默认开启）

@@ -108,10 +108,10 @@ class MusicClient:
         
         return client
     
-    def search(self, keyword: str, platform: str = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, platform: str = None, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲"""
         client = self._get_client(platform)
-        return client.search(keyword, limit, offset)
+        return client.search(keyword, limit, offset, quality=quality)
 
     def search_playlist(self, keyword: str, platform: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """搜索歌单"""
@@ -145,9 +145,9 @@ music_client = MusicClient()
 
 # ==================== 向后兼容的函数接口 ====================
 
-def search_music(keywords: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+def search_music(keywords: str, platform: str = None, limit: int = 50, quality: str = 'lossless') -> List[Dict[str, Any]]:
     """搜索音乐（向后兼容）"""
-    return music_client.search(keywords, platform, limit=limit)
+    return music_client.search(keywords, platform, limit=limit, quality=quality)
 
 
 def get_song_url(song_id: str, quality: str, platform: str = None) -> Dict[str, Any]:

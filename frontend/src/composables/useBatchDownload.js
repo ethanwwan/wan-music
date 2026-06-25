@@ -13,7 +13,7 @@ import { downloadBatchAsZip } from '../services/musicApi.js'
  * @param {Object} options
  * @param {string} options.playlistName 歌单/任务名
  * @param {Array} options.items 歌曲列表 [{id, name, artist, album, source}]
- * @param {Object} options.settings {selectedQuality, filenameFormat, writeMetadata, downloadLrcFile}
+ * @param {Object} options.settings {selectedQuality, filenameFormat, writeMetadata}
  * @returns {Promise<{task_id, total}>}
  */
 export const useBatchDownload = () => {
@@ -33,12 +33,12 @@ export const useBatchDownload = () => {
         artist: m.artist,
         album: m.album,
         source: m.source,
-        quality
+        quality,
+        qualityMap: m.qualityMap || {}
       }))
       const backendSettings = {
         writeMetadata: settings.writeMetadata !== false,
         filenameFormat: settings.filenameFormat || 'song-artist',
-        downloadLrcFile: settings.downloadLrcFile === true
       }
 
       // 加入下载队列

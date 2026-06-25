@@ -92,3 +92,41 @@ def get_all_qualities() -> list:
 def get_default_quality() -> str:
     """获取默认音质"""
     return "lossless"
+
+
+# 统一音质优先级（从高到低，用于 bestQuality 匹配）
+_UNIFIED_QUALITY_PRIORITY = [
+    "jymaster", "jyeffect", "hires", "lossless", "dolby", "sky", "exhigh", "standard"
+]
+
+
+def match_quality(quality_map: dict, requested: str = 'lossless') -> str:
+    """根据用户请求的音质，在 quality_map 中匹配最佳可用音质
+
+    优先级逻辑：
+    1. 精确匹配 requested
+    2. 降级：从 requested 往低找第一个可用的
+    3. 兜底：返回 quality_map 中最高音质
+    """
+    if not quality_map:
+        return ''
+
+    # 1. 精确匹配
+    if requested in quality_map:
+        return requested
+
+    # 2. 从 requested 往低降级
+    try:
+        start = _UNIFIED_QUALITY_PRIORITY.index(requested)
+    except ValueError:
+        start = len(_UNIFIED_QUALITY_PRIORITY)
+    for qk in _UNIFIED_QUALITY_PRIORITY[start:]:
+        if qk in quality_map:
+            return qk
+
+    # 3. 兜底：最高音质
+    for qk in _UNIFIED_QUALITY_PRIORITY:
+        if qk in quality_map:
+            return qk
+
+    return next(iter(quality_map), '')

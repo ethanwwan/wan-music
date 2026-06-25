@@ -64,16 +64,6 @@
               <a-tag color="blue" bordered>写入歌曲名、歌手、专辑、封面、歌词等信息</a-tag>
             </div>
           </a-form-item>
-
-          <a-form-item label="下载LRC歌词文件">
-            <a-switch
-              v-model:checked="settings.downloadLrcFile"
-              @change="handleSave"
-            />
-            <div class="form-item-hint">
-              <a-tag color="blue" bordered>开启后，下载歌曲时会自动转换为ZIP打包</a-tag>
-            </div>
-          </a-form-item>
         </a-form>
       </div>
 

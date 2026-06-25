@@ -59,6 +59,8 @@
               <th class="col-cover"></th>
               <th class="col-name">歌名</th>
               <th class="col-album">专辑名</th>
+              <th class="col-pay">付费</th>
+              <th class="col-quality">音质</th>
               <th class="col-action">
                 <template v-if="!isSelectMode">
                   <a-button size="small" @click="enterSelectMode">批量操作</a-button>
@@ -87,6 +89,7 @@
               <td v-if="isSelectMode" class="col-select">
                 <a-checkbox 
                   :checked="isTrackSelected(track)"
+                  @click.stop
                   @change="() => toggleSelectTrack(track)"
                 />
               </td>
@@ -122,6 +125,17 @@
                 <div class="track-artist" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getArtist(track) }}</div>
               </td>
               <td class="col-album" :class="{ 'unavailable-text': isTrackUnavailable(track) }">{{ getAlbum(track) }}</td>
+              <td class="col-pay">
+                <span v-if="track.payInfo" class="pay-tag" :class="{ 'pay-free': track.payInfo.free, 'pay-vip': track.payInfo.vipOnly }">
+                  {{ track.payInfo.label }}
+                </span>
+              </td>
+              <td class="col-quality">
+                <div v-if="track.bestQuality" class="quality-info">
+                  <span class="quality-label">{{ getBestQualityLabel(track) }}</span>
+                  <span class="quality-size">{{ getBestQualitySize(track) }}</span>
+                </div>
+              </td>
               <td class="col-action">
                 <a-button 
                   type="text"
@@ -399,6 +413,28 @@ const getAlbum = (track) => {
   return track?.album || track?.al?.name || ''
 }
 
+const QUALITY_LABELS = {
+  standard: '标准', exhigh: '极高', lossless: '无损', hires: 'Hi-Res',
+  dolby: '杜比', sky: '环绕声', jymaster: '母带', jyeffect: '臻音',
+}
+
+const getBestQualityLabel = (track) => {
+  const key = track.bestQuality
+  return key ? (QUALITY_LABELS[key] || key) : ''
+}
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+const getBestQualitySize = (track) => {
+  const key = track.bestQuality
+  const size = track.qualityMap?.[key]?.size
+  return formatFileSize(size)
+}
+
 // 图片错误处理
 const handleCoverError = (event) => {
   const target = event.target
@@ -487,19 +523,22 @@ const handleBatchDownloadSelected = async () => {
     name: track.name,
     artist: getArtist(track),
     album: getAlbum(track),
-    source: track.source || ''
+    source: track.source || '',
+    qualityMap: track.qualityMap || {}
   }))
   
   try {
     const { startBatchDownload } = useBatchDownload()
+    const batchName = musicList.length > 1
+      ? `${musicList[0].name}等${musicList.length}首`
+      : musicList[0].name
     await startBatchDownload({
-      playlistName: '批量下载',
+      playlistName: batchName,
       items: musicList,
       settings: {
         selectedQuality: settings.selectedQuality || 'lossless',
         filenameFormat: settings.filenameFormat || 'song-artist',
         writeMetadata: settings.writeMetadata !== false,
-        downloadLrcFile: settings.downloadLrcFile === true
       }
     })
     // 下载后退出选择模式
@@ -603,7 +642,6 @@ const downloadSingle = async (track) => {
         selectedQuality: settings.selectedQuality || 'lossless',
         filenameFormat: settings.filenameFormat || 'song-artist',
         writeMetadata: settings.writeMetadata !== false,
-        downloadLrcFile: settings.downloadLrcFile === true
       }
     })
   } catch (error) {
@@ -635,7 +673,8 @@ const handleBatchDownload = async () => {
       name: track.name,
       artist: getArtist(track),
       album: getAlbum(track),
-      source: track.source || ''
+      source: track.source || '',
+      qualityMap: track.qualityMap || {}
     }))
 
   if (musicList.length === 0) {
@@ -653,7 +692,6 @@ const handleBatchDownload = async () => {
         selectedQuality: settings.selectedQuality || 'lossless',
         filenameFormat: settings.filenameFormat || 'song-artist',
         writeMetadata: settings.writeMetadata !== false,
-        downloadLrcFile: settings.downloadLrcFile === true
       }
     })
   } catch (error) {
@@ -783,6 +821,7 @@ const handleItemClick = (item, action) => {
 .tracks-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .tracks-table th {
@@ -809,7 +848,7 @@ const handleItemClick = (item, action) => {
 }
 
 .col-cover {
-  width: 32px;
+  width: 56px;
   padding: 8px 8px;
 }
 
@@ -837,17 +876,17 @@ const handleItemClick = (item, action) => {
 }
 
 .col-name {
-  min-width: 220px;
-  max-width: 320px;
+  width: 280px;
+  overflow: hidden;
 }
 
 .track-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   flex-wrap: nowrap;
   margin-bottom: 2px;
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .track-name {
@@ -857,9 +896,7 @@ const handleItemClick = (item, action) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .track-artist {
@@ -874,15 +911,61 @@ const handleItemClick = (item, action) => {
 .col-album {
   font-size: 14px;
   color: var(--color-text-muted);
-  min-width: 150px;
-  max-width: 240px;
+  width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.col-pay {
+  width: 60px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pay-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.pay-free {
+  color: #52c41a;
+  background: #f6ffed;
+}
+
+.pay-vip {
+  color: #faad14;
+  background: #fffbe6;
+}
+
+.col-quality {
+  width: 80px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.quality-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.quality-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.quality-size {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
 .tracks-table td.col-action {
-  min-width: 88px;
+  width: 100px;
   text-align: center;
   padding: 6px 8px;
   margin: 0;
@@ -968,7 +1051,6 @@ const handleItemClick = (item, action) => {
   padding: 2px 6px;
   font-size: 10px;
   border-radius: 4px;
-  vertical-align: middle;
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
@@ -997,6 +1079,24 @@ const handleItemClick = (item, action) => {
 .dark .unavailable-reason {
   color: #ff7875;
   background: #2a1a1a;
+}
+
+.dark .pay-free {
+  color: #73d13d;
+  background: #162312;
+}
+
+.dark .pay-vip {
+  color: #ffc53d;
+  background: #2b2111;
+}
+
+.dark .quality-label {
+  color: #e0e0e0;
+}
+
+.dark .quality-size {
+  color: #888;
 }
 
 /* ========== 歌手列表样式 ========== */

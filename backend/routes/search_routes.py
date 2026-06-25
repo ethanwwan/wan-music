@@ -19,6 +19,7 @@ def search():
       - keyword: 搜索内容（可以是关键词或 URL）
       - type: 搜索类型（0=全部 / 1=歌曲 / 2=歌单），仅在 keyword 不是 URL 时生效
       - source: 数据源（netease/qq/kugou/bodian）
+      - quality: 用户选择的音质（standard/exhigh/lossless/hires 等），用于匹配最佳可用音质
       - limit: 返回数量
 
     返回：{type, data: [...]}，每项带 _type 字段
@@ -28,6 +29,7 @@ def search():
         keyword = data.get('keyword', '').strip()
         search_type = int(data.get('type', 0))
         platform = data.get('source')
+        quality = data.get('quality', 'lossless')
         limit = data.get('limit', 50)
 
         logger.info(f"[搜索请求] keyword={keyword!r}, type={search_type}, source={platform}, limit={limit}")
@@ -35,7 +37,7 @@ def search():
         if not keyword:
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
-        result = music_service.search(keyword, search_type, platform, limit)
+        result = music_service.search(keyword, search_type, platform, limit, quality=quality)
 
         logger.info(f"[搜索结果] type={result.get('type')}, 结果数量={len(result.get('data', []))}")
 

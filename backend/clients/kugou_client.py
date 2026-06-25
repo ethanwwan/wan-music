@@ -15,7 +15,7 @@ import requests
 from typing import Dict, List, Optional, Any
 
 from .base_client import BaseMusicClient
-from .quality_config import QualityLevel
+from .quality_config import QualityLevel, match_quality
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +23,54 @@ logger = logging.getLogger(__name__)
 class KugouClient(BaseMusicClient):
     """酷狗音乐客户端"""
     
+    # 酷狗音质 key 到统一 key 的映射
+    _KUGOU_QUALITY_MAP = {
+        'FileSize': 'standard',      # 128k mp3
+        'HQFileSize': 'exhigh',      # 320k mp3
+        'SQFileSize': 'lossless',    # flac
+        'ResFileSize': 'hires',      # Hi-Res
+    }
+    
     def __init__(self):
         super().__init__()
         self.platform_name = "酷狗音乐"
         self.platform_id = "kugou"
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
         })
+        self._download_headers = {
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        }
     
-    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    def _extract_pay_and_quality(self, item: dict, quality: str = 'lossless') -> dict:
+        """从酷狗搜索结果中提取统一的 payInfo 和 qualityMap"""
+        pay_type = item.get('PayType', 0)
+        privilege = item.get('Privilege', 0)
+        
+        if pay_type == 0:
+            pay_info = {'free': True, 'vipOnly': False, 'label': '免费'}
+        elif privilege >= 10:
+            pay_info = {'free': False, 'vipOnly': True, 'label': 'VIP'}
+        else:
+            pay_info = {'free': False, 'vipOnly': False, 'label': '付费'}
+        
+        quality_map = {}
+        for raw_key, unified_key in self._KUGOU_QUALITY_MAP.items():
+            size = item.get(raw_key, 0)
+            if size and size > 0:
+                bitrate_key = raw_key.replace('FileSize', 'Bitrate')
+                bitrate = item.get(bitrate_key, 0)
+                quality_map[unified_key] = {
+                    'bitrate': bitrate,
+                    'size': size,
+                }
+        
+        best = match_quality(quality_map, quality)
+        return {'payInfo': pay_info, 'qualityMap': quality_map, 'bestQuality': best}
+    
+    def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲"""
         from urllib.parse import urlencode
         
@@ -51,6 +90,7 @@ class KugouClient(BaseMusicClient):
             songs = []
             for item in data.get('data', {}).get('lists', []):
                 pic_url = item.get('Image', '').replace('{size}', '400')
+                pq = self._extract_pay_and_quality(item, quality)
                 songs.append({
                     'id': item.get('FileHash', ''),
                     'name': item.get('SongName', ''),
@@ -59,7 +99,8 @@ class KugouClient(BaseMusicClient):
                     'picUrl': pic_url,
                     'artist_string': item.get('SingerName', ''),
                     'source': 'kugou',
-                    'duration': item.get('Duration', 0) or item.get('timelen', 0)
+                    'duration': item.get('Duration', 0) or item.get('timelen', 0),
+                    **pq
                 })
             return songs
         except Exception as e:
@@ -113,32 +154,47 @@ class KugouClient(BaseMusicClient):
             return {}
     
     def get_song_url(self, song_id: str, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取歌曲播放/下载URL"""
-        apis = [
-            lambda sid: f"https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={sid}&level=exhigh",
-            lambda sid: f"https://music.haitangw.cc/kgqq/kg.php?type=json&id={sid}&level=exhigh",
-            lambda sid: f"http://api.liuyunidc.cn/baimusic/musicurl.php?source=kg&musicId={sid}&quality=320k&card=BAI-153B4JE4I40HSG40H1FP",
-            lambda sid: f"https://api.317ak.cn/api/yinyue/kugou?ckey=WE1VS0lBSjNQOExQWDNQOTcxS1U=&i={sid}&br=6&type=json&lrc=1",
-            lambda sid: f"https://kw-api.cenguigui.cn/?id={sid}&type=song&level=lossless&format=json",
-        ]
-        
-        headers = {
-            "accept": "*/*",
-            "accept-encoding": "gzip, deflate",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-        }
-        
-        for api_func in apis:
-            api_url = api_func(song_id)
+        """获取歌曲播放/下载URL
+
+        参考 musicdl kugou.py 的 API 链：
+        1. 第三方 API 先尝试（cocodownloader → haitangw → jbsou → 317ak）
+        2. 官方 API 降级
+        """
+        third_party = self._get_song_url_third_party(song_id, quality)
+        if third_party and third_party.get('url'):
+            return third_party
+
+        official = self._get_song_url_official(song_id, quality)
+        if official and official.get('url'):
+            return official
+
+        return {}
+
+    def _get_song_url_third_party(self, song_id: str, quality: str = 'lossless') -> Dict[str, Any]:
+        """第三方API获取歌曲URL（按 musicdl 优先级）"""
+        for api_name, api_url in self._third_party_apis(song_id):
             try:
-                resp = requests.get(api_url, headers=headers, timeout=10)
-                try:
+                if api_name == 'jbsou':
+                    headers = {
+                        "accept": "application/json, text/javascript, */*; q=0.01",
+                        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                        "origin": "https://www.jbsou.cn",
+                        "referer": "https://www.jbsou.cn/",
+                        "x-requested-with": "XMLHttpRequest",
+                        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+                    }
+                    resp = requests.post(api_url, data={'input': song_id, 'filter': 'id', 'type': 'kugou', 'page': '1'}, headers=headers, timeout=10)
                     data = resp.json()
-                except:
-                    continue
-                
-                download_url = data.get('data', {}).get('url', '') or data.get('url', '')
-                if download_url and download_url.startswith('http'):
+                    download_url = data.get('data', [{}])[0].get('url', '') if data.get('data') else ''
+                    if download_url and not download_url.startswith('http'):
+                        download_url = f"https://www.jbsou.cn{download_url}"
+                else:
+                    resp = requests.get(api_url, headers=self._download_headers, timeout=10)
+                    data = resp.json()
+                    download_url = data.get('data', {}).get('url', '') or data.get('url', '')
+
+                if download_url and str(download_url).startswith('http'):
+                    logger.info(f"[{self.platform_name}] 第三方API({api_name})成功: {download_url[:80]}...")
                     return {
                         'url': download_url,
                         'quality': quality,
@@ -146,22 +202,42 @@ class KugouClient(BaseMusicClient):
                         'source': 'kugou'
                     }
             except Exception as e:
-                logger.debug(f"[{self.platform_name}] 尝试API失败 {api_url}: {e}")
+                logger.debug(f"[{self.platform_name}] 第三方API({api_name})失败: {e}")
                 continue
-        
-        return self._get_song_url_official(song_id, quality)
-    
-    def _get_song_url_official(self, song_id: str, quality: str = 'high') -> Dict[str, Any]:
-        """使用官方API获取歌曲URL"""
-        url = f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash={song_id}&mid=1"
-        
+
+        return {}
+
+    def _third_party_apis(self, song_id: str):
+        """返回第三方 API 列表（按 musicdl 优先级：cocodownloader → haitangw → jbsou → 317ak）"""
+        import random as _random
+        decrypt_func = lambda t: base64.b64decode(str(t)[14:].encode('utf-8')).decode('utf-8')
+        REQUEST_KEYS_317AK = [
+            'charlespikachuUE9WTUhLSklYOEE3SUdIMkZNMVA=',
+            'charlespikachuWE1VS0lBSjNQOExQWDNQOTcxS1U=',
+            'charlespikachuN0tUSTUyVDdWTE9EUjZTVDM3UFQ=',
+        ]
+        return [
+            ('cocodownloader', f"https://cocodownloader.markqq.com/api/url?id={song_id}&provider=kugou"),
+            ('haitangw', f"https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={song_id}&level=hires"),
+            ('jbsou', "https://www.jbsou.cn/"),
+            ('317ak', f"https://api.317ak.cn/api/yinyue/kugou?ckey={decrypt_func(_random.choice(REQUEST_KEYS_317AK))}&i={song_id}&br=6&type=json&lrc=1"),
+        ]
+
+    def _get_song_url_official(self, song_id: str, quality: str = 'lossless') -> Dict[str, Any]:
+        """使用官方API获取歌曲URL
+
+        参考 musicdl _parsewithofficialapiv1：
+        1. 先用 mobilecdnbj API 获取多码率信息
+        2. 再用 wwwapi.kugou.com 获取播放 URL
+        """
+        # 1. 从 mobilecdnbj 获取歌曲信息（含各种码率 hash）
         try:
-            data = self._get(url)
-            
-            if isinstance(data, dict) and data.get('data'):
-                song_info = data['data']
-                play_url = song_info.get('play_url') or song_info.get('url')
+            info_url = f"https://mobilecdnbj.kugou.com/api/v5/song/url?hash={song_id}&album_id=0&platid=14&with_res_tag=1"
+            info_data = self._get(info_url)
+            if info_data and info_data.get('url'):
+                play_url = info_data['url']
                 if play_url and play_url.startswith('http'):
+                    logger.info(f"[{self.platform_name}] 官方API(mobilecdnbj)成功: {play_url[:80]}...")
                     return {
                         'url': play_url,
                         'quality': quality,
@@ -169,9 +245,26 @@ class KugouClient(BaseMusicClient):
                         'source': 'kugou'
                     }
         except Exception as e:
-            logger.debug(f"[{self.platform_name}] 获取歌曲URL失败: {url}, 错误: {e}")
-        
-        logger.error(f"[{self.platform_name}] 获取歌曲URL失败")
+            logger.debug(f"[{self.platform_name}] 官方API(mobilecdnbj)失败: {e}")
+
+        # 2. 从 wwwapi 获取播放 URL
+        try:
+            url = f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash={song_id}&mid=1"
+            data = self._get(url)
+            if isinstance(data, dict) and data.get('data'):
+                song_info = data['data']
+                play_url = song_info.get('play_url') or song_info.get('url')
+                if play_url and play_url.startswith('http'):
+                    logger.info(f"[{self.platform_name}] 官方API(wwwapi)成功: {play_url[:80]}...")
+                    return {
+                        'url': play_url,
+                        'quality': quality,
+                        'song_id': song_id,
+                        'source': 'kugou'
+                    }
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] 官方API(wwwapi)失败: {e}")
+
         return {}
     
     def get_song_info(self, song_id: str) -> Dict[str, Any]:

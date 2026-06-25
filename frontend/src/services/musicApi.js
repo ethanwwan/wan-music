@@ -470,7 +470,10 @@ export const getPlaylistById = async (playlistId, source = '') => {
           album: track.album || '',
           picUrl: track.picUrl || track.cover || '',
           duration: track.duration || 0,
-          source: track.source || playlist.source || platform
+          source: track.source || playlist.source || platform,
+          payInfo: track.payInfo || null,
+          qualityMap: track.qualityMap || null,
+          bestQuality: track.bestQuality || '',
         }))
       }
     }
@@ -547,7 +550,11 @@ const mapSearchSongs = (songs) => songs.map(song => ({
   lrc: song.lyric || '',
   fileExtension: song.fileType ? `.${song.fileType}` : '.mp3',
   // 类型标识（用于前端区分展示）
-  _type: song._type || 'song'
+  _type: song._type || 'song',
+  // 付费和音质信息
+  payInfo: song.payInfo || null,
+  qualityMap: song.qualityMap || null,
+  bestQuality: song.bestQuality || '',
 }))
 
 const mapSearchPlaylists = (playlists) => playlists.map(playlist => ({
@@ -569,13 +576,13 @@ const mapSearchPlaylists = (playlists) => playlists.map(playlist => ({
  *
  * 返回：{type: 0/1/2, songs: [...], playlists: [...]}，根据 type 分桶
  */
-export const unifiedSearch = async (keyword, type = 0, sources = ['netease']) => {
+export const unifiedSearch = async (keyword, type = 0, sources = ['netease'], quality = 'lossless') => {
   try {
-    const cacheKey = `${type}-${keyword}-${sources.join(',')}`
+    const cacheKey = `${type}-${keyword}-${sources.join(',')}-${quality}`
     const cached = getCachedSearchResult('unified', cacheKey)
     if (cached) return { success: true, data: cached, fromCache: true }
 
-    const requestData = { keyword, type, limit: 50 }
+    const requestData = { keyword, type, limit: 50, quality }
     if (sources.length === 1) requestData.source = sources[0]
 
     const result = await postJson('/search', requestData)
@@ -625,7 +632,7 @@ export const searchPlaylist = async (keyword, sources = ['netease']) => {
  *
  * @param {Array} items [{id, name, artist, album, source, quality}, ...]
  * @param {string} name 任务名（用于 zip 文件名）
- * @param {Object} settings {writeMetadata, filenameFormat, downloadLrcFile}
+ * @param {Object} settings {writeMetadata, filenameFormat}
  * @returns {Promise<{success, data: {task_id, total}, message}>}
  */
 export const startBatchTask = async (items, name = 'playlist', settings = {}) => {
@@ -776,7 +783,7 @@ export const downloadBatchAsZip = async (taskId) => {
  *
  * @param {Array} musicList 歌曲列表（需含 id, name, artist, album, source）
  * @param {string} playlistName 歌单名称（用于 zip 文件名）
- * @param {Object} downloadSettings { selectedQuality, filenameFormat, writeMetadata, downloadLrcFile }
+ * @param {Object} downloadSettings { selectedQuality, filenameFormat, writeMetadata }
  * @param {Function} onProgress 进度回调
  */
 export const batchDownloadMusic = async (musicList, playlistName = '', downloadSettings = {}, onProgress = null) => {
@@ -809,7 +816,6 @@ export const batchDownloadMusic = async (musicList, playlistName = '', downloadS
   const settings = {
     writeMetadata: downloadSettings.writeMetadata !== false,
     filenameFormat: downloadSettings.filenameFormat || 'song-artist',
-    downloadLrcFile: downloadSettings.downloadLrcFile === true
   }
 
   // 1. 启动任务

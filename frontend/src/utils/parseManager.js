@@ -6,6 +6,7 @@
 import { ref } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import musicApi from '../services/musicApi.js'
+import { settings } from './settingsManager.js'
 import { allTracks, totalTracks, currentPage, updateDisplayTracks } from './paginationManager.js'
 
 /** 接口版本标签 */
@@ -133,7 +134,7 @@ const notifySearchResult = (count, fromCache = false) => {
 const handleSearchMode = async (sources, searchType = 0) => {
   loading.value = true
   try {
-    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources)
+    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources, settings.selectedQuality || 'lossless')
     const data = result.success ? result.data : { type: searchType, songs: [], playlists: [], warnings: [] }
 
     musicInfo.value = { name: musicUrl.value }
@@ -192,7 +193,7 @@ export const searchByTab = async (sources, searchType) => {
   }
   tabLoading.value = true
   try {
-    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources)
+    const result = await musicApi.unifiedSearch(musicUrl.value, searchType, sources, settings.selectedQuality || 'lossless')
     const data = result.success ? result.data : { type: searchType, songs: [], playlists: [], warnings: [] }
     searchWarnings.value = data.warnings || []
 
