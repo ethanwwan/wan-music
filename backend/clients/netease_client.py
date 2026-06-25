@@ -479,41 +479,33 @@ class NeteaseClient(BaseMusicClient):
         return {}  # 返回空字典而不是抛异常，保持与其他客户端一致
     
     def get_song_info(self, song_id: int) -> Dict[str, Any]:
-        """获取歌曲信息（官方API优先，cookie 失效时跳过，三条备用线路）"""
+        """获取歌曲信息（按 cookie 可用性分线路）"""
         # 线路1: 官方API（仅 cookie 可用时）
-        if self._is_cookie_usable():
-            url = APIConstants.SONG_DETAIL_API
-            params = {'ids': f'[{song_id}]'}
-
+        if self._has_cookie:
             try:
+                url = APIConstants.SONG_DETAIL_API
+                params = {'ids': f'[{song_id}]'}
                 data = self._get(url, params=params)
-                if data:
-                    # 检测 cookie 失效
-                    if self._detect_cookie_invalid(data):
-                        self._mark_cookie_invalid(
-                            f'get_song_info 返回 {data.get("code")}: {data.get("message")}'
-                        )
-                    elif data.get('songs') and len(data['songs']) > 0:
-                        song = data['songs'][0]
-                        # 注意：这里使用 artists 和 album 字段，而不是 ar 和 al
-                        artists = song.get('artists', song.get('ar', []))
-                        album_info = song.get('album', song.get('al', {}))
-                        pq = _extract_pay_and_quality(song)
-                        return {
-                            'id': song.get('id', 0),
-                            'name': song.get('name', ''),
-                            'artists': '/'.join([a['name'] for a in artists]),
-                            'album': album_info.get('name', ''),
-                            'picUrl': album_info.get('picUrl', ''),
-                            'duration': song.get('duration') or song.get('dt') or 0,
-                            'source': 'netease',
-                            'api_source': 'official',
-                            **pq,
-                        }
+                if data and data.get('songs') and len(data['songs']) > 0:
+                    song = data['songs'][0]
+                    artists = song.get('artists', song.get('ar', []))
+                    album_info = song.get('album', song.get('al', {}))
+                    pq = _extract_pay_and_quality(song)
+                    return {
+                        'id': song.get('id', 0),
+                        'name': song.get('name', ''),
+                        'artists': '/'.join([a['name'] for a in artists]),
+                        'album': album_info.get('name', ''),
+                        'picUrl': album_info.get('picUrl', ''),
+                        'duration': song.get('duration') or song.get('dt') or 0,
+                        'source': 'netease',
+                        'api_source': 'official',
+                        **pq,
+                    }
             except Exception as e:
                 logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
 
-        # 线路2: xuanluoge
+        # 线路2: xuanluoge（无 cookie 时也走这里）
         try:
             url = f"{APIConstants.XUANLUOGE_URL}?miss=getMusicInfo&id={song_id}"
             data = self._get(url)

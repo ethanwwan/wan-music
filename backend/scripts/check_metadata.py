@@ -396,6 +396,28 @@ def scan_directory(scan_dir: str, skip_dirs: set) -> list:
     return audio_files
 
 
+# ============================================================
+# 文件大小分析
+# ============================================================
+def print_top_files(reports: list, n: int = 10, label: str = '', ascending: bool = False):
+    """打印 Top N 文件（按大小）"""
+    if not reports:
+        return
+    sorted_reports = sorted(reports, key=lambda r: r.file_size, reverse=not ascending)
+    top = sorted_reports[:n]
+
+    arrow = '↓' if ascending else '↑'
+    print(f'\n{"═" * 70}')
+    print(f'  {label} ({arrow} {len(top)} 个)')
+    print(f'{"═" * 70}')
+
+    for i, r in enumerate(top, 1):
+        status = '✓' if not r.missing_fields and not r.errors else '✗'
+        print(f'  {i:3d}. {status} {format_size(r.file_size):>10} - {r.format:>4} - {r.filename}')
+        if r.missing_fields:
+            print(f'        缺失: {", ".join(r.missing_fields)}')
+
+
 def main():
     scan_dir = SCAN_DIR
     if len(sys.argv) > 1:
@@ -458,6 +480,10 @@ def main():
             print_report_detail(report, i)
 
     print_summary(results, len(audio_files))
+
+    # 文件大小分析
+    print_top_files(results['all'], 10, "文件最大的 10 个")
+    print_top_files(results['all'], 10, "文件最小的 10 个", ascending=True)
 
 
 if __name__ == '__main__':

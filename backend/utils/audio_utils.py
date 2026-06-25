@@ -4,12 +4,19 @@
 """
 import logging
 import os
+import io
+import shutil
+import subprocess
+import tempfile
 from typing import Optional
 from urllib.parse import urlparse
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# 封面写入元数据的最大体积阈值（500K）
+COVER_SIZE_LIMIT = 500 * 1024
 
 # 音频格式的 magic bytes
 AUDIO_SIGNATURES = [
@@ -115,27 +122,101 @@ def detect_mp3_bitrate(file_path: str) -> Optional[int]:
     return None
 
 
-def download_cover(cover_url: str, max_size: int = 3145728) -> Optional[bytes]:
-    """下载封面图片（限制大小，默认 3MB）
+def _sips_resize(input_path: str, output_path: str, max_dim: int, quality: int) -> bool:
+    """调用 sips 缩放图片（macOS 系统工具）"""
+    try:
+        cmd = [
+            'sips',
+            '-s', 'format', 'jpeg',
+            '-s', 'formatOptions', str(quality),
+            '--resampleHeightWidthMax', str(max_dim),
+            input_path,
+            '--out', output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        return result.returncode == 0 and os.path.exists(output_path)
+    except Exception as e:
+        logger.debug(f"sips 失败: {e}")
+        return False
+
+
+def compress_cover(raw_bytes: bytes, max_size: int = COVER_SIZE_LIMIT) -> bytes:
+    """压缩图片到指定体积以下（默认 500K）
+
+    使用 macOS sips 工具尝试不同尺寸/质量组合，找到第一个 <= max_size 的版本。
+    如果压缩失败（如非 macOS），返回原图。
+    """
+    if not raw_bytes or len(raw_bytes) <= max_size:
+        return raw_bytes
+
+    tmpdir = tempfile.mkdtemp(prefix='cover_')
+    try:
+        input_path = os.path.join(tmpdir, 'input')
+        with open(input_path, 'wb') as f:
+            f.write(raw_bytes)
+
+        # 尝试不同尺寸 + 质量组合
+        for max_dim, qualities in [
+            (1400, (85, 75, 65, 55, 45, 35, 25)),
+            (1200, (85, 75, 65, 55, 45, 35)),
+            (1000, (85, 75, 65, 55, 45, 35)),
+            (800,  (85, 75, 65, 55, 45, 35)),
+            (600,  (85, 75, 65, 55, 45, 35)),
+            (500,  (85, 75, 65, 55, 45, 35, 25, 20)),
+        ]:
+            for quality in qualities:
+                output_path = os.path.join(tmpdir, f'out_{max_dim}_{quality}.jpg')
+                if not _sips_resize(input_path, output_path, max_dim, quality):
+                    continue
+                size = os.path.getsize(output_path)
+                if size <= max_size:
+                    with open(output_path, 'rb') as f:
+                        return f.read()
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+        return b''
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def download_cover(cover_url: str, max_size: int = COVER_SIZE_LIMIT) -> Optional[bytes]:
+    """下载封面图片，自动压缩到 500K 以下
 
     Args:
         cover_url: 封面图片 URL
-        max_size: 最大字节数（默认 3MB）
+        max_size: 最大字节数（默认 500K），超过会自动压缩
 
     Returns:
-        图片二进制数据或 None
+        图片二进制数据（JPEG），如果下载失败返回 None
     """
     if not cover_url:
         return None
     try:
-        resp = requests.get(cover_url, timeout=10, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
+        # 下载最多 10MB（防止异常大图）
+        download_limit = 10 * 1024 * 1024
+        resp = requests.get(cover_url, timeout=15, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
         resp.raise_for_status()
         content = b''
         for chunk in resp.iter_content(chunk_size=8192):
             content += chunk
-            if len(content) > max_size:
-                logger.warning(f"封面图片超过大小限制 ({max_size} bytes)")
+            if len(content) > download_limit:
+                logger.warning(f"封面图片超过下载上限 ({download_limit} bytes)")
                 return None
+
+        # 如果原图已经 <= max_size，直接返回
+        if len(content) <= max_size:
+            return content
+
+        # 否则压缩到 max_size 以下
+        compressed = compress_cover(content, max_size)
+        if compressed:
+            logger.debug(f"封面压缩 {len(content)} -> {len(compressed)} bytes")
+            return compressed
+
+        # 压缩失败（极少见），返回原图（让上层决定）
+        logger.warning(f"封面压缩失败，返回原图 ({len(content)} bytes)")
         return content
     except Exception as e:
         logger.warning(f"下载封面失败: {e}")
