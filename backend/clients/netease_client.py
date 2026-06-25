@@ -15,14 +15,10 @@ import json
 import urllib.parse
 import logging
 from typing import Dict, List, Optional, Any
-from hashlib import md5
 from enum import Enum
 
 from .base_client import BaseMusicClient
 from .quality_config import QualityLevel, match_quality
-
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 logger = logging.getLogger(__name__)
 
@@ -72,59 +68,27 @@ class NeteaseAPISource(Enum):
 
 class APIConstants:
     """API相关常量"""
-    AES_KEY = b"e82ckenh8dichen8"
     USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/2.10.2.200154'
     REFERER = 'https://music.163.com/'
-    
-    SONG_URL_V1 = "https://interface3.music.163.com/eapi/song/enhance/player/url/v1"
+
     SONG_DETAIL_API = "https://music.163.com/api/song/detail"
     LYRIC_API = "https://music.163.com/api/song/lyric"
     SEARCH_API = 'https://music.163.com/api/cloudsearch/pc'
     PLAYLIST_DETAIL_API = 'https://music.163.com/api/v6/playlist/detail'
     ALBUM_DETAIL_API = 'https://music.163.com/api/v1/album/'
     ARTIST_TOP_SONG_API = 'https://music.163.com/api/artist/top/song'
-    
+
     DEFAULT_COOKIES = {
         "os": "pc",
         "appver": "",
         "osver": "",
         "deviceId": "pyncm!"
     }
-    
+
     XUANLUOGE_URL = "http://118.24.104.108:3456/api.php"
     HAITANGW_URL = "https://musicapi.haitangw.net/music/wy.php"
-    
+
     COOKIE_FILE_PATH = "netease_cookie.txt"
-
-
-class CryptoUtils:
-    """加密工具类"""
-    
-    @staticmethod
-    def hex_digest(data: bytes) -> str:
-        return "".join([hex(d)[2:].zfill(2) for d in data])
-    
-    @staticmethod
-    def hash_digest(text: str) -> bytes:
-        return md5(text.encode("utf-8")).digest()
-    
-    @staticmethod
-    def hash_hex_digest(text: str) -> str:
-        return CryptoUtils.hex_digest(CryptoUtils.hash_digest(text))
-    
-    @staticmethod
-    def encrypt_params(url: str, payload: Dict[str, Any]) -> str:
-        url_path = urllib.parse.urlparse(url).path.replace("/eapi/", "/api/")
-        digest = CryptoUtils.hash_hex_digest(f"nobody{url_path}use{json.dumps(payload)}md5forencrypt")
-        params = f"{url_path}-36cd479b6b5-{json.dumps(payload)}-36cd479b6b5-{digest}"
-        
-        padder = padding.PKCS7(algorithms.AES(APIConstants.AES_KEY).block_size).padder()
-        padded_data = padder.update(params.encode()) + padder.finalize()
-        cipher = Cipher(algorithms.AES(APIConstants.AES_KEY), modes.ECB())
-        encryptor = cipher.encryptor()
-        enc = encryptor.update(padded_data) + encryptor.finalize()
-        
-        return CryptoUtils.hex_digest(enc)
 
 
 class NeteaseClient(BaseMusicClient):
@@ -220,7 +184,25 @@ class NeteaseClient(BaseMusicClient):
         self._load_local_cookies()
     
     def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
-        """搜索歌曲"""
+        """搜索歌曲
+
+        简化策略：
+        - 有 cookie → 走官方 API
+        - 无 cookie → 走第三方 API（xuanluoge → haitangw）
+        """
+        # 有 cookie：使用官方 API
+        if self._has_cookie:
+            return self._search_official(keyword, limit, offset, quality)
+
+        # 无 cookie：直接走第三方 API
+        logger.debug(f"[{self.platform_name}] 未配置 cookie，直接使用第三方 API")
+        songs = self._search_xuanluoge(keyword, limit)
+        if songs:
+            return songs
+        return self._search_haitangw(keyword, limit)
+
+    def _search_official(self, keyword: str, limit: int, offset: int, quality: str) -> List[Dict[str, Any]]:
+        """官方 API 搜索（依赖 cookie）"""
         url = APIConstants.SEARCH_API
         params = {
             's': keyword,
@@ -228,9 +210,12 @@ class NeteaseClient(BaseMusicClient):
             'limit': limit,
             'offset': offset
         }
-        
+
         try:
             data = self._get(url, params=params)
+            if not data:
+                return []
+
             songs = []
             for item in data.get('result', {}).get('songs', []):
                 pq = _extract_pay_and_quality(item, quality)
@@ -247,7 +232,78 @@ class NeteaseClient(BaseMusicClient):
                 })
             return songs
         except Exception as e:
-            logger.error(f"[{self.platform_name}] 搜索失败: {e}")
+            logger.error(f"[{self.platform_name}] 官方 API 搜索失败: {e}")
+            return []
+
+    def _search_xuanluoge(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
+        """xuanluoge 第三方 API 搜索"""
+        try:
+            url = f"{APIConstants.XUANLUOGE_URL}?miss=search&keyword={urllib.parse.quote(keyword)}&limit={limit}"
+            data = self._get(url)
+            if not data:
+                return []
+
+            song_list = data.get('data', data) if isinstance(data, dict) else data
+            if not isinstance(song_list, list):
+                return []
+
+            songs = []
+            for item in song_list[:limit]:
+                if not isinstance(item, dict):
+                    continue
+                artists = item.get('artists') or item.get('artist') or ''
+                if isinstance(artists, list):
+                    artists = '/'.join([a.get('name', '') for a in artists if a.get('name')])
+                songs.append({
+                    'id': str(item.get('id', '')),
+                    'name': item.get('name', ''),
+                    'artists': artists,
+                    'album': item.get('album', ''),
+                    'picUrl': item.get('picUrl') or item.get('pic') or '',
+                    'artist_string': artists,
+                    'source': 'netease',
+                    'api_source': 'xuanluoge',
+                    'duration': item.get('duration') or item.get('dt') or 0,
+                    'payInfo': {'free': True, 'vipOnly': False, 'label': '免费'},
+                    'qualityMap': {},
+                    'bestQuality': '',
+                })
+            return songs
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] xuanluoge 搜索失败: {e}")
+            return []
+
+    def _search_haitangw(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
+        """haitangw 第三方 API 搜索"""
+        try:
+            url = f"{APIConstants.HAITANGW_URL}?keyword={urllib.parse.quote(keyword)}&type=search&limit={limit}"
+            data = self._get(url)
+            if not data or not data.get('data'):
+                return []
+
+            song_list = data['data'] if isinstance(data['data'], list) else data['data'].get('list', [])
+            songs = []
+            for item in song_list[:limit]:
+                if not isinstance(item, dict):
+                    continue
+                artists = item.get('artists') or item.get('artist') or ''
+                songs.append({
+                    'id': str(item.get('id', '')),
+                    'name': item.get('name', ''),
+                    'artists': artists,
+                    'album': item.get('album', ''),
+                    'picUrl': item.get('picUrl') or item.get('pic') or '',
+                    'artist_string': artists,
+                    'source': 'netease',
+                    'api_source': 'haitangw',
+                    'duration': item.get('duration') or item.get('dt') or 0,
+                    'payInfo': {'free': True, 'vipOnly': False, 'label': '免费'},
+                    'qualityMap': {},
+                    'bestQuality': '',
+                })
+            return songs
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] haitangw 搜索失败: {e}")
             return []
     
     def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -394,7 +450,7 @@ class NeteaseClient(BaseMusicClient):
         from .quality_config import is_valid_quality, get_default_quality
         if not is_valid_quality(quality):
             quality = get_default_quality()
-        
+
         source_func_map = {
             'official': self._get_song_url_official,    # 官方 API（VIP cookie 拿 HiRes）
             'xuanluoge': self._get_song_url_xuanluoge,  # 第三方：官方失败时降级
@@ -423,33 +479,40 @@ class NeteaseClient(BaseMusicClient):
         return {}  # 返回空字典而不是抛异常，保持与其他客户端一致
     
     def get_song_info(self, song_id: int) -> Dict[str, Any]:
-        """获取歌曲信息（官方API优先，两条备用线路）"""
-        # 线路1: 官方API
-        url = APIConstants.SONG_DETAIL_API
-        params = {'ids': f'[{song_id}]'}
-        
-        try:
-            data = self._get(url, params=params)
-            if data.get('songs') and len(data['songs']) > 0:
-                song = data['songs'][0]
-                # 注意：这里使用 artists 和 album 字段，而不是 ar 和 al
-                artists = song.get('artists', song.get('ar', []))
-                album_info = song.get('album', song.get('al', {}))
-                pq = _extract_pay_and_quality(song)
-                return {
-                    'id': song.get('id', 0),
-                    'name': song.get('name', ''),
-                    'artists': '/'.join([a['name'] for a in artists]),
-                    'album': album_info.get('name', ''),
-                    'picUrl': album_info.get('picUrl', ''),
-                    'duration': song.get('duration') or song.get('dt') or 0,
-                    'source': 'netease',
-                    'api_source': 'official',
-                    **pq,
-                }
-        except Exception as e:
-            logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
-        
+        """获取歌曲信息（官方API优先，cookie 失效时跳过，三条备用线路）"""
+        # 线路1: 官方API（仅 cookie 可用时）
+        if self._is_cookie_usable():
+            url = APIConstants.SONG_DETAIL_API
+            params = {'ids': f'[{song_id}]'}
+
+            try:
+                data = self._get(url, params=params)
+                if data:
+                    # 检测 cookie 失效
+                    if self._detect_cookie_invalid(data):
+                        self._mark_cookie_invalid(
+                            f'get_song_info 返回 {data.get("code")}: {data.get("message")}'
+                        )
+                    elif data.get('songs') and len(data['songs']) > 0:
+                        song = data['songs'][0]
+                        # 注意：这里使用 artists 和 album 字段，而不是 ar 和 al
+                        artists = song.get('artists', song.get('ar', []))
+                        album_info = song.get('album', song.get('al', {}))
+                        pq = _extract_pay_and_quality(song)
+                        return {
+                            'id': song.get('id', 0),
+                            'name': song.get('name', ''),
+                            'artists': '/'.join([a['name'] for a in artists]),
+                            'album': album_info.get('name', ''),
+                            'picUrl': album_info.get('picUrl', ''),
+                            'duration': song.get('duration') or song.get('dt') or 0,
+                            'source': 'netease',
+                            'api_source': 'official',
+                            **pq,
+                        }
+            except Exception as e:
+                logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
+
         # 线路2: xuanluoge
         try:
             url = f"{APIConstants.XUANLUOGE_URL}?miss=getMusicInfo&id={song_id}"
@@ -467,7 +530,7 @@ class NeteaseClient(BaseMusicClient):
                 }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] xuanluoge获取歌曲信息失败: {e}")
-        
+
         # 线路3: haitangw
         try:
             url = f"{APIConstants.HAITANGW_URL}?id={song_id}&type=json"
@@ -486,7 +549,7 @@ class NeteaseClient(BaseMusicClient):
                 }
         except Exception as e:
             logger.debug(f"[{self.platform_name}] haitangw获取歌曲信息失败: {e}")
-        
+
         logger.error(f"[{self.platform_name}] 获取歌曲信息失败: 所有API源均无法获取")
         return {}
     

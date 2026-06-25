@@ -205,7 +205,7 @@ def download_proxy():
 
 # ==================== 批量下载（异步任务 + SSE 进度） ====================
 
-def _process_song(item: dict, settings: dict) -> dict | None:
+def _process_song(item: dict, settings: dict) -> Optional[dict]:
     """处理单首歌曲：下载音频 + 写 metadata + 返回结果
 
     settings: {

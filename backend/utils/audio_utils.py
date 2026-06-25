@@ -115,7 +115,7 @@ def detect_mp3_bitrate(file_path: str) -> Optional[int]:
     return None
 
 
-def download_cover(cover_url: str, max_size: int = 3145728) -> bytes | None:
+def download_cover(cover_url: str, max_size: int = 3145728) -> Optional[bytes]:
     """下载封面图片（限制大小，默认 3MB）
 
     Args:

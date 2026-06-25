@@ -59,3 +59,6 @@ env/
 # Cookie / 凭据（绝不能进入仓库）
 **/cookie/
 **/*_cookie.txt
+
+
+musicdl-master/
