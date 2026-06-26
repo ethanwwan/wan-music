@@ -1,0 +1,12 @@
+{
+  "frontend": {
+    "devPort": 5175,
+    "prodPort": 6175,
+    "apiProxyTarget": "",
+    "apiBase": ""
+  },
+  "backend": {
+    "devBackendPort": 5005,
+    "prodBackendPort": 6005
+  }
+}

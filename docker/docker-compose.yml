@@ -1,0 +1,33 @@
+# ============================================================
+# Wan Music - Docker Compose demo
+# ============================================================
+# This is a demo/example for local testing.
+# For production deployment, customize ports, image name, volumes etc.
+#
+# Usage (in project root):
+#   docker compose -f docker/docker-compose.yml up -d --build
+# ============================================================
+
+services:
+  wan-music:
+    image: wan-music:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: wan-music
+    restart: unless-stopped
+    ports:
+      - "6005:6005"
+    volumes:
+      - cookie-data:/app/clients/cookie
+      - ../logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  cookie-data:
+    driver: local

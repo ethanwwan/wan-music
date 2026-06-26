@@ -25,17 +25,17 @@ LABEL maintainer="PGWan" \
       description="Wan Music - 多平台音乐搜索/解析/下载" \
       version="1.0.0"
 
-# 环境变量（可通过 docker run -e PORT=8080 或 compose environment 覆盖）
+# 环境变量（可通过 docker run -e PORT=8080 覆盖）
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     FLASK_APP=main.py \
     FLASK_ENV=production \
-    PORT=5002
+    PORT=6005
 
 # 容器内可配置端口（构建时默认值，可被运行时覆盖）
-ARG PORT=5002
+ARG PORT=6005
 ENV PORT=${PORT}
 
 # 安装系统依赖（mutagen 需要 + 健康检查）

@@ -22,17 +22,19 @@ logs/
 .tmp/
 
 # 环境变量
-# .env 是配置模板，已加入 git 跟踪
-# 如需个人配置覆盖，复制为 .env.local（被忽略）
+# .env.docker / .env.dev / .env.prod 由 config.json 自动生成，已加入 git 跟踪
+# 真正的"本地覆盖"用 .env.local（被忽略）
 .env.local
 .env.*.local
+# 个人 config 覆盖（不提交）
+config.local.json
 
 # 构建产物（前端 build 目录）
 frontend/dist/
 
-# Docker
-Dockerfile
-docker-compose*.yml
+# Docker (根目录 Dockerfile 和 docker/docker-compose.yml 提交到 git)
+# Dockerfile
+# docker-compose*.yml
 .dockerignore
 
 # CI/CD
