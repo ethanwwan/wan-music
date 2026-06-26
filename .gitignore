@@ -58,6 +58,14 @@ __pycache__/
 venv/
 env/
 
+# Tests (本地测试文件)
+tests/
+**/tests/
+test_*.py
+**/test_*.py
+playwright-report/
+test-results/
+
 # Cookie / 凭据（绝不能进入仓库）
 **/cookie/
 **/*_cookie.txt
