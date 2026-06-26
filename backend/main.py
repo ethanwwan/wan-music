@@ -1,32 +1,14 @@
 """Wan Music API 服务主程序
 
 提供多平台音乐搜索、解析、下载 API。
+
+端口优先级：环境变量 PORT > BACKEND_PORT > 默认 5002
 """
 import logging
 import os
-from pathlib import Path
-from dotenv import load_dotenv
+import sys
 
-BACKEND_DIR = Path(__file__).parent
-PROJECT_ROOT = BACKEND_DIR.parent
-
-# ============================================================
-# 加载 .env（向后兼容，不强制要求）
-# 优先级：WAN_MUSIC_ENV_FILE > 根 .env
-# ============================================================
-env_file_override = os.environ.get('WAN_MUSIC_ENV_FILE')
-if env_file_override:
-    target = Path(env_file_override)
-    if not target.is_absolute():
-        target = PROJECT_ROOT / env_file_override
-    if target.exists():
-        load_dotenv(target, override=False)
-else:
-    root_env = PROJECT_ROOT / '.env'
-    if root_env.exists():
-        load_dotenv(root_env, override=False)
-
-from flask import Flask, request, render_template, redirect
+from flask import Flask, redirect
 from flask_cors import CORS
 
 from routes import search_bp, music_bp

@@ -13,7 +13,7 @@
     "preview": "vite preview --mode prod",
     "preview:dev": "vite preview --mode dev",
     "preview:full": "concurrently \"npm run preview\" \"npm run preview:api\"",
-    "preview:api": "cd .. && WAN_MUSIC_ENV_FILE=frontend/.env.prod python3 backend/main.py",
+    "preview:api": "cd .. && python3 backend/main.py",
     "test:ui": "playwright test",
     "test:ui:headed": "playwright test --headed",
     "test:ui:debug": "playwright test --debug",

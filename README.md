@@ -42,7 +42,6 @@ wan-music/
 │   ├── routes/             # Flask 路由
 │   ├── services/           # 业务服务层
 │   ├── utils/              # 工具函数（音频、元数据、响应）
-│   ├── scripts/            # 维护脚本（元数据检查、歌单同步）
 │   ├── main.py             # 入口
 │   └── requirements.txt
 ├── frontend/               # Vue 3 前端
@@ -52,11 +51,10 @@ wan-music/
 │   │   ├── stores/         # Pinia 状态
 │   │   └── utils/          # 工具函数
 │   └── package.json
-├── scripts/                # 仓库级维护脚本
+├── scripts/                # 仓库级维护脚本（元数据检查、歌单同步）
 ├── config.json             # ⭐ 统一配置（前端/后端端口）
 ├── Dockerfile              # 根目录 Docker 镜像构建
 ├── docker/                 # Docker 部署参考配置（demo）
-├── DOCKER.md               # Docker 部署详细指南
 └── README.md
 ```
 
@@ -113,7 +111,7 @@ docker run -d \
 | `/playlist` | POST | 获取歌单详情 |
 | `/api/data-sources` | GET | 获取支持的数据源 |
 
-详细文档：[backend/API_DOC.md](file:///Users/Awan/Public/Repository/wan-music/backend/API_DOC.md)
+详细文档：[backend/README.md](file:///Users/Awan/Public/Repository/wan-music/backend/README.md)（含完整 API 文档）
 
 ## 🛠️ 技术栈
 
@@ -125,10 +123,10 @@ docker run -d \
 
 ```bash
 # 扫描音频文件元数据完整性
-python3 backend/scripts/check_metadata.py
+python3 scripts/check_metadata.py
 
 # 同步歌手目录与歌单原曲
-python3 backend/scripts/sync_artist_to_playlist.py
+python3 scripts/sync_artist_to_playlist.py
 ```
 
 ## 📦 版本发布
@@ -144,6 +142,103 @@ git push origin v1.0.0
 # 3) Trivy 漏洞扫描
 # 4) 创建 GitHub Release
 ```
+
+## 🐳 Docker 部署
+
+### 本地构建
+
+```bash
+# 根目录的 Dockerfile，多阶段构建
+docker build -t wan-music:local .
+
+# 运行
+docker run -d \
+  --name wan-music \
+  -p 6005:6005 \
+  --restart unless-stopped \
+  wan-music:local
+
+# 访问
+open http://localhost:6005
+```
+
+### docker/ 目录
+
+提供 `docker-compose.yml` 作为参考 demo（端口 6005），部署到远程服务器时复制到部署目录后修改使用：
+
+```bash
+cp docker/docker-compose.yml deploy/
+cd deploy && docker compose up -d
+```
+
+### GitHub Actions 自动发布
+
+| 事件 | 触发结果 |
+|------|---------|
+| `git push origin main` | 构建并推送 `:latest` + `:sha-<short>` |
+| `git push origin v1.2.3` | 构建并推送 `:v1.2.3` + `:1.2` + `:1` + `:latest` |
+| `git push origin v1.2.3-rc1` | 构建并推送 `:v1.2.3-rc1`（预发布） |
+| `pull_request` | 只构建不推送（用于验证） |
+| `workflow_dispatch` | 手动指定 tag |
+
+镜像同时支持 `linux/amd64` 和 `linux/arm64`（Apple Silicon / Graviton / Raspberry Pi 4+）。
+
+### 拉取预构建镜像
+
+```bash
+docker pull pgwan/wan-music:latest
+
+docker run -d \
+  --name wan-music \
+  -p 6005:6005 \
+  --restart unless-stopped \
+  pgwan/wan-music:latest
+```
+
+### 常用命令
+
+```bash
+docker ps | grep wan-music              # 查看运行中的容器
+docker stats wan-music                 # 资源占用
+docker exec -it wan-music /bin/bash    # 进入容器
+docker logs -f wan-music               # 实时日志
+docker compose down -v                 # 停止并清理卷
+```
+
+### 反向代理
+
+Nginx 示例（用于 `music.example.com`）：
+
+```nginx
+server {
+    listen 80;
+    server_name music.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:6005;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;  # SSE 支持
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+### 故障排查
+
+```bash
+# 1) 端口被占用 → 修改 docker-compose.yml 的 ports
+# 2) cookie 问题 → docker exec 检查 /app/clients/cookie/
+# 3) 清理重建 → docker compose down -v && docker system prune -a
+```
+
+### 安全特性
+
+- 非 root 用户运行（`wanmusic`）
+- 多阶段构建（不包含构建工具）
+- Trivy 自动漏洞扫描
+- `.dockerignore` 排除 cookie / .env / node_modules
 
 ## 📄 许可证
 

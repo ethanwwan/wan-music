@@ -13,10 +13,13 @@ npm run dev:full   # 前端 + 后端
 npm run build      # 生产构建
 ```
 
-## 环境变量
+## 配置
 
-- `.env.dev` - 开发环境（端口 5175，后端 5005）
-- `.env.prod` - 生产环境（端口 6175，后端 6005）
+端口由根目录 [`../config.json`](../config.json) 的 `frontend` 节点配置：
+
+- `devPort` - 开发模式端口（默认 5175）
+- `prodPort` - 生产构建端口（默认 6175）
+- `apiBase` - 跨域部署时的 API 基础路径（默认空 = 同源）
 
 ## 目录
 
