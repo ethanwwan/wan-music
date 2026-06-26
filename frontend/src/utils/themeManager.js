@@ -1,25 +1,18 @@
-import { ref } from 'vue'
-
-const isDark = ref(false)
+/**
+ * 主题管理：当前仅使用一套浅色主题 token，
+ * applyTheme 把全部 CSS 变量写入 :root，
+ * 让 App.vue 与 global.css 共用同一套色板。
+ */
 
 /** 默认主题色：蓝色 #0057c2 */
 export const DEFAULT_THEME_COLOR = '#0057c2'
-
-const hexToRgb = (hex) => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : { r: 0, g: 87, b: 194 }
-}
 
 export const applyTheme = () => {
   if (typeof document === 'undefined') return
 
   const root = document.documentElement
   const color = DEFAULT_THEME_COLOR
-  const { r, g, b } = hexToRgb(color)
+  const r = 0, g = 87, b = 194  // #0057c2 的 RGB 解析结果
 
   root.style.setProperty('--color-primary', color)
   root.style.setProperty('--color-primary-hover', color)
@@ -49,18 +42,8 @@ export const applyTheme = () => {
   root.style.setProperty('--color-notice-bg', `rgba(${r}, ${g}, ${b}, 0.1)`)
   root.style.setProperty('--color-notice-border', `rgba(${r}, ${g}, ${b}, 0.3)`)
 
-  root.style.setProperty('--app-bg', '#f0f2f5')
-  root.style.setProperty('--app-header-bg', 'rgba(255, 255, 255, 0.95)')
-  root.style.setProperty('--app-card-bg', '#FFFFFF')
-  root.style.setProperty('--app-text-primary', '#333333')
-  root.style.setProperty('--app-text-secondary', '#666666')
-  root.style.setProperty('--app-text-muted', '#999999')
-  root.style.setProperty('--app-border-color', '#E8E8E8')
-  root.style.setProperty('--app-shadow', '0 4px 16px rgba(0, 0, 0, 0.08)')
-
   document.documentElement.classList.remove('dark')
 }
 
+/** 启动入口：保留命名以兼容 App.vue 的现有调用 */
 export const initThemeFromLocalStorage = applyTheme
-
-export { isDark }

@@ -1,29 +1,22 @@
 <template>
   <a-config-provider :theme="{ token: themeToken }">
     <a-layout class="app-container" style="min-height: 100vh;">
-      <!-- 主要内容区域 -->
       <a-layout-content class="app-main">
-        <!-- Hero Header 组件 -->
-        <HeroHeader 
-          title="Wan Music - 多平台音乐下载"
-          subtitle="支持网易云 / QQ 音乐 / 酷狗 / 波点，搜索歌曲/歌单，解析真实下载地址。"
-        />
+        <div class="hero-header">
+          <h1 class="hero-title">Wan Music - 多平台音乐下载</h1>
+          <p class="hero-subtitle">支持网易云 / QQ 音乐 / 酷狗 / 波点，搜索歌曲/歌单，解析真实下载地址。</p>
+        </div>
 
-
-
-        <!-- Search Container 组件 -->
         <SearchContainer
           ref="searchContainerRef"
-          :title="searchConfig.title"
-          :placeholder="searchConfig.placeholder"
+          title="输入搜索关键词"
+          placeholder="请输入歌曲名或歌单名"
           :loading="loading"
           @parse="handleParse"
           @open-settings="showSettingsDialog = true"
         />
 
-        <!-- 搜索结果面板组件 -->
         <SearchResult
-          :key="searchResultKey"
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :loading="loading"
@@ -33,272 +26,101 @@
           @track-play="handlePlaySong"
           @search-type-change="handleSearchTypeChange"
         />
-
-        <!-- 单曲解析视图 -->
-        <div class="view-container" v-show="currentView === 'music'">
-          <!-- 音乐播放器组件 -->
-          <MusicPlayer
-            v-if="musicInfo"
-            :playlist="[musicInfo]"
-            :current-index="0"
-          />
-        </div>
-
-        <!-- 歌单解析视图 -->
-        <div class="view-container" v-show="currentView === 'playlist' && playlistInfo && displayTracks.length > 0">
-          <SongList
-            :playlist-info="playlistInfo"
-            :display-tracks="playlistInfo?.tracks || displayTracks"
-            :current-page="currentPage"
-            :page-size="20"
-            :total-tracks="totalTracks"
-            :settings="settings"
-            @track-selected="handleTrackSelected"
-            @track-parsed="handleTrackParsed"
-            @track-play="(track) => handlePlaySong(track, playlistInfo?.tracks || displayTracks)"
-            @page-change="handlePageChange"
-          />
-        </div>
-
-        <!-- 专辑解析视图 -->
-        <div class="view-container" v-show="currentView === 'album' && albumInfo">
-          <SongList
-            type="song"
-            :items="albumInfo?.tracks || []"
-            :detail-info="{
-              ...albumInfo,
-              coverImgUrl: albumInfo?.coverImgUrl || albumInfo?.picUrl,
-              name: albumInfo?.name,
-              creator: albumInfo?.artistName || albumInfo?.artist?.name,
-              isAlbum: true
-            }"
-            :current-page="currentPage"
-            :page-size="20"
-            :total-tracks="totalTracks"
-            :settings="settings"
-            @track-selected="handleTrackSelected"
-            @track-parsed="handleTrackParsed"
-            @track-play="(track) => handlePlaySong(track)"
-            @page-change="handlePageChange"
-          />
-        </div>
       </a-layout-content>
 
-      <!-- 底部组件 -->
       <a-layout-footer>
-        <Footer />
+        <footer class="footer-container">
+          <div class="footer-content">
+            <p class="footer-text">© 2026 Wan Music. All rights reserved.</p>
+            <p class="footer-text">开源项目 | 仅供学习</p>
+            <p class="footer-text">Version 1.3.6 · 构建时间: 2026.5.24</p>
+          </div>
+        </footer>
       </a-layout-footer>
 
-      <!-- 浮动操作按钮 -->
-      <FloatingActions @open-settings="showSettingsDialog = true" />
-
-      <!-- 设置对话框 -->
       <SettingsDialog v-model:open="showSettingsDialog" />
-
-      <!-- 下载队列抽屉 -->
       <DownloadDrawer />
-
-      <!-- 底部播放器 -->
       <MusicPlayer :current-song="currentSong" :autoplay="true" @play-error="handlePlayError" />
     </a-layout>
   </a-config-provider>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { message } from 'ant-design-vue'
-
-// 导入组件
-import HeroHeader from './components/HeroHeader.vue'
 
 import SearchContainer from './components/SearchContainer.vue'
 import SearchResult from './components/SearchResult.vue'
-import Footer from './components/Footer.vue'
-import FloatingActions from './components/FloatingActions.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
-import SongList from './components/SongList.vue'
 import DownloadDrawer from './components/DownloadDrawer.vue'
 
-// 导入工具函数
 import musicApi from './services/musicApi.js'
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { settings, loadSettings } from './utils/settingsManager.js'
-import {
-    musicUrl, loading, tabLoading, musicInfo, parseMusic, searchByTab, cleanupTimer, searchResults, playlistSearchResults, searchWarnings, playlistInfo
-  } from './utils/parseManager.js'
-import { displayTracks, currentPage, totalTracks, updateDisplayTracks } from './utils/paginationManager.js'
-import { initDeviceDetection, cleanupDeviceDetection } from './utils/deviceDetector.js'
+import { loading, tabLoading, parseMusic, searchByTab, searchResults, playlistSearchResults, searchWarnings } from './utils/parseManager.js'
 import { downloadQueueStore as queueStore } from './stores/downloadQueue.js'
 
-
-// 响应式数据
-const currentView = ref('search')
 const showSettingsDialog = ref(false)
-const searchResultKey = ref(0)
 const searchContainerRef = ref(null)
-const currentSearchType = ref('keyword') // 'keyword' | 'music_link' | 'playlist_link'
-
-// 播放列表（保留用于向后兼容）
-const playerPlaylist = ref([])
-
-// 当前播放的歌曲
+/** 'keyword' | 'music_link' | 'playlist_link' */
+const currentSearchType = ref('keyword')
 const currentSong = ref(null)
-
-// 搜索配置
-const searchConfig = {
-  title: '输入搜索关键词',
-  description: '支持搜索歌曲、歌单、单曲分享链接或歌单分享链接',
-  placeholder: '请输入歌曲名或歌单名'
-}
-
-// 主题配置 - 响应式主题token
-const themeToken = reactive({
-  colorPrimary: DEFAULT_THEME_COLOR,
-})
-
-// 判断输入类型 → 返回后端 type 参数
-// 0=全部(不再使用) | 1=只搜歌曲 | 2=只搜歌单
-const detectSearchType = (url) => {
-  // 检查是否是歌曲链接
-  if (musicApi.validateMusicUrl(url)) {
-    return 1
-  }
-  // 检查是否是歌单链接
-  if (musicApi.validatePlaylistUrl(url)) {
-    return 2
-  }
-  // 关键字搜索：默认只搜歌曲（点击歌单 tab 时再搜歌单）
-  return 1
-}
-
-// 判断输入类型（前端 UI 用）
-const detectInputType = (url) => {
-  // 检查是否是歌曲链接
-  if (musicApi.validateMusicUrl(url)) {
-    return 'music_link'
-  }
-  // 检查是否是歌单链接
-  if (musicApi.validatePlaylistUrl(url)) {
-    return 'playlist_link'
-  }
-  // 默认是keyword搜索
-  return 'keyword'
-}
-
-// 当前选择的数据源（从localStorage读取）
 const currentSources = ref([localStorage.getItem('wan-music-selected-data-source') || 'netease'])
+/** 当前输入（供 tab 切换时回传给后端） */
+const currentInput = ref('')
+
+const themeToken = reactive({ colorPrimary: DEFAULT_THEME_COLOR })
 
 const handleParse = async ({ url, sources = ['netease'] }) => {
-  // 重新挂载 SearchResult 组件，重置所有状态
-  searchResultKey.value++
-  musicUrl.value = url
-
-  // 保存当前选择的数据源
   currentSources.value = sources
+  currentInput.value = url
+  // URL 解析交由后端，前端先按关键词的双 tab 占位；后端返回后再收窄为单 tab
+  currentSearchType.value = 'keyword'
+  await parseMusic(url, sources, musicApi.isHttpUrl(url) ? 0 : 1)
 
-  // 检测输入类型
-  currentSearchType.value = detectInputType(url)
-  const searchType = detectSearchType(url)
+  if (musicApi.isHttpUrl(url)) {
+    // URL 后端只会返回歌曲或歌单之一，按结果收窄为对应单 tab
+    if (searchResults.value.length > 0) currentSearchType.value = 'music_link'
+    else if (playlistSearchResults.value.length > 0) currentSearchType.value = 'playlist_link'
+  }
 
-  const quality = settings.selectedQuality || 'lossless'
-  await parseMusic(quality, 'search', sources, searchType)
-  
   if (searchContainerRef.value && url.trim()) {
     searchContainerRef.value.addHistoryRecord(url.trim())
   }
 }
 
-
-
-const handlePageChange = (page) => {
-  console.log('App.vue handlePageChange called with page:', page)
-  console.log('Before: currentPage =', currentPage.value, ', displayTracks.length =', displayTracks.value.length)
-  currentPage.value = page
-  updateDisplayTracks()
-  console.log('After: currentPage =', currentPage.value, ', displayTracks.length =', displayTracks.value.length)
-  console.log('Display tracks updated:', displayTracks.value.slice(0, 3))
-}
-
 const handleSearchTypeChange = async (searchType) => {
-  // tab 切换：调用 searchByTab（独立 loading，不影响搜索按钮）
   const backendType = searchType === 'playlist' ? 2 : 1
-  await searchByTab(currentSources.value, backendType)
+  await searchByTab(currentInput.value, currentSources.value, backendType)
 }
 
-// 处理歌曲播放 - 只播放当前点击的歌曲
-// track.url 由 SongList 的 track-play 事件传递（实际值是后端 /song 响应的下载 URL）
-// 同时设置 musicInfo.value，让 MusicPlayer 的 v-if 通过（无需第二次 /song URL 模式调用）
-const handlePlaySong = async (track) => {
-  const song = {
+const handlePlaySong = (track) => {
+  currentSong.value = {
     id: track.id,
     name: track.name,
     artist: track.artist || track.ar?.[0]?.name || (Array.isArray(track.artists) ? track.artists[0]?.name : track.artists) || '未知艺术家',
     album: track.album || track.al?.name || '未知专辑',
-    cover: getCoverUrl(track),
+    cover: track.cover || track.picUrl || track.al?.picUrl || track.album?.coverImgUrl || track.album?.picUrl || '',
     lrc: track.lrc || '',
     url: track.url || '',
     fileExtension: track.fileExtension || '.mp3',
+    source: track.source || '',
     unavailable: track.unavailable || false
   }
-  currentSong.value = song
-  musicInfo.value = song
 }
 
-// 获取封面URL
-const getCoverUrl = (track) => {
-  return (
-    track.cover ||
-    track.picUrl ||
-    track.al?.picUrl ||
-    track.album?.coverImgUrl ||
-    track.album?.picUrl ||
-    ''
-  )
-}
-
-const handleTrackParsed = async (data) => {
-  console.log('Track parsed:', data)
-  if (searchContainerRef.value && data) {
-    const name = data.name || data.track?.name
-    if (name) {
-      searchContainerRef.value.addHistoryRecord(name)
-    }
-  }
-}
-
-const handleTrackSelected = (track) => {
-  console.log('Track selected:', track)
-}
-
-// 处理歌曲播放失败（无版权）
+/** 播放失败（无版权）：标记 + 提示 */
 const handlePlayError = (track) => {
-  // 标记歌曲为不可用
-  track.unavailable = true
-  
-  // 吐司提示
-  message.warning(`《${track.name}》因版权问题暂时无法播放`)
-  
-  // 更新播放列表中的歌曲状态
-  const index = playerPlaylist.value.findIndex(p => p.id === track.id)
-  if (index !== -1) {
-    playerPlaylist.value[index].unavailable = true
-  }
+  if (track) track.unavailable = true
+  message.warning(`《${track?.name}》因版权问题暂时无法播放`)
 }
 
-// 生命周期
 onMounted(() => {
   loadSettings()
-  initDeviceDetection()
   initThemeFromLocalStorage()
   themeToken.colorPrimary = DEFAULT_THEME_COLOR
-  // 启动下载队列同步（从 localStorage + 后端拉取）
   queueStore.init()
-})
-
-onUnmounted(() => {
-  cleanupDeviceDetection()
-  cleanupTimer()
 })
 </script>
 
@@ -322,43 +144,68 @@ onUnmounted(() => {
   }
 }
 
-.view-container {
-  margin-top: var(--spacing-2xl);
+.hero-header {
+  text-align: center;
+  margin-bottom: 40px;
 }
 
-.custom-drawer-title {
+.hero-title {
+  font-size: var(--font-size-headline-lg);
+  font-weight: 700;
+  line-height: var(--line-height-headline-lg);
+  margin-bottom: 8px;
+  color: var(--color-on-surface);
+  font-family: var(--font-family);
+}
+
+.hero-subtitle {
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-body-lg);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin: 0;
+  font-family: var(--font-family);
+}
+
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 28px;
+  }
+  .hero-subtitle {
+    font-size: var(--font-size-body-md);
+    line-height: var(--line-height-body-md);
+  }
+}
+
+.footer-container {
+  width: 100%;
+  margin-top: auto;
+  background: transparent;
+}
+
+.footer-content {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 var(--padding-desktop);
+  text-align: center;
+  padding-top: 3rem;
+  padding-bottom: 3rem;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-on-surface);
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.custom-drawer-title .anticon {
-  font-size: 18px;
+.footer-text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-sm);
+  margin: 0;
 }
 
-.custom-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.header-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-on-surface);
-}
-
-.close-icon {
-  font-size: 20px;
-  color: var(--color-on-surface-variant);
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.close-icon:hover {
-  color: var(--color-on-surface);
+@media (max-width: 768px) {
+  .footer-content {
+    padding: 0 var(--padding-mobile);
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
 }
 </style>

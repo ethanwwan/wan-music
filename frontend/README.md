@@ -24,10 +24,11 @@ npm run build      # 生产构建
 ## 目录
 
 - `src/components/` - 业务组件
-- `src/composables/` - 组合式 API
-- `src/stores/` - Pinia 状态
+- `src/stores/` - 状态管理（基于 Vue ref，不依赖 Pinia）
 - `src/services/` - API 服务
 - `src/utils/` - 工具函数
+- `src/config/` - 配置（音质等级等）
+- `src/styles/` - 全局样式与主题变量
 
 ## 许可证
 

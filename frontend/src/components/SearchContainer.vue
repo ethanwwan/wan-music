@@ -1,10 +1,8 @@
 <template>
   <a-card class="main-card" :hoverable="true">
-    <!-- 输入头部 -->
-    <div v-if="currentMode !== 'rank'" class="input-header">
+    <div class="input-header">
       <div class="header-text">
         <h2 class="input-title">{{ title }}</h2>
-        <p class="input-desc">{{ description }}</p>
       </div>
       <div class="header-actions">
         <!-- 下载队列按钮（设置按钮左侧） -->
@@ -18,7 +16,6 @@
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          <!-- 任务徽章（进行中 + 已完成） -->
           <span
             v-if="totalBadge > 0"
             class="badge"
@@ -38,18 +35,7 @@
       </div>
     </div>
 
-    <!-- 榜单选择器 -->
-    <div v-if="currentMode === 'rank'" class="charts-select-container">
-      <a-select v-model:value="selectedChart" placeholder="选择榜单" size="large" style="width: 100%">
-        <a-select-option value="19723756">飙升榜</a-select-option>
-        <a-select-option value="3779629">新歌榜</a-select-option>
-        <a-select-option value="2884035">原创榜</a-select-option>
-        <a-select-option value="3778678">热歌榜</a-select-option>
-      </a-select>
-    </div>
-
-    <!-- 标准输入区 -->
-    <div v-if="currentMode !== 'rank'" class="input-section">
+    <div class="input-section">
       <div class="input-row">
         <a-input
           v-model:value="inputValue"
@@ -59,10 +45,9 @@
           @keyup.enter="handleParse"
           prefix-icon="link"
         />
-        <!-- 数据源下拉选择框 -->
-        <a-select 
-          v-model:value="selectedDataSource" 
-          placeholder="数据源" 
+        <a-select
+          v-model:value="selectedDataSource"
+          placeholder="数据源"
           size="large"
           style="width: 160px"
           @change="handleDataSourceChange"
@@ -82,7 +67,6 @@
         </a-button>
       </div>
 
-      <!-- 历史解析 -->
       <div v-if="historyRecords.length > 0" class="history-section">
         <div class="history-header">
           <span class="history-label">历史解析</span>
@@ -93,7 +77,7 @@
             v-for="record in historyRecords"
             :key="record.name"
             class="history-tag"
-            @click="handleTagClick(record, 'history-click')"
+            @click="handleTagClick(record)"
           >
             {{ record.name }}
           </span>
@@ -104,16 +88,13 @@
 </template>
 
 <script setup>
-import { ref, defineProps, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
-import { dataSources, defaultSelectedSources } from '../utils/dataSourceConfig.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
 
-// 历史记录存储的localStorage key
 const HISTORY_STORAGE_KEY = 'wan-music-history-records'
 
-// 从localStorage加载历史记录
 const loadHistoryFromStorage = () => {
   try {
     const stored = localStorage.getItem(HISTORY_STORAGE_KEY)
@@ -124,7 +105,6 @@ const loadHistoryFromStorage = () => {
   }
 }
 
-// 保存历史记录到localStorage
 const saveHistoryToStorage = (records) => {
   try {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(records))
@@ -133,22 +113,14 @@ const saveHistoryToStorage = (records) => {
   }
 }
 
-const props = defineProps({
-  currentMode: {
-    type: String,
-    default: 'music'
-  },
+defineProps({
   title: {
     type: String,
-    default: '输入歌曲 URL 或 ID'
-  },
-  description: {
-    type: String,
-    default: '支持搜索歌曲、歌单、单曲分享链接或歌单分享链接'
+    default: '输入搜索关键词'
   },
   placeholder: {
     type: String,
-    default: '输入歌曲名/歌单名，或粘贴单曲/歌单链接（支持多平台）'
+    default: '请输入歌曲名或歌单名'
   },
   loading: {
     type: Boolean,
@@ -156,33 +128,23 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits([
-  'parse',
-  'chart-change',
-  'history-click',
-  'open-settings',
-  'open-download-drawer'
-])
+const emit = defineEmits(['parse', 'open-settings'])
 
-// 下载队列相关
 const openDownloadDrawer = () => {
   queueStore.openDrawer()
-  emit('open-download-drawer')
 }
 const activeCount = computed(() => queueStore.activeCount.value)
 const completedCount = computed(() => queueStore.completedCount.value)
 const totalBadge = computed(() => activeCount.value + completedCount.value)
 
 const inputValue = ref('')
-const selectedChart = ref('19723756')
 const historyRecords = ref([])
 
-// 从localStorage读取保存的数据源
+// 从 localStorage 读取上次选择的数据源
 const savedDataSource = localStorage.getItem('wan-music-selected-data-source')
 const selectedDataSource = ref(savedDataSource || 'netease')
 const selectedSources = ref([selectedDataSource.value])
 
-// 从设置中读取音质，如果没有则使用默认值 'lossless'
 const selectedQuality = computed({
   get: () => settings.selectedQuality || 'lossless',
   set: (value) => {
@@ -191,49 +153,26 @@ const selectedQuality = computed({
   }
 })
 
-const loadHistoryRecords = (mode) => {
-  // 榜单模式不显示历史记录
-  if (mode === 'rank') {
-    historyRecords.value = []
-    return
-  }
-  // 从localStorage加载历史记录，并过滤当前模式
-  const allHistory = loadHistoryFromStorage()
-  historyRecords.value = allHistory.filter(record => record.type === mode)
+const loadHistoryRecords = () => {
+  historyRecords.value = loadHistoryFromStorage()
 }
 
 const addHistoryRecord = (songName) => {
-  // 检查是否已存在
   const exists = historyRecords.value.some(item => item.name === songName)
   if (!exists) {
-    // 添加到历史记录开头
-    historyRecords.value.unshift({
-      name: songName,
-      url: songName,
-      type: props.currentMode
-    })
-    // 限制最多10条记录
-    if (historyRecords.value.length > 10) {
-      historyRecords.value.pop()
-    }
-    // 保存到localStorage（包含所有模式的历史）
-    const allHistory = loadHistoryFromStorage()
-    // 移除同一模式的相同记录
-    const otherHistory = allHistory.filter(h => h.type !== props.currentMode || h.name !== songName)
-    const newHistory = [historyRecords.value[0], ...otherHistory].slice(0, 50) // 总共最多50条
-    saveHistoryToStorage(newHistory)
+    historyRecords.value.unshift({ name: songName, url: songName, type: 'search' })
+    if (historyRecords.value.length > 50) historyRecords.value.pop()
+    saveHistoryToStorage(historyRecords.value)
   }
 }
 
-const handleTagClick = (item, eventName) => {
+const handleTagClick = (item) => {
   inputValue.value = item.name
-  emit(eventName, item)
 }
 
 const handleDataSourceChange = (value) => {
   selectedDataSource.value = value
   selectedSources.value = [value]
-  // 保存到localStorage
   localStorage.setItem('wan-music-selected-data-source', value)
 }
 
@@ -250,29 +189,16 @@ const handleParse = () => {
   })
 }
 
-const handleChartChange = () => {
-  emit('chart-change', selectedChart.value)
-}
-
 const handleClearHistory = () => {
   historyRecords.value = []
-  // 清除localStorage中的历史记录
   saveHistoryToStorage([])
 }
 
 onMounted(() => {
-  // 初始化时从localStorage加载历史记录
-  loadHistoryRecords(props.currentMode)
+  loadHistoryRecords()
 })
 
-// 监听模式变化，切换历史记录
-watch(() => props.currentMode, (newMode) => {
-  loadHistoryRecords(newMode)
-})
-
-defineExpose({
-  addHistoryRecord
-})
+defineExpose({ addHistoryRecord })
 </script>
 
 <style scoped>
@@ -299,25 +225,9 @@ defineExpose({
   font-size: var(--font-size-headline-md);
   font-weight: 600;
   line-height: var(--line-height-headline-md);
-  margin: 0 0 var(--spacing-xs) 0;
+  margin: 0;
   color: var(--color-on-surface);
   font-family: var(--font-family);
-}
-
-.input-desc {
-  font-size: var(--font-size-body-md);
-  line-height: var(--line-height-body-md);
-  color: var(--color-text-muted);
-  margin: 0;
-  font-family: var(--font-family);
-}
-
-.quality-select {
-  min-width: 140px;
-}
-
-.charts-select-container {
-  margin-bottom: var(--spacing-lg);
 }
 
 .input-section {
@@ -427,7 +337,6 @@ defineExpose({
   border-color: var(--color-primary);
 }
 
-/* 下载队列徽章 */
 .badge {
   position: absolute;
   top: -6px;
@@ -463,59 +372,8 @@ defineExpose({
 }
 
 .queue-btn:hover .badge {
-  /* 保持徽章颜色，但加边 */
   background: var(--color-primary);
 }
-
-.settings-btn {
-  margin-left: 0;  /* 由 .header-actions gap 控制间距 */
-}
-
-.data-source-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.data-source-label {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-body-sm);
-}
-
-.data-source-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  padding-left: 0;
-  margin-left: 0;
-}
-
-.data-source-tag {
-  cursor: pointer;
-  transition: all 0.2s;
-  padding: var(--spacing-xs) var(--spacing-lg);
-  background: transparent;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-label);
-  color: var(--color-secondary);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.data-source-tag:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.data-source-tag.active {
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-
 
 .history-section {
   display: flex;
@@ -573,12 +431,12 @@ defineExpose({
   .input-row {
     flex-direction: column;
   }
-  
+
   .input-header {
     flex-direction: column;
     gap: var(--spacing-lg);
   }
-  
+
   .main-card {
     padding: var(--spacing-lg);
   }

@@ -11,7 +11,6 @@ import json
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import unquote_plus
 
 from services.music_service import music_service
 from utils.api_response import APIResponse
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 music_bp = Blueprint('music', __name__)
 
 
-# ==================== 下载代理（解决 CORS） ====================
+# ==================== 批量下载（异步任务 + SSE 进度） ====================
 
 EXT_MIME_TYPES = {
     '.mp3': 'audio/mpeg',
@@ -69,138 +68,6 @@ def _cleanup_temp_files(exception=None):
         for path in list(g._temp_files):
             _safe_remove(path)
         g._temp_files.clear()
-
-
-@music_bp.route('/download', methods=['GET'])
-def download_proxy():
-    """代理下载单曲（解决 CORS，可选写入 metadata，临时文件自动清理）
-
-    参数：
-      - id: 歌曲 ID
-      - quality: 音质（默认 lossless）
-      - source: 平台（默认 netease）
-      - name: 歌曲名
-      - artist: 歌手
-      - album: 专辑
-      - lrc: 歌词（可选，用于 metadata）
-      - filenameFormat: song-artist / artist-song / song（默认 song-artist）
-      - writeMetadata: true/false（默认 true）
-    """
-    song_id = request.args.get('id', '').strip()
-    quality = request.args.get('quality', 'lossless').strip()
-    source = request.args.get('source', '').strip() or None
-    name = request.args.get('name', 'song')
-    artist = request.args.get('artist', '')
-    album = request.args.get('album', '')
-    lyric = request.args.get('lrc', '')
-    filename_format = request.args.get('filenameFormat', 'song-artist').strip()
-    write_metadata = request.args.get('writeMetadata', 'true').lower() != 'false'
-
-    if not song_id:
-        return APIResponse.json_error("缺少歌曲 id 参数", 400)
-
-    try:
-        song_info = music_service.get_song_info(song_id, quality, source)
-    except Exception as e:
-        logger.error(f"获取歌曲信息失败: {e}")
-        return APIResponse.json_error(f"获取歌曲信息失败: {str(e)}", 500)
-
-    url = song_info.get('url')
-    if not url:
-        return APIResponse.json_error("无法获取歌曲下载链接（可能因版权问题不可用）", 404)
-
-    extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
-    if not extension.startswith('.'):
-        extension = '.' + extension
-
-    # 1. 下载到临时文件
-    fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-')
-    os.close(fd)
-    _register_temp_file(tmp_path)
-    try:
-        resp = requests.get(url, stream=True, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
-        resp.raise_for_status()
-        with open(tmp_path, 'wb') as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    f.write(chunk)
-
-        # 1.5 下载完成后，用 magic bytes 检测真实文件类型，覆盖可能错误的扩展名
-        # （例如网易云 URL 不带后缀，但服务器返回的可能是 FLAC/MP3/M4A 中任一种）
-        detected = _detect_audio_type(tmp_path)
-        if detected and '.' + detected != extension:
-            new_path = os.path.splitext(tmp_path)[0] + '.' + detected
-            try:
-                os.rename(tmp_path, new_path)
-                tmp_path = new_path
-                extension = '.' + detected
-            except Exception:
-                pass
-        mime_type = EXT_MIME_TYPES.get(extension, 'audio/mpeg')
-
-        # 2. 可选写 metadata
-        if write_metadata:
-            _write_metadata(
-                tmp_path, extension,
-                name or song_info.get('name', ''),
-                artist or song_info.get('artists', ''),
-                album or song_info.get('album', ''),
-                lyric or song_info.get('lyric', ''),
-                song_info.get('picUrl', ''),
-                platform=song_info.get('source', source or ''),
-                song_id=song_info.get('id', song_id)
-            )
-
-        # 构建文件名
-        safe_name = _sanitize_filename(
-            _build_filename(artist or song_info.get('artists', ''),
-                            name or song_info.get('name', 'song'),
-                            extension, filename_format)
-        )
-
-        # 3. 发送文件：先读取文件到内存，再通过 Response 返回
-        # 避免 send_file 内部流式读取与文件删除的时序问题
-        # 确保 Content-Length 精确匹配实际文件大小
-        with open(tmp_path, 'rb') as f:
-            file_data = f.read()
-        file_size = len(file_data)
-        logger.info(f"下载到临时文件 {tmp_path} 完成，大小: {file_size} bytes")
-
-        logger.info(f"准备发送: filename={safe_name}, size={file_size}")
-
-        # 实际音质推断（用于前端显示真实下载到的音质）
-        # 通过 magic bytes + MP3 frame header bitrate 判断真实码率
-        actual_quality = quality
-        if detected == 'flac' or detected == 'ape':
-            actual_quality = 'lossless'
-        elif detected == 'mp3':
-            # 通过 MP3 frame header 读取真实 bitrate（适用于所有平台）
-            mp3_br = _detect_mp3_bitrate(tmp_path)
-            logger.info(f"音质推断: detected=mp3, bitrate={mp3_br}kbps")
-            if mp3_br is not None and mp3_br >= 256:
-                actual_quality = 'exhigh'  # 320k MP3
-            elif mp3_br is not None and mp3_br >= 96:
-                actual_quality = 'standard'  # 128k MP3
-            # bitrate 读取失败时保持原 quality（保守处理）
-        elif detected == 'm4a':
-            # M4A 通常 256k（AAC）
-            actual_quality = 'exhigh'
-        # 告诉前端实际拿到的音质（user 可能选了 lossless 但实际只能下到 320k）
-        downgraded = (actual_quality != quality)
-
-        return Response(file_data, status=200, headers={
-            'Content-Type': mime_type,
-            'Content-Disposition': _build_content_disposition(safe_name),
-            'Content-Length': str(file_size),
-            'Accept-Ranges': 'none',
-            'X-Actual-Quality': actual_quality,
-            'X-Quality-Downgraded': '1' if downgraded else '0',
-            'X-Actual-FileType': detected or extension.lstrip('.'),
-        })
-    except Exception as e:
-        _safe_remove(tmp_path)
-        logger.error(f"下载失败: {e}")
-        return APIResponse.json_error(f"下载失败: {str(e)}", 500)
 
 
 # ==================== 批量下载（异步任务 + SSE 进度） ====================
@@ -495,16 +362,6 @@ def download_batch_list():
     return jsonify(APIResponse.success(items, "查询成功"))
 
 
-@music_bp.route('/download/batch/info/<task_id>', methods=['GET'])
-def download_batch_info(task_id):
-    """查询单个任务信息"""
-    with batch_tasks_lock:
-        task = batch_tasks.get(task_id)
-    if not task:
-        return jsonify(APIResponse.error("任务不存在或已过期", 404))
-    return jsonify(APIResponse.success(_task_to_dict(task_id, task), "查询成功"))
-
-
 @music_bp.route('/download/batch/<task_id>', methods=['DELETE'])
 def download_batch_delete(task_id):
     """取消/删除批量下载任务
@@ -635,113 +492,88 @@ def download_batch_file(task_id):
     return response
 
 
+def _resolve_song_ref(payload: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """从请求体里提取 (music_id, source, url) 之一
+    - 优先用 url（推荐，url 必传时由后端解析 id + source）
+    - 否则用 ids / id + source
+    - 兜底：QQ 的 ID 是字母数字混合，其他平台都是纯数字
+    """
+    url = (payload.get('url') or '').strip() or None
+    ids = (payload.get('ids') or '').strip()
+    music_id = ids.split(',')[0] if ids else (payload.get('id') or '').strip() or None
+    source = (payload.get('source') or '').strip() or None
+
+    if url and not music_id:
+        parsed = parse_url(url)
+        if parsed:
+            music_id = parsed['id']
+            if not source:
+                source = parsed['platform']
+
+    if not source and music_id and not music_id.isdigit():
+        source = 'qq'
+
+    return music_id, source, url
+
+
 @music_bp.route('/song', methods=['POST'])
 def get_song_info():
-    """获取歌曲信息（支持多种类型：url/name/lyric/json）
+    """获取歌曲完整信息：基本信息 + 播放/下载地址 + 歌词
 
-    支持以下参数（任选其一）：
-        - url: 完整的歌曲链接（推荐，由后端解析）
-        - ids 或 id: 歌曲 ID（需配合 source 使用）
+    支持传链接（推荐）或传 ID。返回字段统一，前端播放、下载均走此接口。
+    后端 /download/batch/start 内部也复用 music_service.get_song_info 拉取同样数据。
+
+    请求体（JSON 或 form）：
+        - url: 完整的歌曲链接（由后端解析出 id 和 source）
+        - id 或 ids: 歌曲 ID（需配合 source 使用）
         - source: 平台（netease/qq/kugou/bodian），不传则从 URL 推断
+        - level: 音质，默认 lossless
+
+    返回：
+        {
+          id, name, artist, album, cover, duration,
+          url, level, fileType, source,
+          available: bool,           // false 时因版权无法播放
+          lyric: 'LRC 文本'          // 无歌词时为空字符串
+        }
     """
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    music_id, source, url = _resolve_song_ref(payload)
+    level = (payload.get('level') or 'lossless').strip() or 'lossless'
+
+    if not music_id:
+        if url:
+            return jsonify(APIResponse.error("无法识别此歌曲链接，请检查格式", 400))
+        return jsonify(APIResponse.error("请提供歌曲链接或 ID", 400))
+
+    logger.info(f"/song 请求: music_id={music_id}, source={source}, level={level}")
+
     try:
-        data = request.get_data(as_text=True)
-        params = {}
-        for pair in data.split('&'):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                params[unquote_plus(key)] = unquote_plus(value)
-
-        # 优先使用 url 参数（推荐）
-        url = params.get('url', '')
-        ids = params.get('ids', '')
-        music_id = ids.split(',')[0] if ids else params.get('id', '')
-        source = params.get('source', '')
-
-        # 如果传入了 url，则在后端解析
-        if url and not music_id:
-            parsed = parse_url(url)
-            if parsed:
-                music_id = parsed['id']
-                if not source:
-                    source = parsed['platform']
-
-        # 兜底：尝试从 ID 格式判断平台
-        if not source and music_id and not music_id.isdigit():
-            source = 'qq'
-
-        if not music_id:
-            # 区分"没有提供任何参数"和"URL 解析失败"两种情况，给出更具体的错误信息
-            if url:
-                return jsonify(APIResponse.error("无法识别此歌曲链接，请检查格式", 400))
-            return jsonify(APIResponse.error("请提供歌曲链接或 ID", 400))
-
-        info_type = params.get('type', 'json')
-        level = params.get('level', 'lossless')
-
-        logger.info(f"[DEBUG] /song 请求: music_id={music_id}, source={source}, type={info_type}, level={level}")
-        
-        if info_type == 'url':
-            result = music_service.get_song_url(music_id, level, source)
-            if result and result.get('data') and len(result['data']) > 0:
-                song_data = result['data'][0]
-                if song_data.get('url'):
-                    response_data = {
-                        'id': song_data.get('id'),
-                        'url': song_data.get('url'),
-                        'level': song_data.get('level', level),
-                        'type': song_data.get('type', 'mp3'),
-                        'source': song_data.get('source', source or 'netease')
-                    }
-                    return jsonify(APIResponse.success(response_data, "获取歌曲URL成功"))
-                else:
-                    return jsonify(APIResponse.error("该歌曲因版权限制无法获取播放链接", 403))
-            else:
-                return jsonify(APIResponse.error("获取音乐URL失败，可能是版权限制或音质不支持", 404))
-        
-        elif info_type == 'name':
-            result = music_service.get_song_detail(music_id, source)
-            return jsonify(APIResponse.success(result, "获取歌曲信息成功"))
-        
-        elif info_type == 'lyric':
-            lyric = music_service.get_lyric(music_id, source)
-            return jsonify(APIResponse.success({'lyric': lyric}, "获取歌词成功"))
-        
-        elif info_type == 'json':
-            song_info = music_service.get_song_info(music_id, level, source)
-            if not song_info:
-                logger.info(f"[DEBUG] /song 返回空结果: music_id={music_id}, source={source}, song_info={song_info}")
-                return jsonify(APIResponse.error("未找到歌曲信息", 404))
-            
-            response_data = {
-                'id': music_id,
-                'name': song_info.get('name', ''),
-                'ar_name': song_info.get('artists', ''),
-                'al_name': song_info.get('album', ''),
-                'pic': song_info.get('picUrl', ''),
-                'level': level,
-                'source': song_info.get('source', source or 'netease'),
-                'lyric': song_info.get('lyric', ''),
-                'tlyric': '',
-                'fileType': song_info.get('fileType', 'mp3')  # 文件类型（mp3/flac等）
-            }
-            
-            if song_info.get('url'):
-                response_data['url'] = song_info['url']
-            else:
-                response_data['url'] = ''
-                response_data['size'] = '获取失败'
-            
-            return jsonify(APIResponse.success(response_data, "获取歌曲信息成功"))
-        
-        else:
-            return jsonify(APIResponse.error(f"不支持的类型: {info_type}", 400))
-    
+        song_info = music_service.get_song_info(music_id, level, source)
     except Exception as e:
         if "所有数据源均无法获取" in str(e):
             return jsonify(APIResponse.error("该歌曲因版权限制无法获取播放链接", 403))
-        logger.error(f"获取歌曲信息异常: {e}")
-        return jsonify(APIResponse.error(f"服务器错误: {str(e)}", 500))
+        logger.error(f"/song 获取歌曲信息失败: {e}")
+        return jsonify(APIResponse.error(f"获取歌曲信息失败: {str(e)}", 500))
+
+    if not song_info or not song_info.get('id'):
+        return jsonify(APIResponse.error("未找到歌曲信息", 404))
+
+    play_url = song_info.get('url') or ''
+    return jsonify(APIResponse.success({
+        'id': music_id,
+        'name': song_info.get('name', ''),
+        'artist': song_info.get('artists', ''),
+        'album': song_info.get('album', ''),
+        'cover': song_info.get('picUrl', ''),
+        'duration': song_info.get('duration', 0),
+        'url': play_url,
+        'level': level,
+        'fileType': song_info.get('fileType', 'mp3'),
+        'source': song_info.get('source', source or 'netease'),
+        'available': bool(play_url),
+        'lyric': song_info.get('lyric', '') or '',
+    }, "获取歌曲信息成功"))
 
 
 @music_bp.route('/playlist', methods=['POST'])
@@ -754,16 +586,9 @@ def get_playlist():
         - source: 平台（netease/qq/kugou/bodian），不传则从 URL 推断
     """
     try:
-        data = request.get_data(as_text=True)
-        params = {}
-        for pair in data.split('&'):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                params[unquote_plus(key)] = unquote_plus(value)
-
-        url = params.get('url', '')
-        playlist_id = params.get('id', '')
-        source = params.get('source', '')
+        url = request.form.get('url', '').strip()
+        playlist_id = request.form.get('id', '').strip()
+        source = request.form.get('source', '').strip()
 
         # 优先使用 url 参数（推荐）
         if url and not playlist_id:

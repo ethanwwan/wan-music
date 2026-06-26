@@ -1,20 +1,20 @@
 <template>
   <div class="pagination-container">
     <div class="pagination">
-      <button 
-        class="pagination-btn" 
+      <button
+        class="pagination-btn"
         :disabled="currentPage === 1"
         @click="prevPage"
       >
         ←
       </button>
-      
+
       <template v-for="page in visiblePages" :key="page">
-        <span 
-          v-if="page === '...'" 
+        <span
+          v-if="page === '...'"
           class="pagination-ellipsis"
         >...</span>
-        <button 
+        <button
           v-else
           class="pagination-btn"
           :class="{ active: currentPage === page }"
@@ -23,9 +23,9 @@
           {{ page }}
         </button>
       </template>
-      
-      <button 
-        class="pagination-btn" 
+
+      <button
+        class="pagination-btn"
         :disabled="currentPage === totalPages"
         @click="nextPage"
       >
@@ -56,7 +56,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'page-change'])
+const emit = defineEmits(['update:modelValue'])
 
 const currentPage = ref(props.modelValue)
 
@@ -66,64 +66,41 @@ watch(() => props.modelValue, (newVal) => {
 
 watch(currentPage, (newVal) => {
   emit('update:modelValue', newVal)
-  emit('page-change', newVal)
 })
 
-const totalPages = computed(() => {
-  return Math.max(1, Math.ceil(props.totalCount / props.pageSize))
-})
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(props.totalCount / props.pageSize))
+)
 
 const visiblePages = computed(() => {
   const pages = []
   const total = totalPages.value
   const current = currentPage.value
-  
+
   if (total <= 7) {
-    for (let i = 1; i <= total; i++) {
-      pages.push(i)
-    }
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else if (current <= 3) {
+    pages.push(1, 2, 3, 4, '...', total)
+  } else if (current >= total - 2) {
+    pages.push(1, '...', total - 3, total - 2, total - 1, total)
   } else {
-    if (current <= 3) {
-      pages.push(1, 2, 3, 4, '...', total)
-    } else if (current >= total - 2) {
-      pages.push(1, '...', total - 3, total - 2, total - 1, total)
-    } else {
-      pages.push(1, '...', current - 1, current, current + 1, '...', total)
-    }
+    pages.push(1, '...', current - 1, current, current + 1, '...', total)
   }
-  
+
   return pages
 })
 
 const goToPage = (page) => {
-  console.log('Pagination: goToPage called with page:', page)
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-    console.log('Pagination: currentPage updated to', currentPage.value)
-  }
+  if (page >= 1 && page <= totalPages.value) currentPage.value = page
 }
 
 const prevPage = () => {
-  console.log('Pagination: prevPage called')
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
+  if (currentPage.value > 1) currentPage.value--
 }
 
 const nextPage = () => {
-  console.log('Pagination: nextPage called')
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-  }
+  if (currentPage.value < totalPages.value) currentPage.value++
 }
-
-const reset = () => {
-  currentPage.value = 1
-}
-
-defineExpose({
-  reset
-})
 </script>
 
 <style scoped>

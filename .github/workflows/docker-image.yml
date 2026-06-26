@@ -2,7 +2,7 @@ name: Docker Image
 
 # ============================================================
 # 触发条件：
-#   1) push tag (v*.*.* 或 v*.*.*-*)  → 构建并推送多架构镜像到 Docker Hub
+#   1) push tag (v*.*.* 或 v*.*.*-*)  → 构建并推送镜像到 Docker Hub
 #   2) push main                     → 构建并推送 latest 镜像（不发布 Release）
 #   3) pull_request                  → 只构建不推送（用于验证）
 # ============================================================
@@ -36,28 +36,14 @@ env:
 
 jobs:
   build:
-    name: Build & Push (${{ matrix.platform }})
+    name: Build & Push
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-          - platform: linux/arm64
-            arch: arm64
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -126,13 +112,13 @@ jobs:
         with:
           context: .
           file: backend/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # 构建缓存：加速重复构建
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
         if: github.event_name != 'pull_request'
@@ -172,10 +158,10 @@ jobs:
           body: |
             ## 🐳 Docker 镜像
 
-            多架构镜像已推送到 Docker Hub：
+            镜像已推送到 Docker Hub：
 
             ```bash
-              # 拉取指定版本（多架构：linux/amd64 + linux/arm64）
+              # 拉取指定版本
               docker pull ${{ secrets.DOCKERHUB_USERNAME }}/wan-music:${{ github.ref_name }}
 
               # 启动服务

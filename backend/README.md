@@ -35,13 +35,13 @@ MIT
 
 - **默认端口**: `5002`（可通过环境变量 `PORT` 覆盖）
 - **数据格式**: JSON
-- **统一响应格式**: `{code, message, data}`
+- **统一响应格式**: `{success, message, data}`
 
 ```json
 // 成功
-{ "code": 200, "message": "success", "data": { /* 响应数据 */ } }
+{ "success": true, "message": "success", "data": { /* 响应数据 */ } }
 // 失败
-{ "code": 400, "message": "错误信息", "data": null }
+{ "success": false, "message": "错误信息", "data": null }
 ```
 
 ### 错误码
@@ -61,6 +61,19 @@ MIT
 | `qq` | QQ音乐（支持搜索歌曲/歌单、下载） |
 | `kugou` | 酷狗（支持搜索歌曲、下载） |
 | `bodian` | 波点（支持搜索歌曲、下载） |
+
+### 音质等级
+
+| 值 | 说明 |
+|----|------|
+| `standard` | 标准音质 (128kbps) |
+| `exhigh` | 极高音质 (320kbps) |
+| `lossless` | 无损音质 (FLAC) |
+| `hires` | Hi-Res 音质 (FLAC 24bit) |
+| `sky` | 沉浸环绕声 |
+| `jyeffect` | 高清臻音 |
+| `jymaster` | 超清母带 |
+| `dolby` | 杜比全景声 |
 
 ---
 
@@ -90,7 +103,7 @@ curl http://localhost:5002/health
 | keyword | string | 是 | - | 搜索关键词 或 完整 URL |
 | type | int | 否 | 0 | 0=全部 / 1=歌曲 / 2=歌单（仅关键词搜索生效） |
 | source | string | 否 | null | 平台过滤，null=全部 |
-| quality | string | 否 | lossless | 音质偏好（用于选择最佳可用音质） |
+| quality | string | 否 | lossless | 音质偏好 |
 | limit | int | 否 | 50 | 返回数量 |
 
 **响应 data**：
@@ -121,50 +134,41 @@ curl http://localhost:5002/health
 
 **`POST /song`**
 
-支持**传链接**（推荐）或**传 ID**。根据 `type` 参数返回不同内容。
+获取歌曲完整信息：**基本信息 + 播放/下载地址 + 歌词**，前端播放、悬浮球歌词展示、下载均基于此接口的返回数据。
 
-**请求参数**（`application/x-www-form-urlencoded`）：
+后端 `/download/batch/start` 内部也复用 `music_service.get_song_info` 拉取同样数据来写元数据，前端不需要为下载额外传 metadata。
+
+支持**传链接**（推荐）或**传 ID**。
+
+**请求体**（JSON 或 form）：
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | url | string | 否 | - | 完整歌曲链接（推荐，自动解析平台和 ID） |
-| ids / id | string | 否 | - | 歌曲 ID（逗号分隔时取第一个） |
+| id / ids | string | 否 | - | 歌曲 ID |
 | source | string | 否 | - | 平台（不传则从 URL 推断） |
-| type | string | 否 | json | `url` / `name` / `lyric` / `json` |
 | level | string | 否 | lossless | 音质等级 |
 
-**音质等级**：
-
-| 值 | 说明 |
-|----|------|
-| `standard` | 标准音质 (128kbps) |
-| `exhigh` | 极高音质 (320kbps) |
-| `lossless` | 无损音质 (FLAC) |
-| `hires` | Hi-Res 音质 (FLAC 24bit) |
-| `sky` | 沉浸环绕声 |
-| `jyeffect` | 高清臻音 |
-| `jymaster` | 超清母带 |
-| `dolby` | 杜比全景声 |
-
-**type=json 响应**：
+**响应 data**：
 
 ```json
 {
-  "data": {
-    "id": "123456",
-    "name": "有没有人告诉你",
-    "ar_name": "陈楚生",
-    "al_name": "快乐男声",
-    "pic": "https://...",
-    "level": "lossless",
-    "source": "netease",
-    "lyric": "[00:00.00]...",
-    "tlyric": "",
-    "fileType": "flac",
-    "url": "https://example.com/song.flac"
-  }
+  "id": "123456",
+  "name": "有没有人告诉你",
+  "artist": "陈楚生",
+  "album": "快乐男声",
+  "cover": "https://...",
+  "duration": 245000,
+  "url": "https://example.com/song.flac",
+  "level": "lossless",
+  "fileType": "flac",
+  "source": "netease",
+  "available": true,
+  "lyric": "[00:00.00]歌词内容\n[00:05.00]..."
 }
 ```
+
+`available=false` 表示该歌曲因版权问题无法播放。
 
 ### 4. 获取歌单详情
 
@@ -180,67 +184,29 @@ curl http://localhost:5002/health
 | id | string | 否 | 歌单 ID |
 | source | string | 否 | 平台（不传则从 URL 推断） |
 
-**响应 data**：
+**响应 data.playlist**：
 
 ```json
 {
-  "data": {
-    "playlist": {
-      "id": "456",
-      "name": "华语流行金曲",
-      "cover": "https://...",
-      "description": "...",
-      "trackCount": 50,
-      "playCount": 1234567,
-      "creator": "...",
-      "source": "netease",
-      "tracks": [
-        {
-          "id": "1",
-          "name": "歌曲1",
-          "artists": "歌手1",
-          "album": "专辑1",
-          "duration": 245000
-        }
-      ]
-    }
-  }
+  "id": "456",
+  "name": "华语流行金曲",
+  "cover": "https://...",
+  "description": "...",
+  "trackCount": 50,
+  "playCount": 1234567,
+  "source": "netease",
+  "tracks": [
+    { "id": "1", "name": "歌曲1", "artists": "歌手1", "album": "专辑1", "duration": 245000 }
+  ]
 }
 ```
 
-### 5. 单曲下载（代理）
-
-**`GET /download`**
-
-后端代理下载单曲（解决 CORS），可选自动写入 ID3 标签。
-
-**Query 参数**：
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| id | string | 是 | - | 歌曲 ID |
-| quality | string | 否 | lossless | 音质 |
-| source | string | 否 | - | 平台 |
-| name | string | 否 | song | 歌曲名 |
-| artist | string | 否 | - | 歌手 |
-| album | string | 否 | - | 专辑 |
-| lrc | string | 否 | - | 歌词（用于 metadata） |
-| filenameFormat | string | 否 | song-artist | song-artist / artist-song / song |
-| writeMetadata | bool | 否 | true | 是否写入元数据 |
-
-**响应**：音频文件流（`audio/mpeg` / `audio/flac` / `audio/mp4`）
-
-**响应头**：
-- `Content-Disposition`: 文件名
-- `X-Actual-Quality`: 实际音质（VIP 不可用时降级）
-- `X-Quality-Downgraded`: `1` 表示音质被降级
-- `X-Actual-FileType`: 实际文件类型（mp3/flac/m4a，通过 magic bytes 检测）
-
-### 6. 批量下载（异步 + SSE 进度）
+### 5. 批量下载（异步 + SSE 进度）
 
 支持并发下载 6 首歌曲，完成后打包成 ZIP（单曲则直接返回音频文件）。
+单首下载也走同一异步流程，前端不再需要单独的同步下载接口。
 
-#### 6.1 启动任务
+#### 5.1 启动任务
 
 **`POST /download/batch/start`**
 
@@ -269,23 +235,15 @@ curl http://localhost:5002/health
 
 ```json
 {
-  "data": {
-    "task_id": "task_abc123",
-    "total": 38,
-    "file_size": 12345678
-  }
+  "data": { "task_id": "task_abc123", "total": 38, "file_size": 12345678 }
 }
 ```
 
-#### 6.2 任务列表
+#### 5.2 任务列表
 
 **`GET /download/batch/list`** — 返回所有任务（按创建时间倒序）
 
-#### 6.3 任务详情
-
-**`GET /download/batch/info/<task_id>`**
-
-#### 6.4 SSE 实时进度
+#### 5.3 SSE 实时进度
 
 **`GET /download/batch/progress/<task_id>`**
 
@@ -301,14 +259,16 @@ data: {"status":"running","total":38,"completed":15,"failed":1,"current":"歌名
 
 status 取值：`running` / `done` / `error` / `cancelled`
 
-#### 6.5 下载完成文件
+#### 5.4 下载完成文件
 
 **`GET /download/batch/file/<task_id>`**
 
 - 单曲：直接返回音频文件
 - 多首：返回 ZIP 压缩包
 
-#### 6.6 取消/删除任务
+响应头会包含 `X-Actual-Quality` / `X-Quality-Downgraded` / `X-Actual-FileType` 用于前端展示真实音质。
+
+#### 5.5 取消/删除任务
 
 **`DELETE /download/batch/<task_id>`**
 
@@ -318,11 +278,9 @@ status 取值：`running` / `done` / `error` / `cancelled`
 
 ## HTTP 方法说明
 
-按 RESTful 规范设计，**不强求统一方法**：
-
 | 方法 | 用途 | 接口 |
 |------|------|------|
-| GET | 只读 + 文件下载（浏览器要求） | `/health`, `/download/batch/list`, `/download/batch/info`, `/download/batch/progress`, `/download/batch/file`, `/download` |
+| GET | 只读 + 文件下载（浏览器要求） | `/health`, `/download/batch/list`, `/download/batch/progress`, `/download/batch/file` |
 | POST | 复杂请求体 / 表单 | `/search`, `/song`, `/playlist`, `/download/batch/start` |
 | DELETE | 资源删除 | `/download/batch/<task_id>` |
 
@@ -355,16 +313,19 @@ curl -X POST http://localhost:5002/search \
   -H "Content-Type: application/json" \
   -d '{"keyword": "陈楚生", "type": 1, "limit": 5}'
 
-# 通过 URL 获取歌曲
+# 通过 URL 获取歌曲完整信息
 curl -X POST http://localhost:5002/song \
-  -d "url=https://music.163.com/song?id=123456&type=json&level=lossless"
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://music.163.com/song?id=123456", "level": "lossless"}'
+
+# 通过 ID 获取歌曲完整信息
+curl -X POST http://localhost:5002/song \
+  -H "Content-Type: application/json" \
+  -d '{"id": "123456", "source": "netease", "level": "lossless"}'
 
 # 获取歌单详情
 curl -X POST http://localhost:5002/playlist \
   -d "url=https://music.163.com/playlist?id=7583298906"
-
-# 单曲下载
-curl -o song.flac "http://localhost:5002/download?id=123456&quality=lossless&name=test&artist=test"
 
 # 批量下载
 curl -X POST http://localhost:5002/download/batch/start \

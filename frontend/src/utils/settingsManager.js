@@ -1,133 +1,49 @@
 import { reactive, watch } from 'vue'
 
-// 默认设置
+const STORAGE_KEY = 'app-settings'
+
+/** 默认设置（被旧版本使用过的 key 也会被 loadSettings 清理） */
 export const defaultSettings = {
-  filenameFormat: 'song-artist', // song-artist, artist-song, song
-  writeMetadata: true, // 是否写入元数据（默认开启）
-  layoutMode: 'single-column', // 布局模式: dual-column, single-column
-  // 播放链接缓存设置
-  enableCache: true, // 是否启用缓存（默认开启）
-  cacheTTLMinutes: 15, // 缓存时间（分钟） 
-  // 音质设置
-  selectedQuality: 'lossless', // 默认音质：无损
-  // 数据源设置已移除，现在使用自动切换线路
+  filenameFormat: 'song-artist',     // song-artist | artist-song | song
+  writeMetadata: true,               // 自动写入元数据（产品需求：默认开启）
+  layoutMode: 'single-column',
+  enableCache: true,                 // 搜索/歌单详情页缓存开关
+  cacheTTLMinutes: 15,
+  selectedQuality: 'lossless',       // 默认音质
 }
 
-// 当前设置
 export const settings = reactive({ ...defaultSettings })
 
-// 监听设置变化，自动保存到 localStorage
-watch(
-  settings,
-  () => {
-    saveSettings()
-  },
-  { deep: true }
-)
+/** 任意字段变化都自动持久化到 localStorage */
+watch(settings, () => saveSettings(), { deep: true })
 
-/**
- * 加载设置
- */
+/** 启动时加载并迁移旧字段（writeMetadata 强制为 true 以满足产品需求） */
 export const loadSettings = () => {
   try {
-    const savedSettings = localStorage.getItem('app-settings')
-    console.log('[Settings] 加载设置, localStorage:', savedSettings)
-    
-    if (savedSettings) {
-      const parsed = JSON.parse(savedSettings)
-      console.log('[Settings] 解析后的设置:', parsed)
-      
-      // 合并默认值和保存的值
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
       Object.assign(settings, { ...defaultSettings, ...parsed })
-      console.log('[Settings] 合并后的设置:', settings)
-      
-      // 迁移逻辑：根据新的产品需求，强制某些设置为默认值
-      let hasChanges = false
-      
-      // writeMetadata 必须默认为 true（产品需求：自动写入元数据默认开启）
-      if (settings.writeMetadata !== defaultSettings.writeMetadata) {
-        console.log(`[Settings] 迁移: writeMetadata 从 ${settings.writeMetadata} 改为 ${defaultSettings.writeMetadata}`)
-        settings.writeMetadata = defaultSettings.writeMetadata
-        hasChanges = true
+
+      // 旧版本 layoutMode 字段已废弃
+      if (parsed.layoutMode !== undefined) {
+        delete settings.layoutMode
       }
-      
-      // selectedQuality 必须有值且有效（只在未设置时使用默认值）
-      if (!settings.selectedQuality) {
-        console.log(`[Settings] 迁移: selectedQuality 从 ${settings.selectedQuality} 改为 ${defaultSettings.selectedQuality}`)
-        settings.selectedQuality = defaultSettings.selectedQuality
-        hasChanges = true
-      }
-      
-      // 清理已移除的旧字段
-      const deprecatedKeys = ['enableUrlCache', 'urlCacheTTLMinutes', 'dataSource']
-      deprecatedKeys.forEach(key => {
-        if (parsed[key] !== undefined) {
-          delete settings[key]
-          hasChanges = true
-          console.log(`[Settings] 清理: 移除已废弃的设置项 ${key}`)
-        }
-      })
-      
-      // 如果有变更，立即保存
-      if (hasChanges) {
-        saveSettings()
-        console.log('[Settings] 已保存迁移后的设置')
-      }
+      // 旧版本强制 writeMetadata = true
+      settings.writeMetadata = defaultSettings.writeMetadata
+      // selectedQuality 兜底
+      if (!settings.selectedQuality) settings.selectedQuality = defaultSettings.selectedQuality
     } else {
-      // 没有保存的设置，使用默认值
       Object.assign(settings, defaultSettings)
-      saveSettings()
-      console.log('[Settings] 无保存的设置，使用默认值:', settings)
     }
-  } catch (error) {
-    console.error('[Settings] 加载设置失败:', error)
+    saveSettings()
+  } catch {
     Object.assign(settings, defaultSettings)
   }
 }
 
-/**
- * 保存设置
- */
 export const saveSettings = () => {
   try {
-    localStorage.setItem('app-settings', JSON.stringify(settings))
-  } catch {
-    void 0
-  }
-}
-
-/**
- * 更新设置
- * @param {Object} newSettings 新的设置对象
- */
-export const updateSettings = (newSettings) => {
-  Object.assign(settings, newSettings)
-  saveSettings()
-}
-
-/**
- * 重置设置为默认值
- */
-export const resetSettings = () => {
-  Object.assign(settings, defaultSettings)
-  saveSettings()
-}
-
-/**
- * 获取设置值
- * @param {string} key 设置键名
- * @returns {any} 设置值
- */
-export const getSetting = (key) => {
-  return settings[key]
-}
-
-/**
- * 设置单个配置项
- * @param {string} key 设置键名
- * @param {any} value 设置值
- */
-export const setSetting = (key, value) => {
-  settings[key] = value
-  saveSettings()
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+  } catch { /* localStorage 写入失败时静默 */ }
 }

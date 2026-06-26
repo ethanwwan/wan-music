@@ -1,17 +1,16 @@
 <template>
   <div :class="listContainerClass">
-    <!-- 单曲列表样式 -->
-    <template v-if="listType === 'song'">
-      <!-- 详情头部（歌单/专辑/歌手信息） -->
+    <!-- 单曲列表（搜索结果 / 歌单详情共用） -->
+    <template v-if="type === 'song'">
       <div v-if="detailInfo" class="detail-header">
         <div class="header-left">
           <div class="detail-cover-wrapper">
-            <img 
+            <img
               v-if="detailInfo.coverImgUrl"
-              :src="detailInfo.coverImgUrl" 
-              :alt="detailInfo.name" 
+              :src="detailInfo.coverImgUrl"
+              :alt="detailInfo.name"
               class="detail-cover"
-              @error="handleCoverError($event)"
+              @error="handleCoverError"
             />
             <div v-else class="cover-placeholder"></div>
           </div>
@@ -25,36 +24,24 @@
           </div>
         </div>
         <div class="header-right">
-          <a-button
-            type="primary"
-            @click="handleBatchDownload"
-          >
-            打包下载
-          </a-button>
+          <a-button type="primary" @click="handleBatchDownload">打包下载</a-button>
         </div>
       </div>
 
-
-
-      <!-- 歌曲表格 -->
       <div v-if="paginatedTracks.length > 0" class="tracks-table-wrapper">
         <table class="tracks-table">
           <thead>
             <tr>
               <th v-if="isSelectMode" class="col-select">
-                <a-checkbox 
+                <a-checkbox
                   :checked="isAllSelected"
                   :indeterminate="isPartiallySelected"
                   @change="handleSelectAll"
                 />
               </th>
               <th class="col-index">
-                <template v-if="isSelectMode">
-                  已选 {{ (selectedTrackIds?.length || 0) }}/{{ (sortedTracks?.length || 0) }}
-                </template>
-                <template v-else>
-                  序号
-                </template>
+                <template v-if="isSelectMode">已选 {{ selectedTrackIds.length }}/{{ sortedTracks.length }}</template>
+                <template v-else>序号</template>
               </th>
               <th class="col-cover"></th>
               <th class="col-name">歌名</th>
@@ -67,7 +54,7 @@
                 </template>
                 <template v-else>
                   <a-space :size="8">
-                    <a-button size="small" type="primary" :disabled="(selectedTrackIds?.length || 0) === 0" @click="handleBatchDownloadSelected">下载选中</a-button>
+                    <a-button size="small" type="primary" :disabled="selectedTrackIds.length === 0" @click="handleBatchDownloadSelected">下载选中</a-button>
                     <a-button size="small" @click="exitSelectMode">取消</a-button>
                   </a-space>
                 </template>
@@ -75,19 +62,18 @@
             </tr>
           </thead>
           <tbody>
-            <tr 
-              v-for="(track, index) in paginatedTracks" 
+            <tr
+              v-for="(track, index) in paginatedTracks"
               :key="track.id"
               class="track-row"
-              :class="{ 
-                'selected': selectedTrack && selectedTrack.id === track.id,
+              :class="{
                 'unavailable': isTrackUnavailable(track),
-                'selected-for-batch': isSelectMode && selectedTrackIds.value?.includes(track.id)
+                'selected-for-batch': isSelectMode && selectedTrackIds.includes(track.id)
               }"
               @click="handleTrackClick(track)"
             >
               <td v-if="isSelectMode" class="col-select">
-                <a-checkbox 
+                <a-checkbox
                   :checked="isTrackSelected(track)"
                   @click.stop
                   @change="() => toggleSelectTrack(track)"
@@ -105,7 +91,7 @@
                     class="track-cover"
                     :class="{ 'grayscale': isTrackUnavailable(track) }"
                     loading="lazy"
-                    @error="handleTrackCoverError($event)"
+                    @error="handleTrackCoverError"
                   />
                   <div v-else class="track-cover-placeholder"></div>
                 </div>
@@ -137,7 +123,7 @@
                 </div>
               </td>
               <td class="col-action">
-                <a-button 
+                <a-button
                   type="text"
                   :disabled="parsingTrackId === track.id && parsingType === 'play' || isTrackUnavailable(track)"
                   :loading="parsingTrackId === track.id && parsingType === 'play'"
@@ -146,7 +132,7 @@
                 >
                   <template #icon><PlayCircleOutlined /></template>
                 </a-button>
-                <a-button 
+                <a-button
                   type="text"
                   :disabled="parsingTrackId === track.id && parsingType === 'download' || isTrackUnavailable(track)"
                   :loading="parsingTrackId === track.id && parsingType === 'download'"
@@ -161,90 +147,56 @@
         </table>
       </div>
 
-      <!-- 分页 - 只有超过1页时才显示 -->
-      <Pagination 
+      <Pagination
         v-if="Math.ceil(sortedTracks.length / pageSize) > 1"
         :total-count="sortedTracks.length"
         :page-size="pageSize"
         :model-value="currentPage"
-        @update:model-value="handlePageChange"
+        @update:model-value="(page) => emit('page-change', page)"
       />
     </template>
 
-    <!-- 歌手列表样式 -->
-    <template v-else-if="listType === 'artist'">
-      <div class="artist-grid">
-        <div 
-          v-for="artist in items" 
-          :key="artist.id" 
-          class="artist-card"
+    <!-- 歌单列表 -->
+    <template v-else-if="type === 'playlist'">
+      <div class="playlist-grid">
+        <div
+          v-for="item in items"
+          :key="item.id"
+          class="playlist-card"
+          @click="emit('item-click', { item, action: 'playlist' })"
         >
-          <div class="artist-cover-wrapper">
-            <img 
-              v-if="artist.avatarUrl"
-              :src="artist.avatarUrl" 
-              :alt="artist.name" 
-              class="artist-cover"
-              loading="lazy"
-              @error="handleImageError($event, 'artist')"
-            />
-            <div v-else class="artist-cover-placeholder"></div>
-          </div>
-          <div class="artist-info">
-            <h4 class="artist-name">{{ artist.name }}</h4>
-            <p class="artist-music-count">{{ artist.musicCount }} 首歌曲</p>
-          </div>
-          <div class="artist-action">
-            <a-button size="middle" type="primary" @click.stop="handleItemClick(artist, 'artist')">
-              解析歌手
-            </a-button>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- 歌单/专辑列表样式 -->
-    <template v-else-if="listType === 'playlist' || listType === 'album'">
-      <div :class="listType === 'playlist' ? 'playlist-grid' : 'album-grid'">
-        <div 
-          v-for="item in items" 
-          :key="item.id" 
-          :class="listType === 'playlist' ? 'playlist-card' : 'album-card'"
-          @click="handleItemClick(item, 'select')"
-        >
-          <div :class="listType === 'playlist' ? 'playlist-cover-wrapper' : 'album-cover-wrapper'">
-            <img 
+          <div class="playlist-cover-wrapper">
+            <img
               v-if="item.coverImgUrl"
-              :src="item.coverImgUrl" 
-              :alt="item.name" 
-              :class="listType === 'playlist' ? 'playlist-cover' : 'album-cover'"
+              :src="item.coverImgUrl"
+              :alt="item.name"
+              class="playlist-cover"
               loading="lazy"
-              @error="handleImageError($event, listType)"
             />
-            <div v-else :class="listType === 'playlist' ? 'playlist-cover-placeholder' : 'album-cover-placeholder'"></div>
-            <span 
-              v-if="item.source" 
-              :class="listType === 'playlist' ? 'playlist-source-tag' : 'album-source-tag'"
+            <div v-else class="playlist-cover-placeholder"></div>
+            <span
+              v-if="item.source"
+              class="playlist-source-tag"
               :style="{ backgroundColor: getSourceInfo(item.source)?.color, color: '#fff' }"
             >
               {{ getSourceInfo(item.source)?.name || item.source }}
             </span>
-            <div :class="listType === 'playlist' ? 'playlist-overlay' : 'album-overlay'">
+            <div class="playlist-overlay">
               <span class="track-count">
                 <template v-if="item.trackCount && item.trackCount > 0">{{ item.trackCount }} 首</template>
                 <template v-else>数量未知</template>
               </span>
             </div>
           </div>
-          <div :class="listType === 'playlist' ? 'playlist-info' : 'album-info'">
-            <h4 :class="listType === 'playlist' ? 'playlist-name' : 'album-name'">{{ item.name }}</h4>
-            <p :class="listType === 'playlist' ? 'playlist-creator' : 'album-artist'">
-              {{ listType === 'playlist' ? (typeof item.creator === 'object' ? item.creator.name : item.creator) : (typeof item.artist === 'object' ? item.artist.name : item.artist) }}
+          <div class="playlist-info">
+            <h4 class="playlist-name">{{ item.name }}</h4>
+            <p class="playlist-creator">
+              {{ typeof item.creator === 'object' ? item.creator.name : item.creator }}
             </p>
           </div>
-          <div :class="listType === 'playlist' ? 'playlist-action' : 'album-action'">
-            <a-button size="middle" type="primary" @click.stop="handleItemClick(item, listType)">
-              解析{{ listType === 'playlist' ? '歌单' : '专辑' }}
+          <div class="playlist-action">
+            <a-button size="middle" type="primary" @click.stop="emit('item-click', { item, action: 'playlist' })">
+              解析歌单
             </a-button>
           </div>
         </div>
@@ -257,25 +209,22 @@
 import { ref, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
-import { parseMusicInfo } from '../services/musicApi.js'
+import { parseMusicInfo, dataSources } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
-import { useBatchDownload } from '../composables/useBatchDownload.js'
+import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
 import Pagination from './Pagination.vue'
-import { dataSources } from '../utils/dataSourceConfig.js'
 
 const props = defineProps({
-  // 列表类型：song / artist / playlist / album
+  /** 'song' | 'playlist' */
   type: {
     type: String,
     default: 'song',
-    validator: (value) => ['song', 'artist', 'playlist', 'album'].includes(value)
+    validator: (value) => ['song', 'playlist'].includes(value)
   },
-  // 列表数据
   items: {
     type: Array,
     default: () => []
   },
-  // 单曲列表相关
   detailInfo: {
     type: Object,
     default: null
@@ -286,7 +235,7 @@ const props = defineProps({
   },
   pageSize: {
     type: Number,
-    default: 12
+    default: 20
   },
   totalTracks: {
     type: Number,
@@ -294,40 +243,21 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits([
-  'track-selected',
-  'track-parsed',
-  'track-play',
-  'page-change',
-  'item-click',
-  'select',
-  'track-unavailable'
-])
+const emit = defineEmits(['track-parsed', 'track-play', 'page-change', 'item-click', 'track-unavailable'])
 
-// 计算列表类型
-const listType = computed(() => props.type)
-
-// 计算容器类名
 const listContainerClass = computed(() => {
-  if (props.type === 'song' && props.detailInfo) {
-    return 'detail-view'
-  }
+  if (props.type === 'song' && props.detailInfo) return 'detail-view'
   return 'song-list-panel'
 })
 
-// 创建者标签
 const creatorLabel = computed(() => {
   if (props.detailInfo?.isAlbum) return '作者'
   if (props.detailInfo?.isArtist) return '歌手'
   return '创建者'
 })
 
-// 歌曲列表（保持原顺序，不排序）
-const sortedTracks = computed(() => {
-  return [...props.items]
-})
+const sortedTracks = computed(() => [...props.items])
 
-// 分页后的歌曲列表
 const paginatedTracks = computed(() => {
   if (props.totalTracks > 0) {
     const start = (props.currentPage - 1) * props.pageSize
@@ -338,80 +268,50 @@ const paginatedTracks = computed(() => {
 })
 
 // 状态
-const selectedTrack = ref(null)
 const parsingTrackId = ref(null)
 const parsingType = ref(null)
 
-// 批量选择状态
+// 批量选择
 const isSelectMode = ref(false)
 const selectedTrackIds = ref([])
-
-// 不可用歌曲ID集合（用于跟踪无版权歌曲）
 const unavailableTrackIds = shallowRef(new Set())
 
-// 是否全选
-const isAllSelected = computed(() => {
-  if (selectedTrackIds.value.length === 0 || sortedTracks.value.length === 0) return false
-  return selectedTrackIds.value.length === sortedTracks.value.length
-})
+const isAllSelected = computed(() =>
+  selectedTrackIds.value.length > 0 && selectedTrackIds.value.length === sortedTracks.value.length
+)
 
-// 是否部分选择（用于 checkbox indeterminate 状态）
 const isPartiallySelected = computed(() => {
-  if (sortedTracks.value.length === 0) return false
-  return selectedTrackIds.value.length > 0 && selectedTrackIds.value.length < sortedTracks.value.length
+  const total = sortedTracks.value.length
+  return total > 0 && selectedTrackIds.value.length > 0 && selectedTrackIds.value.length < total
 })
 
-// 检查歌曲是否被选中
-const isTrackSelected = (track) => {
-  const ids = selectedTrackIds.value
-  if (!ids || !Array.isArray(ids)) return false
-  return ids.includes(track.id)
-}
+const isTrackSelected = (track) => Array.isArray(selectedTrackIds.value) && selectedTrackIds.value.includes(track.id)
 
-// 标记歌曲为不可用（无版权）
 const markTrackUnavailable = (track) => {
-  // 添加到不可用集合
   const newSet = new Set(unavailableTrackIds.value)
   newSet.add(track.id)
   unavailableTrackIds.value = newSet
-  
-  // 直接设置歌曲的 unavailable 属性
   track.unavailable = true
-  
-  // 通知父组件更新歌曲数据
   emit('track-unavailable', track)
 }
 
-// 判断歌曲是否不可用
-const isTrackUnavailable = (track) => {
-  return track.unavailable || unavailableTrackIds.value.has(track.id)
-}
+const isTrackUnavailable = (track) =>
+  track.unavailable || unavailableTrackIds.value.has(track.id)
 
 // 工具方法
+const getCover = (track) =>
+  track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || props.detailInfo?.coverImgUrl || ''
 
-const getCover = (track) => {
-  const coverUrl = track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || props.detailInfo?.coverImgUrl || ''
-  return coverUrl
-}
+const getArtist = (track) =>
+  track?.artist || track?.singer ||
+  (typeof track?.artists === 'string' ? track.artists : null) ||
+  (Array.isArray(track?.artists) && track.artists[0]?.name) ||
+  (Array.isArray(track?.ar) && track.ar[0]?.name) ||
+  ''
 
-const getArtist = (track) => {
-  return (
-    track?.artist ||
-    track?.singer ||
-    (typeof track?.artists === 'string' ? track.artists : null) ||
-    (Array.isArray(track?.artists) && track.artists[0]?.name) ||
-    (Array.isArray(track?.ar) && track.ar[0]?.name) ||
-    ''
-  )
-}
+const getSourceInfo = (sourceId) => dataSources.find(s => s.id === sourceId) || null
 
-const getSourceInfo = (sourceId) => {
-  return dataSources.find(s => s.id === sourceId) || null
-}
-
-const getAlbum = (track) => {
-  return track?.album || track?.al?.name || ''
-}
+const getAlbum = (track) => track?.album || track?.al?.name || ''
 
 const QUALITY_LABELS = {
   standard: '标准', exhigh: '极高', lossless: '无损', hires: 'Hi-Res',
@@ -435,178 +335,136 @@ const getBestQualitySize = (track) => {
   return formatFileSize(size)
 }
 
-// 图片错误处理
-const handleCoverError = (event) => {
-  const target = event.target
-  target.style.display = 'none'
-  const placeholder = target.parentElement.querySelector('.cover-placeholder')
-  if (placeholder) {
-    placeholder.style.display = 'flex'
-  }
+const handleCoverError = (e) => {
+  e.target.style.display = 'none'
+  const placeholder = e.target.parentElement.querySelector('.cover-placeholder')
+  if (placeholder) placeholder.style.display = 'flex'
 }
 
-const handleTrackCoverError = (event) => {
-  const target = event.target
-  target.style.display = 'none'
-  const placeholder = target.parentElement.querySelector('.track-cover-placeholder')
-  if (placeholder) {
-    placeholder.style.display = 'flex'
-  }
+const handleTrackCoverError = (e) => {
+  e.target.style.display = 'none'
+  const placeholder = e.target.parentElement.querySelector('.track-cover-placeholder')
+  if (placeholder) placeholder.style.display = 'flex'
 }
 
-const handleImageError = (event, type) => {
-  const target = event.target
-  target.style.display = 'none'
-  const placeholderClass = type === 'artist' ? '.artist-cover-placeholder' : 
-                           type === 'playlist' ? '.playlist-cover-placeholder' : '.album-cover-placeholder'
-  const placeholder = target.parentElement.querySelector(placeholderClass)
-  if (placeholder) {
-    placeholder.style.display = 'flex'
-  }
-}
-
-// 歌曲操作
+// 行点击：批量选择模式切换；非选择模式触发播放
 const handleTrackClick = (track) => {
   if (isTrackUnavailable(track)) {
     message.warning(`《${track.name}》因版权问题暂时无法播放`)
     return
   }
-  
-  // 如果在批量选择模式下，点击行切换选择状态
   if (isSelectMode.value) {
     toggleSelectTrack(track)
     return
   }
-  
-  selectedTrack.value = track
-  emit('track-selected', track)
 }
 
-// 切换单首歌曲选择
 const toggleSelectTrack = (track) => {
   const currentIds = selectedTrackIds.value
   if (currentIds.includes(track.id)) {
-    // 取消选中
     selectedTrackIds.value = currentIds.filter(id => id !== track.id)
   } else {
-    // 添加选中
     selectedTrackIds.value = [...currentIds, track.id]
     isSelectMode.value = true
   }
 }
 
-// 全选/取消全选
 const handleSelectAll = (event) => {
   const checked = typeof event === 'boolean' ? event : (event?.target?.checked ?? false)
   if (checked) {
-    // 全选：选中所有歌曲（跨分页）
-    const allIds = sortedTracks.value.map(t => t.id)
-    selectedTrackIds.value = [...allIds]
+    selectedTrackIds.value = sortedTracks.value.map(t => t.id)
     isSelectMode.value = true
   } else {
-    // 取消全选：只是清除选中状态，不退出选择模式
     selectedTrackIds.value = []
   }
 }
 
-// 下载选中的歌曲
+// 下载
+const startDownload = (musicList, playlistName) => queueStore.addTask(
+  musicList,
+  playlistName,
+  {
+    selectedQuality: settings.selectedQuality || 'lossless',
+    filenameFormat: settings.filenameFormat || 'song-artist',
+    writeMetadata: settings.writeMetadata !== false,
+  }
+).then(() => {
+  message.success(`已加入下载队列：${musicList.length} 首歌曲`)
+  queueStore.openDrawer()
+})
+
+const buildDownloadItems = (tracks) => tracks.map(track => ({
+  id: track.id,
+  name: track.name,
+  artist: getArtist(track),
+  album: getAlbum(track),
+  source: track.source || '',
+  qualityMap: track.qualityMap || {}
+}))
+
+const buildBatchName = (musicList) =>
+  musicList.length > 1 ? `${musicList[0].name}等${musicList.length}首` : musicList[0].name
+
 const handleBatchDownloadSelected = async () => {
   if (selectedTrackIds.value.length === 0) {
     message.warning('请先选择要下载的歌曲')
     return
   }
-  
-  // 过滤出选中的歌曲
   const selectedTracks = sortedTracks.value.filter(t => selectedTrackIds.value.includes(t.id))
-  const musicList = selectedTracks.map(track => ({
-    id: track.id,
-    name: track.name,
-    artist: getArtist(track),
-    album: getAlbum(track),
-    source: track.source || '',
-    qualityMap: track.qualityMap || {}
-  }))
-  
+  const musicList = buildDownloadItems(selectedTracks)
   try {
-    const { startBatchDownload } = useBatchDownload()
-    const batchName = musicList.length > 1
-      ? `${musicList[0].name}等${musicList.length}首`
-      : musicList[0].name
-    await startBatchDownload({
-      playlistName: batchName,
-      items: musicList,
-      settings: {
-        selectedQuality: settings.selectedQuality || 'lossless',
-        filenameFormat: settings.filenameFormat || 'song-artist',
-        writeMetadata: settings.writeMetadata !== false,
-      }
-    })
-    // 下载后退出选择模式
+    await startDownload(musicList, buildBatchName(musicList))
     exitSelectMode()
   } catch (error) {
-    const errorMsg = error?.message || String(error) || '未知错误'
-    message.error(`下载失败：${errorMsg}`)
+    message.error(`下载失败：${error?.message || error}`)
   }
 }
 
-// 进入批量选择模式
-const enterSelectMode = () => {
-  isSelectMode.value = true
-}
-
-// 退出批量选择模式
+const enterSelectMode = () => { isSelectMode.value = true }
 const exitSelectMode = () => {
   isSelectMode.value = false
   selectedTrackIds.value = []
 }
 
-/**
- * 播放单首歌曲
- *
- * 流程：
- *   1. 检查歌曲是否被标记为不可用
- *   2. 用 track.id 调后端 /song 接口获取播放信息
- *   3. 拿到 musicInfo 后触发播放事件
- *
- * @param {Object} track - 歌曲对象，必须包含 id、name、source
- */
+// 播放单首：调后端 /song 获取真实 URL + 歌词，emit 给 App.vue
 const playTrack = async (track) => {
-  // 1. 不可用检查
   if (isTrackUnavailable(track)) {
     message.warning(`《${track.name}》因版权问题暂时无法播放`)
     return
   }
-
-  // 2. 校验 track.id
   if (!track?.id) {
     message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
     return
   }
 
-  // 设置 loading 状态
   parsingTrackId.value = track.id
   parsingType.value = 'play'
 
   try {
-    // 3. 用 id + source 调后端 /song 接口
     const qualityValue = settings.selectedQuality || 'lossless'
     const musicInfo = await parseMusicInfo(track.id, qualityValue, track.source)
-
-    // 4. URL 无效时标记为不可用
-    if (!musicInfo?.url) {
+    if (!musicInfo?.url || !musicInfo.available) {
       markTrackUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法播放`)
       return
     }
-
-    // 5. 触发播放
     emit('track-parsed', { track, quality: qualityValue })
-    emit('track-play', { ...track, url: musicInfo.url, lrc: musicInfo.lrc })
+    emit('track-play', {
+      ...track,
+      id: musicInfo.id,
+      name: musicInfo.name,
+      artist: musicInfo.artist,
+      album: musicInfo.album,
+      cover: musicInfo.cover,
+      url: musicInfo.url,
+      duration: musicInfo.duration,
+      level: musicInfo.level,
+      fileExtension: musicInfo.fileExtension,
+      lrc: musicInfo.lyric || ''
+    })
     message.success(`开始播放：${track.name}`)
   } catch (error) {
-    // 6. 统一错误处理
-    const errorMsg = error?.message || String(error) || '未知错误'
-    message.error(`播放失败：${errorMsg}`)
+    message.error(`播放失败：${error?.message || error}`)
   } finally {
     parsingTrackId.value = null
     parsingType.value = null
@@ -618,7 +476,6 @@ const downloadSingle = async (track) => {
     message.warning(`《${track.name}》因版权问题暂时无法下载`)
     return
   }
-
   if (!track.id) {
     message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
     return
@@ -628,22 +485,13 @@ const downloadSingle = async (track) => {
   parsingType.value = 'download'
 
   try {
-    const { startBatchDownload } = useBatchDownload()
-    await startBatchDownload({
-      playlistName: track.name,
-      items: [{
-        id: track.id,
-        name: track.name,
-        artist: getArtist(track),
-        album: getAlbum(track),
-        source: track.source || ''
-      }],
-      settings: {
-        selectedQuality: settings.selectedQuality || 'lossless',
-        filenameFormat: settings.filenameFormat || 'song-artist',
-        writeMetadata: settings.writeMetadata !== false,
-      }
-    })
+    await startDownload([{
+      id: track.id,
+      name: track.name,
+      artist: getArtist(track),
+      album: getAlbum(track),
+      source: track.source || ''
+    }], track.name)
   } catch (error) {
     const errorMsg = error?.message || String(error) || '未知错误'
     if (errorMsg.includes('已下架') || errorMsg.includes('无法获取') || errorMsg.includes('未找到歌曲') || errorMsg.includes('版权')) {
@@ -658,90 +506,40 @@ const downloadSingle = async (track) => {
   }
 }
 
-// 批量下载
 const handleBatchDownload = async () => {
   if (!props.items || props.items.length === 0) {
     message.warning('没有可下载的歌曲')
     return
   }
-
-  // 不做过滤：所有歌曲都尝试，后端自动跳过无版权的
-  const musicList = props.items
-    .filter(t => t.id)
-    .map(track => ({
-      id: track.id,
-      name: track.name,
-      artist: getArtist(track),
-      album: getAlbum(track),
-      source: track.source || '',
-      qualityMap: track.qualityMap || {}
-    }))
-
+  const musicList = buildDownloadItems(props.items.filter(t => t.id))
   if (musicList.length === 0) {
     message.error('没有可下载的歌曲（缺少ID）')
     return
   }
-
-  // 把任务加入下载队列（进度在 Drawer 中查看，不在此处阻塞）
-  const { startBatchDownload } = useBatchDownload()
   try {
-    await startBatchDownload({
-      playlistName: props.detailInfo?.name || '歌单',
-      items: musicList,
-      settings: {
-        selectedQuality: settings.selectedQuality || 'lossless',
-        filenameFormat: settings.filenameFormat || 'song-artist',
-        writeMetadata: settings.writeMetadata !== false,
-      }
-    })
+    await startDownload(musicList, props.detailInfo?.name || '歌单')
   } catch (error) {
-    const errorMsg = error?.message || String(error) || '未知错误'
-    message.error(`加入下载队列失败: ${errorMsg}`)
-  }
-}
-
-// 分页变化
-const handlePageChange = (page) => {
-  emit('page-change', page)
-}
-
-// 列表项点击
-const handleItemClick = (item, action) => {
-  if (action === 'select') {
-    emit('select', item)
-  } else {
-    emit('item-click', { item, action })
+    message.error(`加入下载队列失败: ${error?.message || error}`)
   }
 }
 </script>
 
-<style>
-</style>
-
 <style scoped>
-/* 歌曲列表面板 */
 .song-list-panel {
   width: 100%;
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
 
-/* 详情页面模式 */
 .detail-view {
   padding: 0;
 }
 
-
-
-
-
-/* 选择列 */
 .col-select {
   width: 40px;
   text-align: center;
 }
 
-/* 选中状态样式 */
 .track-row.selected-for-batch {
   background: var(--color-primary-light);
 }
@@ -813,7 +611,6 @@ const handleItemClick = (item, action) => {
   flex-shrink: 0;
 }
 
-/* 表格容器 */
 .tracks-table-wrapper {
   overflow-x: auto;
 }
@@ -1003,11 +800,6 @@ const handleItemClick = (item, action) => {
   background: var(--color-primary-light);
 }
 
-.track-row.selected {
-  background: var(--color-primary-light);
-}
-
-/* 无版权歌曲样式 */
 .track-row.unavailable {
   background-color: #f5f5f5 !important;
   cursor: not-allowed;
@@ -1027,11 +819,6 @@ const handleItemClick = (item, action) => {
 .track-cover.grayscale {
   filter: grayscale(100%);
   opacity: 0.5;
-}
-
-.unavailable-icon {
-  color: #ff4d4f;
-  font-size: 14px;
 }
 
 .unavailable-reason {
@@ -1056,7 +843,6 @@ const handleItemClick = (item, action) => {
   flex-shrink: 0;
 }
 
-/* 暗色模式 */
 .dark .track-row.unavailable {
   background-color: #2a2a2a !important;
 }
@@ -1099,106 +885,8 @@ const handleItemClick = (item, action) => {
   color: #888;
 }
 
-/* ========== 歌手列表样式 ========== */
-.artist-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  padding: 0 1.5rem 1.5rem 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-@media (min-width: 640px) {
-  .artist-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 768px) {
-  .artist-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (min-width: 1024px) {
-  .artist-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.artist-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1rem;
-  background: var(--color-surface-container-low);
-  border-radius: var(--radius-md);
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.artist-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.artist-cover-wrapper {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-}
-
-.artist-cover {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.artist-cover-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
-}
-
-.artist-info {
-  text-align: center;
-}
-
-.artist-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-on-surface);
-  margin: 0 0 4px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.artist-music-count {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.artist-action {
-  padding: 0.75rem 1rem 0;
-  width: 100%;
-}
-
-.artist-action :deep(.ant-btn) {
-  width: 100%;
-}
-
 /* ========== 歌单列表样式 ========== */
-.playlist-grid,
-.album-grid {
+.playlist-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
   gap: 1.5rem;
@@ -1206,28 +894,24 @@ const handleItemClick = (item, action) => {
 }
 
 @media (min-width: 640px) {
-  .playlist-grid,
-  .album-grid {
+  .playlist-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (min-width: 1024px) {
-  .playlist-grid,
-  .album-grid {
+  .playlist-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (min-width: 1280px) {
-  .playlist-grid,
-  .album-grid {
+  .playlist-grid {
     grid-template-columns: repeat(4, 1fr);
   }
 }
 
-.playlist-card,
-.album-card {
+.playlist-card {
   background: var(--color-surface-container-low);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -1235,29 +919,25 @@ const handleItemClick = (item, action) => {
   cursor: pointer;
 }
 
-.playlist-card:hover,
-.album-card:hover {
+.playlist-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
-.playlist-cover-wrapper,
-.album-cover-wrapper {
+.playlist-cover-wrapper {
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
 }
 
-.playlist-cover,
-.album-cover {
+.playlist-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
 }
 
-.playlist-cover-placeholder,
-.album-cover-placeholder {
+.playlist-cover-placeholder {
   width: 100%;
   height: 100%;
   display: flex;
@@ -1266,13 +946,11 @@ const handleItemClick = (item, action) => {
   background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
 }
 
-.playlist-card:hover .playlist-cover,
-.album-card:hover .album-cover {
+.playlist-card:hover .playlist-cover {
   transform: scale(1.05);
 }
 
-.playlist-overlay,
-.album-overlay {
+.playlist-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -1291,8 +969,7 @@ const handleItemClick = (item, action) => {
   border-radius: 4px;
 }
 
-.playlist-source-tag,
-.album-source-tag {
+.playlist-source-tag {
   position: absolute;
   bottom: 0.5rem;
   left: 0.5rem;
@@ -1305,13 +982,11 @@ const handleItemClick = (item, action) => {
   z-index: 1;
 }
 
-.playlist-info,
-.album-info {
+.playlist-info {
   padding: 1rem;
 }
 
-.playlist-name,
-.album-name {
+.playlist-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-on-surface);
@@ -1321,8 +996,7 @@ const handleItemClick = (item, action) => {
   white-space: nowrap;
 }
 
-.playlist-creator,
-.album-artist {
+.playlist-creator {
   font-size: 12px;
   color: var(--color-text-muted);
   margin: 0;
@@ -1331,13 +1005,11 @@ const handleItemClick = (item, action) => {
   white-space: nowrap;
 }
 
-.playlist-action,
-.album-action {
+.playlist-action {
   padding: 0 1rem 1rem;
 }
 
-.playlist-action :deep(.ant-btn),
-.album-action :deep(.ant-btn) {
+.playlist-action :deep(.ant-btn) {
   width: 100%;
 }
 </style>
