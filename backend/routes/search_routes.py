@@ -47,26 +47,4 @@ def search():
         return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))
 
 
-@search_bp.route('/search/playlist', methods=['POST'])
-def search_playlist():
-    """歌单搜索（兼容旧接口，内部转调统一搜索 type=2）"""
-    try:
-        data = request.get_json()
-        keyword = data.get('keyword', '').strip()
-        platform = data.get('source')
-        limit = data.get('limit', 20)
-
-        if not keyword:
-            return jsonify(APIResponse.error("请输入搜索关键词", 400))
-
-        result = music_service.search(keyword, 2, platform, limit)
-        return jsonify(APIResponse.success({
-            'playlists': result.get('data', []),
-            'warnings': result.get('warnings', [])
-        }, "搜索成功"))
-    except Exception as e:
-        logger.error(f"搜索歌单失败: {e}")
-        return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))
-
-
 

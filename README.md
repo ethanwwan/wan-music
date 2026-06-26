@@ -2,7 +2,7 @@
 
 > 多平台音乐搜索、解析、下载工具
 
-[![Docker Hub](https://img.shields.io/docker/pulls/pgwan/wan-music)](https://hub.docker.com/r/pgwan/wan-music)
+[![Docker Hub](https://hub.docker.com/r/ethanwwan/wan-music)](https://hub.docker.com/r/ethanwwan/wan-music)
 
 ## ✨ 特性
 
@@ -14,7 +14,7 @@
 
 ## ⚙️ 统一配置
 
-所有环境变量集中在根目录 [`config.json`](file:///Users/Awan/Public/Repository/wan-music/config.json)：
+所有环境变量集中在根目录 [`config.json`](/config.json)：
 
 ```json
 {
@@ -105,8 +105,7 @@ docker run -d \
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/health` | GET | 健康检查 |
-| `/search` | POST | 搜索歌曲 |
-| `/search/playlist` | POST | 搜索歌单 |
+| `/search` | POST | 统一搜索（type=0 全部 / 1 歌曲 / 2 歌单） |
 | `/song` | POST | 获取歌曲详情（含下载链接） |
 | `/playlist` | POST | 获取歌单详情 |
 | `/api/data-sources` | GET | 获取支持的数据源 |

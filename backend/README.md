@@ -153,41 +153,7 @@ curl http://localhost:5002/health
 
 ---
 
-### 3. 搜索歌单（兼容旧接口）
-
-**`POST /search/playlist`**
-
-内部转调 `/search` 的 `type=2`，仅返回歌单。
-
-**请求参数**：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| keyword | string | 是 | 搜索关键词 |
-| source | string | 否 | 平台过滤 |
-| limit | int | 否 | 默认 20 |
-
-**响应 data**：
-
-```json
-{
-  "playlists": [
-    {
-      "id": "456",
-      "name": "华语流行金曲",
-      "cover": "https://...",
-      "trackCount": 50,
-      "playCount": 1234567,
-      "source": "netease"
-    }
-  ],
-  "warnings": []
-}
-```
-
----
-
-### 4. 获取歌曲信息
+### 3. 获取歌曲信息
 
 **`POST /song`**
 
