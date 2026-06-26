@@ -108,7 +108,8 @@ docker run -d \
 | `/search` | POST | 统一搜索（type=0 全部 / 1 歌曲 / 2 歌单） |
 | `/song` | POST | 获取歌曲详情（含下载链接） |
 | `/playlist` | POST | 获取歌单详情 |
-| `/api/data-sources` | GET | 获取支持的数据源 |
+| `/download` | GET | 单曲下载（流式） |
+| `/download/batch/*` | POST/GET/DELETE | 批量下载 + SSE 进度 |
 
 详细文档：[backend/README.md](file:///Users/Awan/Public/Repository/wan-music/backend/README.md)（含完整 API 文档）
 

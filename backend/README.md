@@ -27,33 +27,21 @@ MIT
 
 ---
 
+## API 文档
 
-## 基础信息
+> 本文档只列出**前端实际使用**的接口。删除/调整前请确认前端调用。
+
+### 基础信息
 
 - **默认端口**: `5002`（可通过环境变量 `PORT` 覆盖）
 - **数据格式**: JSON
 - **统一响应格式**: `{code, message, data}`
 
----
-
-## 通用响应格式
-
-### 成功
 ```json
-{
-  "code": 200,
-  "message": "success",
-  "data": { /* 响应数据 */ }
-}
-```
-
-### 失败
-```json
-{
-  "code": 400,
-  "message": "错误信息",
-  "data": null
-}
+// 成功
+{ "code": 200, "message": "success", "data": { /* 响应数据 */ } }
+// 失败
+{ "code": 400, "message": "错误信息", "data": null }
 ```
 
 ### 错误码
@@ -65,16 +53,14 @@ MIT
 | 404 | 资源未找到 |
 | 500 | 服务器内部错误 |
 
----
+### 支持的平台
 
-## 支持的平台
-
-| value | label | 说明 |
-|-------|-------|------|
-| `netease` | 网易云音乐 | 支持搜索歌曲/歌单、下载（含 VIP 音质，需 cookie） |
-| `qq` | QQ音乐 | 支持搜索歌曲/歌单、下载 |
-| `bodian` | 波点音乐 | 支持搜索歌曲、下载（不支持搜索歌单） |
-| `kugou` | 酷狗音乐 | 支持搜索歌曲、下载（不支持搜索歌单） |
+| value | 说明 |
+|-------|------|
+| `netease` | 网易云（支持搜索歌曲/歌单、下载，需 cookie 解锁 VIP 音质） |
+| `qq` | QQ音乐（支持搜索歌曲/歌单、下载） |
+| `kugou` | 酷狗（支持搜索歌曲、下载） |
+| `bodian` | 波点（支持搜索歌曲、下载） |
 
 ---
 
@@ -89,14 +75,12 @@ curl http://localhost:5002/health
 # {"status": "healthy"}
 ```
 
----
-
-### 2. 统一搜索（推荐）
+### 2. 统一搜索
 
 **`POST /search`**
 
-支持三种搜索模式：
-- **关键词搜索**：搜歌曲/歌单
+支持两种模式：
+- **关键词搜索**：搜歌曲/歌单（`type` 控制）
 - **URL 解析**：粘贴歌曲/歌单链接直接获取详情
 
 **请求参数**（JSON）：
@@ -105,7 +89,7 @@ curl http://localhost:5002/health
 |------|------|------|--------|------|
 | keyword | string | 是 | - | 搜索关键词 或 完整 URL |
 | type | int | 否 | 0 | 0=全部 / 1=歌曲 / 2=歌单（仅关键词搜索生效） |
-| source | string | 否 | null | 平台过滤（netease/qq/kugou/bodian），null=全部 |
+| source | string | 否 | null | 平台过滤，null=全部 |
 | quality | string | 否 | lossless | 音质偏好（用于选择最佳可用音质） |
 | limit | int | 否 | 50 | 返回数量 |
 
@@ -113,7 +97,7 @@ curl http://localhost:5002/health
 
 ```json
 {
-  "type": 0,
+  "type": 1,
   "data": [
     {
       "_type": "song",
@@ -124,34 +108,14 @@ curl http://localhost:5002/health
       "picUrl": "https://...",
       "duration": 245000,
       "source": "netease"
-    },
-    {
-      "_type": "playlist",
-      "id": "456",
-      "name": "华语流行金曲",
-      "cover": "https://...",
-      "trackCount": 50,
-      "playCount": 1234567,
-      "source": "netease"
     }
   ],
   "warnings": []
 }
 ```
 
-**warnings 字段**：
+**warnings**：
 - `playlist_search_unsupported`：当前平台不支持搜索歌单
-
-**URL 解析示例**：
-
-```json
-// 请求
-{ "keyword": "https://music.163.com/song?id=123456" }
-
-// 响应：type=1, data=[{...该歌曲详情, _type: "song"}]
-```
-
----
 
 ### 3. 获取歌曲信息
 
@@ -169,13 +133,6 @@ curl http://localhost:5002/health
 | type | string | 否 | json | `url` / `name` / `lyric` / `json` |
 | level | string | 否 | lossless | 音质等级 |
 
-**type 说明**：
-
-- `url`：仅返回下载 URL
-- `name`：仅返回歌曲名/歌手/专辑
-- `lyric`：仅返回歌词
-- `json`：返回完整信息（默认）
-
 **音质等级**：
 
 | 值 | 说明 |
@@ -189,12 +146,10 @@ curl http://localhost:5002/health
 | `jymaster` | 超清母带 |
 | `dolby` | 杜比全景声 |
 
-**响应示例（type=json）**：
+**type=json 响应**：
 
 ```json
 {
-  "code": 200,
-  "message": "获取歌曲信息成功",
   "data": {
     "id": "123456",
     "name": "有没有人告诉你",
@@ -203,7 +158,7 @@ curl http://localhost:5002/health
     "pic": "https://...",
     "level": "lossless",
     "source": "netease",
-    "lyric": "[00:00.00]有没有人告诉你...",
+    "lyric": "[00:00.00]...",
     "tlyric": "",
     "fileType": "flac",
     "url": "https://example.com/song.flac"
@@ -211,9 +166,7 @@ curl http://localhost:5002/health
 }
 ```
 
----
-
-### 5. 获取歌单详情
+### 4. 获取歌单详情
 
 **`POST /playlist`**
 
@@ -231,14 +184,12 @@ curl http://localhost:5002/health
 
 ```json
 {
-  "code": 200,
-  "message": "获取歌单成功",
   "data": {
     "playlist": {
       "id": "456",
       "name": "华语流行金曲",
       "cover": "https://...",
-      "description": "精选华语流行歌曲",
+      "description": "...",
       "trackCount": 50,
       "playCount": 1234567,
       "creator": "...",
@@ -257,85 +208,11 @@ curl http://localhost:5002/health
 }
 ```
 
----
-
-### 6. 获取数据源列表
-
-**`GET /api/data-sources`**
-
-```json
-{
-  "code": 200,
-  "message": "获取数据源列表成功",
-  "data": [
-    { "value": "netease", "label": "网易云音乐", "description": "网易云音乐平台" },
-    { "value": "qq", "label": "QQ音乐", "description": "QQ音乐平台" },
-    { "value": "bodian", "label": "波点音乐", "description": "波点音乐平台" },
-    { "value": "kugou", "label": "酷狗音乐", "description": "酷狗音乐平台" }
-  ]
-}
-```
-
----
-
-### 7. URL 解析
-
-**`POST /parse/url`**
-
-解析 URL，返回平台、类型、资源 ID。
-
-**请求参数**（`application/x-www-form-urlencoded`）：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| url | string | 是 | 要解析的链接 |
-
-**响应**：
-
-```json
-{
-  "code": 200,
-  "message": "解析成功",
-  "data": {
-    "platform": "netease",
-    "type": "music",
-    "id": "123456"
-  }
-}
-```
-
-type 取值：`music` / `playlist` / `album`
-
----
-
-### 8. URL 验证
-
-**`POST /parse/validate`**
-
-仅判断 URL 类型，不返回 ID。
-
-**响应**：
-
-```json
-{
-  "code": 200,
-  "message": "验证成功",
-  "data": {
-    "type": "music",
-    "isMusic": true,
-    "isPlaylist": false,
-    "isAlbum": false
-  }
-}
-```
-
----
-
-### 9. 单曲下载（代理，解决 CORS）
+### 5. 单曲下载（代理）
 
 **`GET /download`**
 
-后端代理下载单曲，可选自动写入 ID3 标签（标题/歌手/专辑/歌词/封面/平台/歌曲ID）。
+后端代理下载单曲（解决 CORS），可选自动写入 ID3 标签。
 
 **Query 参数**：
 
@@ -355,21 +232,17 @@ type 取值：`music` / `playlist` / `album`
 
 **响应头**：
 - `Content-Disposition`: 文件名
-- `X-Actual-Quality`: 实际音质（可能比请求的 quality 低，如 VIP 不可用时）
-- `X-Quality-Downgraded`: `1` 表示实际音质被降级
+- `X-Actual-Quality`: 实际音质（VIP 不可用时降级）
+- `X-Quality-Downgraded`: `1` 表示音质被降级
 - `X-Actual-FileType`: 实际文件类型（mp3/flac/m4a，通过 magic bytes 检测）
 
----
-
-### 10. 批量下载（异步 + SSE 进度）
+### 6. 批量下载（异步 + SSE 进度）
 
 支持并发下载 6 首歌曲，完成后打包成 ZIP（单曲则直接返回音频文件）。
 
-#### 10.1 启动批量任务
+#### 6.1 启动任务
 
 **`POST /download/batch/start`**
-
-**请求体**：
 
 ```json
 {
@@ -396,8 +269,6 @@ type 取值：`music` / `playlist` / `album`
 
 ```json
 {
-  "code": 200,
-  "message": "任务已启动",
   "data": {
     "task_id": "task_abc123",
     "total": 38,
@@ -406,34 +277,15 @@ type 取值：`music` / `playlist` / `album`
 }
 ```
 
-#### 10.2 任务列表
+#### 6.2 任务列表
 
-**`GET /download/batch/list`**
+**`GET /download/batch/list`** — 返回所有任务（按创建时间倒序）
 
-返回所有任务（按创建时间倒序）。
-
-#### 10.3 任务详情
+#### 6.3 任务详情
 
 **`GET /download/batch/info/<task_id>`**
 
-#### 10.4 任务状态（一次性查询）
-
-**`GET /download/batch/status/<task_id>`**
-
-```json
-{
-  "code": 200,
-  "data": {
-    "status": "running",
-    "total": 38,
-    "completed": 15,
-    "failed": 1,
-    "current": "正在下载的歌名"
-  }
-}
-```
-
-#### 10.5 SSE 实时进度
+#### 6.4 SSE 实时进度
 
 **`GET /download/batch/progress/<task_id>`**
 
@@ -449,14 +301,14 @@ data: {"status":"running","total":38,"completed":15,"failed":1,"current":"歌名
 
 status 取值：`running` / `done` / `error` / `cancelled`
 
-#### 10.6 下载完成文件
+#### 6.5 下载完成文件
 
 **`GET /download/batch/file/<task_id>`**
 
 - 单曲：直接返回音频文件
 - 多首：返回 ZIP 压缩包
 
-#### 10.7 取消/删除任务
+#### 6.6 取消/删除任务
 
 **`DELETE /download/batch/<task_id>`**
 
@@ -464,120 +316,15 @@ status 取值：`running` / `done` / `error` / `cancelled`
 
 ---
 
-### 11. 网易云 Cookie 状态
+## HTTP 方法说明
 
-**`GET /api/netease/cookie/status`**
+按 RESTful 规范设计，**不强求统一方法**：
 
-查看网易云 cookie 状态（不返回具体值），**自动 reload**：如果 cookie 文件被修改，下次调用会重新加载。
-
-```json
-{
-  "code": 200,
-  "data": {
-    "active_path": "/app/clients/cookie/netease_cookie.txt",
-    "file_exists": true,
-    "cookie_keys": ["MUSIC_U", "NMTID", "__csrf"],
-    "has_music_u": true,
-    "is_vip": true,
-    "cookie_count": 3
-  }
-}
-```
-
----
-
-## 使用示例
-
-### JavaScript
-
-```javascript
-// 搜索歌曲
-async function searchSongs(keyword, source = null) {
-  const res = await fetch('/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keyword, source, type: 1, limit: 10 })
-  });
-  return (await res.json()).data;
-}
-
-// 通过 URL 获取歌曲
-async function getSongByUrl(url) {
-  const form = new URLSearchParams({ url, type: 'json', level: 'lossless' });
-  const res = await fetch('/song', { method: 'POST', body: form });
-  return (await res.json()).data;
-}
-
-// 解析歌单 URL
-async function getPlaylistByUrl(url) {
-  const form = new URLSearchParams({ url });
-  const res = await fetch('/playlist', { method: 'POST', body: form });
-  return (await res.json()).data.playlist;
-}
-
-// 单曲下载
-function downloadSong(song) {
-  const params = new URLSearchParams({
-    id: song.id,
-    quality: 'lossless',
-    source: song.source,
-    name: song.name,
-    artist: song.artists,
-    album: song.album,
-    writeMetadata: 'true'
-  });
-  window.location.href = `/download?${params}`;
-}
-
-// 批量下载 + SSE 进度
-async function batchDownload(items, name) {
-  // 1. 启动任务
-  const start = await (await fetch('/download/batch/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, name })
-  })).json();
-
-  const taskId = start.data.task_id;
-
-  // 2. 订阅 SSE 进度
-  const es = new EventSource(`/download/batch/progress/${taskId}`);
-  es.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    console.log(`${data.completed}/${data.total}`, data.current);
-    if (data.status === 'done') {
-      // 3. 下载文件
-      window.location.href = `/download/batch/file/${taskId}`;
-      es.close();
-    }
-  };
-}
-```
-
-### cURL
-
-```bash
-# 健康检查
-curl http://localhost:5002/health
-
-# 搜索歌曲
-curl -X POST http://localhost:5002/search \
-  -H "Content-Type: application/json" \
-  -d '{"keyword": "陈楚生", "type": 1, "limit": 5}'
-
-# 通过 URL 获取歌曲
-curl -X POST http://localhost:5002/song \
-  -d "url=https://music.163.com/song?id=123456&type=json&level=lossless"
-
-# 解析 URL
-curl -X POST http://localhost:5002/parse/url \
-  -d "url=https://music.163.com/playlist?id=7583298906"
-
-# 单曲下载
-curl -o song.flac "http://localhost:5002/download?id=123456&quality=lossless&name=test&artist=test"
-```
-
----
+| 方法 | 用途 | 接口 |
+|------|------|------|
+| GET | 只读 + 文件下载（浏览器要求） | `/health`, `/download/batch/list`, `/download/batch/info`, `/download/batch/progress`, `/download/batch/file`, `/download` |
+| POST | 复杂请求体 / 表单 | `/search`, `/song`, `/playlist`, `/download/batch/start` |
+| DELETE | 资源删除 | `/download/batch/<task_id>` |
 
 ## 部署说明
 
@@ -594,9 +341,33 @@ curl -o song.flac "http://localhost:5002/download?id=123456&quality=lossless&nam
 ### 启动
 
 ```bash
-# 1. 直接用环境变量
 PORT=5005 python3 main.py
+```
 
-# 2. 用 .env 文件（可选）
-WAN_MUSIC_ENV_FILE=.env python3 main.py
+## 使用示例（cURL）
+
+```bash
+# 健康检查
+curl http://localhost:5002/health
+
+# 搜索歌曲
+curl -X POST http://localhost:5002/search \
+  -H "Content-Type: application/json" \
+  -d '{"keyword": "陈楚生", "type": 1, "limit": 5}'
+
+# 通过 URL 获取歌曲
+curl -X POST http://localhost:5002/song \
+  -d "url=https://music.163.com/song?id=123456&type=json&level=lossless"
+
+# 获取歌单详情
+curl -X POST http://localhost:5002/playlist \
+  -d "url=https://music.163.com/playlist?id=7583298906"
+
+# 单曲下载
+curl -o song.flac "http://localhost:5002/download?id=123456&quality=lossless&name=test&artist=test"
+
+# 批量下载
+curl -X POST http://localhost:5002/download/batch/start \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"id":"123","quality":"lossless"}],"name":"playlist"}'
 ```

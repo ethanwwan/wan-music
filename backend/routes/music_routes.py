@@ -15,7 +15,7 @@ from urllib.parse import unquote_plus
 
 from services.music_service import music_service
 from utils.api_response import APIResponse
-from utils.url_parser import parse_url, is_music_url, is_playlist_url, is_album_url
+from utils.url_parser import parse_url
 from utils.filename import (
     sanitize_filename as _sanitize_filename,
     build_filename as _build_filename,
@@ -635,98 +635,6 @@ def download_batch_file(task_id):
     return response
 
 
-@music_bp.route('/download/batch/status/<task_id>', methods=['GET'])
-def download_batch_status(task_id):
-    """查询任务状态（一次性查询，不订阅 SSE）"""
-    with batch_tasks_lock:
-        task = batch_tasks.get(task_id)
-    if not task:
-        return jsonify(APIResponse.error("任务不存在或已过期", 404))
-    return jsonify(APIResponse.success({
-        'status': task['status'],
-        'total': task['total'],
-        'completed': task['completed'],
-        'failed': task['failed'],
-        'current': task['current']
-    }, "查询成功"))
-
-
-@music_bp.route('/parse/url', methods=['POST'])
-def parse_url_endpoint():
-    """
-    解析 URL，返回平台、类型和资源 ID
-
-    请求体（application/x-www-form-urlencoded）：
-        url: 要解析的链接
-
-    响应：
-        {
-            'platform': 'netease' | 'qq' | 'kugou' | 'bodian',
-            'type': 'music' | 'playlist' | 'album',
-            'id': '资源 ID'
-        }
-    """
-    try:
-        data = request.get_data(as_text=True)
-        params = {}
-        for pair in data.split('&'):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                params[unquote_plus(key)] = unquote_plus(value)
-
-        url = params.get('url', '')
-        if not url:
-            return jsonify(APIResponse.error("请提供 URL", 400))
-
-        parsed = parse_url(url)
-        if not parsed:
-            return jsonify(APIResponse.error("无法识别的 URL", 400))
-
-        return jsonify(APIResponse.success(parsed, "解析成功"))
-    except Exception as e:
-        logger.error(f"URL 解析异常: {e}")
-        return jsonify(APIResponse.error(f"服务器错误: {str(e)}", 500))
-
-
-@music_bp.route('/parse/validate', methods=['POST'])
-def validate_url_endpoint():
-    """
-    验证 URL 类型
-
-    请求体：
-        url: 要验证的链接
-
-    响应：
-        {
-            'type': 'music' | 'playlist' | 'album' | null,
-            'isMusic': true/false,
-            'isPlaylist': true/false,
-            'isAlbum': true/false
-        }
-    """
-    try:
-        data = request.get_data(as_text=True)
-        params = {}
-        for pair in data.split('&'):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                params[unquote_plus(key)] = unquote_plus(value)
-
-        url = params.get('url', '')
-        parsed = parse_url(url)
-        url_type = parsed['type'] if parsed else None
-
-        return jsonify(APIResponse.success({
-            'type': url_type,
-            'isMusic': url_type == 'music',
-            'isPlaylist': url_type == 'playlist',
-            'isAlbum': url_type == 'album',
-        }, "验证成功"))
-    except Exception as e:
-        logger.error(f"URL 验证异常: {e}")
-        return jsonify(APIResponse.error(f"服务器错误: {str(e)}", 500))
-
-
 @music_bp.route('/song', methods=['POST'])
 def get_song_info():
     """获取歌曲信息（支持多种类型：url/name/lyric/json）
@@ -877,59 +785,3 @@ def get_playlist():
     except Exception as e:
         logger.error(f"获取歌单失败: {e}")
         return jsonify(APIResponse.error(f"获取歌单失败: {str(e)}", 500))
-
-
-@music_bp.route('/api/data-sources', methods=['GET'])
-def get_data_sources():
-    """获取可用数据源列表"""
-    try:
-        platforms = music_service.get_platforms()
-        return jsonify(APIResponse.success(platforms, "获取数据源列表成功"))
-    except Exception as e:
-        logger.error(f"获取数据源列表失败: {e}")
-        return jsonify(APIResponse.error(f"获取数据源列表失败: {str(e)}", 500))
-
-
-# ==================== 网易云 Cookie 状态 ====================
-
-@music_bp.route('/api/netease/cookie/status', methods=['GET'])
-def get_netease_cookie_status():
-    """查看当前网易云 cookie 状态（不返回具体值，不写文件）
-
-    每次调用都会**检查文件 mtime**，如果文件被修改会自动 reload 到 session。
-    """
-    from clients.netease_client import APIConstants
-    import os
-    try:
-        # 候选路径（与 netease_client._load_local_cookies 保持一致）
-        candidates = [
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'clients', 'cookie', 'netease_cookie.txt'),
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookie', 'netease_cookie.txt'),
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'netease_cookie.txt'),
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookie.txt'),
-        ]
-        active_path = next((c for c in candidates if os.path.exists(c)), None)
-        from clients.music_client import music_client
-        netease = music_client._get_client('netease') if hasattr(music_client, '_get_client') else None
-        cookies = dict(netease.session.cookies) if netease else {}
-
-        # 自动 reload：如果文件 mtime 比上次加载新，就重新加载
-        if active_path and netease and hasattr(netease, '_last_cookie_mtime'):
-            current_mtime = os.path.getmtime(active_path)
-            if current_mtime > netease._last_cookie_mtime:
-                logger.info(f"检测到 cookie 文件已修改，自动 reload...")
-                netease.reload_cookies()
-                cookies = dict(netease.session.cookies)
-
-        has_music_u = 'MUSIC_U' in cookies
-        return jsonify(APIResponse.success({
-            'active_path': active_path,
-            'candidates': candidates,
-            'file_exists': active_path is not None,
-            'cookie_keys': list(cookies.keys()),
-            'has_music_u': has_music_u,
-            'is_vip': has_music_u,
-            'cookie_count': len(cookies)
-        }, "Cookie 状态查询成功"))
-    except Exception as e:
-        return jsonify(APIResponse.error(f"查询失败: {str(e)}", 500))
