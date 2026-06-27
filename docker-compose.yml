@@ -9,8 +9,9 @@ services:
   wan-music:
     image: ethanwwan/wan-music:latest
     container_name: wan-music
-    restart: unless-stopped
+    restart: always
     ports:
       - "6005:6005"
     volumes:
       - ./cookie:/app/clients/cookie   # 持久化 cookie（VIP 登录状态）
+      
