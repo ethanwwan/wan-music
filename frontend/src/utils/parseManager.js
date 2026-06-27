@@ -22,12 +22,11 @@ export const searchWarnings = ref([])
 
 // ==================== 搜索/解析 ====================
 
-/** 通知搜索结果 */
+/** 通知搜索结果（统一通知格式：message + description） */
 const notifySearchResult = (count, fromCache = false) => {
-  notification.open({
-    title: fromCache ? '读取缓存成功' : '搜索成功',
-    message: `找到 ${count} 条结果${fromCache ? '（来自缓存）' : ''}`,
-    type: 'success'
+  notification.success({
+    message: fromCache ? '读取缓存数据成功' : '搜索成功',
+    description: fromCache ? `从缓存找到 ${count} 条结果` : `从网络获取 ${count} 条结果`
   })
 }
 

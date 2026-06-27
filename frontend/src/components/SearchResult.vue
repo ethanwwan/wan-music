@@ -20,8 +20,8 @@
       </a-button>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="currentDetail && currentDetail.loading" class="loading-view">
+    <!-- 加载中：tab 切换 或 详情加载 -->
+    <div v-if="tabLoading || (currentDetail && currentDetail.loading)" class="loading-view">
       <div class="loading-spinner"></div>
       <span class="loading-text">正在加载中...</span>
     </div>
@@ -53,8 +53,8 @@
       @item-click="handleItemClick"
     />
 
-    <!-- 当前 tab 搜索结果为空时显示提示 -->
-    <div v-if="!loading && hasSearched && !currentDetail && isCurrentTabEmpty" class="empty-tab-hint">
+    <!-- 当前 tab 搜索结果为空时显示提示（加载中时不展示空提示） -->
+    <div v-if="!loading && !tabLoading && hasSearched && !currentDetail && isCurrentTabEmpty" class="empty-tab-hint">
       <a-empty
         v-if="displayMode === 'playlist' && isPlaylistSearchUnsupported"
         description="该平台不支持歌单搜索，请粘贴歌单链接进行解析（网易云/QQ 音乐支持歌单搜索）"
@@ -148,12 +148,25 @@ const detailTracks = ref([])
 
 // 缓存
 const PLAYLIST_CACHE_KEY = 'wan-music-playlist-cache'
+/** 缓存 24 小时（与平台/搜索一致） */
+const PLAYLIST_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const cache = ref({ playlist: {} })
 
 const loadCache = () => {
   try {
     const stored = localStorage.getItem(PLAYLIST_CACHE_KEY)
-    return stored ? JSON.parse(stored) : {}
+    if (!stored) return {}
+    const parsed = JSON.parse(stored)
+    if (!parsed.playlist) return {}
+    // 过滤过期条目
+    const now = Date.now()
+    for (const id of Object.keys(parsed.playlist)) {
+      const entry = parsed.playlist[id]
+      if (!entry?._ts || now - entry._ts > PLAYLIST_CACHE_TTL_MS) {
+        delete parsed.playlist[id]
+      }
+    }
+    return parsed
   } catch { return {} }
 }
 
@@ -220,7 +233,10 @@ const handleParsePlaylist = async (item) => {
       loading: false
     }
     detailTracks.value = cached.tracks
-    notification.success({ message: '使用缓存数据', description: `找到 ${detailTracks.value.length} 首歌曲` })
+    notification.success({
+      message: '读取缓存数据成功',
+      description: `从缓存找到 ${detailTracks.value.length} 首歌曲`
+    })
     return
   }
 
@@ -240,6 +256,7 @@ const handleParsePlaylist = async (item) => {
       detailTracks.value = playlist.tracks || []
 
       cache.value.playlist[item.id] = {
+        _ts: Date.now(),
         id: playlist.id,
         name: playlist.name,
         coverImgUrl: playlist.coverImgUrl,
@@ -250,7 +267,10 @@ const handleParsePlaylist = async (item) => {
       saveCache(cache.value.playlist)
 
       if (detailTracks.value.length > 0) {
-        notification.success({ message: '解析成功', description: `找到 ${detailTracks.value.length} 首歌曲` })
+        notification.success({
+          message: '解析歌单成功',
+          description: `从网络获取 ${detailTracks.value.length} 首歌曲`
+        })
       }
     } else {
       const errorMsg = result.error || result.message || '解析失败'

@@ -8,7 +8,7 @@ export const defaultSettings = {
   writeMetadata: true,               // 自动写入元数据（产品需求：默认开启）
   layoutMode: 'single-column',
   enableCache: true,                 // 搜索/歌单详情页缓存开关
-  cacheTTLMinutes: 15,
+  cacheTTLMinutes: 24 * 60,
   selectedQuality: 'lossless',       // 默认音质
 }
 

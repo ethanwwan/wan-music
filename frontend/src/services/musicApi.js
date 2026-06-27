@@ -43,7 +43,7 @@ export const isHttpUrl = (url) =>
 // ==================== 搜索缓存 ====================
 
 const CACHE_KEY_PREFIX = 'wan-music-search-'
-const searchCache = { music: new Map(), playlist: new Map(), album: new Map() }
+const searchCache = { music: new Map(), playlist: new Map(), album: new Map(), unified: new Map() }
 
 const loadCacheFromStorage = (type) => {
   try {
@@ -61,7 +61,10 @@ const saveCacheToStorage = (type, cache) => {
 for (const k of Object.keys(searchCache)) searchCache[k] = loadCacheFromStorage(k)
 
 const isCacheValid = (entry) => {
-  if (!entry?.data) return false
+  if (!entry?.data || !entry.timestamp) return false
+  // 校验 TTL（settings.cacheTTLMinutes 单位：分钟）
+  const ttlMs = (settings.cacheTTLMinutes || 24 * 60) * 60 * 1000
+  if (Date.now() - entry.timestamp > ttlMs) return false
   const { songs = [], playlists = [], albums = [], artists = [] } = entry.data
   return songs.length || playlists.length || albums.length || artists.length
 }
@@ -71,7 +74,7 @@ const getCachedSearchResult = (type, keyword) => {
   const cache = searchCache[type]
   const cached = cache?.get(keyword)
   if (isCacheValid(cached)) return cached.data
-  // 空缓存视为无效，避免下次再走无意义判断
+  // 空缓存/过期缓存视为无效，避免下次再走无意义判断
   if (cached) { cache.delete(keyword); saveCacheToStorage(type, cache) }
   return null
 }

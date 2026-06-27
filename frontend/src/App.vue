@@ -17,6 +17,7 @@
         />
 
         <SearchResult
+          :key="searchSession"
           :songs="searchResults"
           :playlists="playlistSearchResults"
           :loading="loading"
@@ -69,10 +70,13 @@ const currentSong = ref(null)
 const currentSources = ref([localStorage.getItem('wan-music-selected-data-source') || 'netease'])
 /** 当前输入（供 tab 切换时回传给后端） */
 const currentInput = ref('')
+/** 搜索会话计数器：每次点击搜索按钮自增，作为 :key 强制 SearchResult 重新挂载 */
+const searchSession = ref(0)
 
 const themeToken = reactive({ colorPrimary: DEFAULT_THEME_COLOR })
 
 const handleParse = async ({ url, sources = ['netease'] }) => {
+  searchSession.value++  // 每次搜索自增，驱动 SearchResult 重新挂载
   currentSources.value = sources
   currentInput.value = url
   // URL 解析交由后端，前端先按关键词的双 tab 占位；后端返回后再收窄为单 tab
