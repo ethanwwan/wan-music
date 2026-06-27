@@ -12,7 +12,7 @@
     <div class="drawer-header">
       <div class="stats">
         <a-tag color="blue">
-          <component :is="LoadingOutlined" class="mr-1" />
+          <component :is="CloudDownloadOutlined" class="mr-1" />
           进行中 {{ store.activeCount.value }}
         </a-tag>
         <a-tag color="green">
@@ -216,7 +216,6 @@ import { message, Modal } from 'ant-design-vue'
 import * as icons from '@ant-design/icons-vue'
 const {
   DownloadOutlined,
-  LoadingOutlined,
   CheckCircleOutlined,
   MusicOutlined,
   CloseCircleOutlined,
