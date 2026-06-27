@@ -1,6 +1,9 @@
 # Wan Music - Docker Compose
 # 启动：docker compose up -d
 # 访问：http://localhost:6005
+#
+# 单一镜像同时包含前后端：Flask 后端监听 6005，并把 Vue 构建产物作为静态资源输出。
+# 前端无需独立部署，所有 HTTP 请求统一走同一个端口。
 
 services:
   wan-music:
