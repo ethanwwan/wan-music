@@ -151,11 +151,10 @@
           <a-button
             v-if="task.status === 'running'"
             size="small"
-            danger
+            class="action-delete-btn"
             @click="handleCancel(task)"
             :loading="cancellingId === task.task_id"
           >
-            <component :is="StopOutlined" class="mr-1" />
             取消
           </a-button>
 
@@ -220,7 +219,6 @@ const {
   MusicOutlined,
   CloseCircleOutlined,
   HeadphonesOutlined,
-  StopOutlined,
   CloudDownloadOutlined,
   AlertCircleOutlined = icons.WarningOutlined,
   WarningOutlined,
