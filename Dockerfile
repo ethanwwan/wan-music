@@ -24,12 +24,12 @@ LABEL maintainer="PGWan" \
       description="Wan Music - 多平台音乐搜索/解析/下载"
 
 # 环境变量
+# PORT 不再硬编码——由 gunicorn.conf.py 从 config.json:backend.prodBackendPort 解析
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    FLASK_APP=main.py \
-    PORT=6005
+    FLASK_APP=main.py
 
 # 安装系统依赖（仅 curl 用于健康检查 + gcc 用于构建 mutagen 等含 C 扩展的包）
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,6 +49,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制后端代码
 COPY backend/ ./
 
+# 把 config.json 复制到镜像（gunicorn.conf.py 在 /app/config.json 找它）
+COPY config.json /app/config.json
+
 # 复制前端构建产物到 Flask 的 templates/static 目录
 # Vite 默认输出到 dist/，结构为 dist/index.html + dist/assets/* + dist/favicon.svg
 COPY --from=frontend-builder /app/frontend/dist/index.html ./templates/index.html
@@ -60,19 +63,13 @@ RUN mkdir -p /app/clients/cookie && chown -R wanmusic:wanmusic /app
 
 USER wanmusic
 
-EXPOSE ${PORT}
+# EXPOSE 不指定固定端口（gunicorn.conf.py 在启动时解析实际端口）
+EXPOSE 6005
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    CMD curl -f http://localhost:$(python3 -c "from utils.config import resolve_port; print(resolve_port())")/health || exit 1
 
 # 使用 gunicorn 启动（生产环境）
-# 端口从 $PORT 环境变量读取（默认 6005，可被运行时覆盖）
-CMD ["sh", "-c", "gunicorn \
-     --bind 0.0.0.0:${PORT} \
-     --workers 2 \
-     --threads 4 \
-     --timeout 120 \
-     --access-logfile - \
-     --error-logfile - \
-     main:app"]
+# 端口 / workers / threads 全部由 gunicorn.conf.py 集中管理
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "main:app"]

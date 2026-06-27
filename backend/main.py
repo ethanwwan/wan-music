@@ -2,18 +2,17 @@
 
 提供多平台音乐搜索、解析、下载 API。
 
-端口优先级：环境变量 PORT > config.json backend.devBackendPort > 默认 5005
+端口优先级：环境变量 PORT > config.json:backend.prodBackendPort > 默认 6005
+（与 gunicorn.conf.py 共享 utils.config.resolve_port）
 """
-import json
 import logging
-import os
 import sys
-from pathlib import Path
 
 from flask import Flask, redirect
 from flask_cors import CORS
 
 from routes import music_bp
+from utils.config import resolve_port
 
 # 配置日志
 logging.basicConfig(
@@ -57,26 +56,8 @@ def internal_error(error):
 
 
 def _resolve_default_port() -> int:
-    """从项目根 config.json 解析默认端口，保持与前端 Vite 代理配置同步
-
-    优先级：环境变量 > config.json backend.devBackendPort > 默认 5005
-    """
-    env_port = os.environ.get('PORT') or os.environ.get('BACKEND_PORT')
-    if env_port:
-        return int(env_port)
-
-    config_path = Path(__file__).resolve().parent.parent / 'config.json'
-    if config_path.is_file():
-        try:
-            with config_path.open(encoding='utf-8') as f:
-                cfg = json.load(f)
-            backend_cfg = cfg.get('backend', {}) or {}
-            dev_port = backend_cfg.get('devBackendPort')
-            if dev_port:
-                return int(dev_port)
-        except (OSError, ValueError, json.JSONDecodeError) as e:
-            logger.warning(f"读取 config.json 失败: {e}，将使用默认端口")
-    return 5005
+    """从项目根 config.json 解析默认端口（与 gunicorn.conf.py 共用 resolve_port）"""
+    return resolve_port()
 
 
 if __name__ == '__main__':
