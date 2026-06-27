@@ -523,21 +523,50 @@ onMounted(() => {
 .task-card {
   transition: all 0.3s ease;
   border-radius: 12px;
-  background: #fff;
+  /* 统一使用主题变量，自动适配深浅色模式 */
+  background: var(--color-surface-white, #fff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-left: 4px solid var(--color-border-subtle, #e5e7eb); /* 默认统一边框 */
 }
 
+/* 各种状态通过左侧色条 + 微妙背景区分 */
+/* 正常下载中：蓝色脉冲边框 + 微妙蓝色背景 + 微动画 */
 .task-card.status-running {
-  border-left: 4px solid #3b82f6;
+  border-left-color: #3b82f6;
+  background: var(--color-bg-soft-blue, rgba(59, 130, 246, 0.05));
+  position: relative;
+  overflow: hidden;
+}
+
+.task-card.status-running::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%);
+  background-size: 100% 200%;
+  animation: running-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes running-pulse {
+  0%, 100% { background-position: 0 0; }
+  50% { background-position: 0 100%; }
 }
 
 .task-card.status-done {
-  border-left: 4px solid #10b981;
+  border-left-color: #10b981;
+}
+
+.task-card.status-pending {
+  border-left-color: #fa8c16;
+  background: var(--color-bg-soft, rgba(250, 140, 22, 0.04));
 }
 
 .task-card.status-error,
 .task-card.status-cancelled {
-  border-left: 4px solid #9ca3af;
+  border-left-color: #9ca3af;
   opacity: 0.85;
 }
 
