@@ -158,11 +158,16 @@ const loadCache = () => {
     if (!stored) return {}
     const parsed = JSON.parse(stored)
     if (!parsed.playlist) return {}
-    // 过滤过期条目
+    // 过滤过期/空数据条目
     const now = Date.now()
     for (const id of Object.keys(parsed.playlist)) {
       const entry = parsed.playlist[id]
       if (!entry?._ts || now - entry._ts > PLAYLIST_CACHE_TTL_MS) {
+        delete parsed.playlist[id]
+        continue
+      }
+      // 空歌单视为无缓存
+      if (!entry.tracks || entry.tracks.length === 0) {
         delete parsed.playlist[id]
       }
     }
@@ -264,7 +269,10 @@ const handleParsePlaylist = async (item) => {
         trackCount: playlist.trackCount,
         tracks: detailTracks.value
       }
-      saveCache(cache.value.playlist)
+      // 空歌单不缓存（下次走网络重试）
+      if (detailTracks.value.length > 0) {
+        saveCache(cache.value.playlist)
+      }
 
       if (detailTracks.value.length > 0) {
         notification.success({

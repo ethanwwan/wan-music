@@ -60,27 +60,33 @@ const saveCacheToStorage = (type, cache) => {
 
 for (const k of Object.keys(searchCache)) searchCache[k] = loadCacheFromStorage(k)
 
+// 缓存数据是否"非空"——空数据视为无缓存，避免返回 0 条结果
+const hasContent = (data) => {
+  if (!data) return false
+  const { songs = [], playlists = [], albums = [], artists = [] } = data
+  return songs.length > 0 || playlists.length > 0 || albums.length > 0 || artists.length > 0
+}
+
 const isCacheValid = (entry) => {
   if (!entry?.data || !entry.timestamp) return false
-  // 校验 TTL（settings.cacheTTLMinutes 单位：分钟）
+  // TTL 校验（settings.cacheTTLMinutes 单位：分钟）
   const ttlMs = (settings.cacheTTLMinutes || 24 * 60) * 60 * 1000
   if (Date.now() - entry.timestamp > ttlMs) return false
-  const { songs = [], playlists = [], albums = [], artists = [] } = entry.data
-  return songs.length || playlists.length || albums.length || artists.length
+  // 空数据视为无缓存（走网络重试）
+  return hasContent(entry.data)
 }
 
 const getCachedSearchResult = (type, keyword) => {
   if (!settings.enableCache) return null
   const cache = searchCache[type]
   const cached = cache?.get(keyword)
-  if (isCacheValid(cached)) return cached.data
-  // 空缓存/过期缓存视为无效，避免下次再走无意义判断
-  if (cached) { cache.delete(keyword); saveCacheToStorage(type, cache) }
-  return null
+  return isCacheValid(cached) ? cached.data : null
 }
 
 const setCachedSearchResult = (type, keyword, data) => {
   if (!settings.enableCache) return
+  // 空结果不缓存，下次直接走网络
+  if (!hasContent(data)) return
   const cache = searchCache[type]
   if (!cache) return
   cache.set(keyword, { data, timestamp: Date.now() })
