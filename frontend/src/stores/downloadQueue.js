@@ -1,6 +1,6 @@
 /**
  * 下载队列 Store
- * 管理所有批量下载任务的状态、订阅 SSE、localStorage 持久化
+ * 管理所有批量下载任务的状态、订阅 SSE
  */
 
 import { ref, computed } from 'vue'
@@ -54,7 +54,6 @@ const addTask = async (items, name = 'playlist', settings = {}) => {
   tasks.value.set(taskId, task)
   // 触发响应式更新（Map 需要重新赋值）
   tasks.value = new Map(tasks.value)
-  persistTaskIds()
 
   // 启动 SSE 订阅
   subscribeTask(taskId)
@@ -240,7 +239,6 @@ const syncWithBackend = async () => {
     }
 
     tasks.value = new Map(tasks.value)
-    persistTaskIds()
   } catch (e) {
     console.error('[downloadQueue] 同步后端任务失败:', e)
   }
@@ -273,7 +271,6 @@ const cancelTask = async (taskId) => {
 const removeTask = (taskId) => {
   tasks.value.delete(taskId)
   tasks.value = new Map(tasks.value)
-  persistTaskIds()
 }
 
 /**
@@ -335,17 +332,9 @@ const completedCount = computed(() => {
 // ==================== 初始化 ====================
 
 /**
- * 启动时初始化：直接同步后端任务列表
- * 旧的 localStorage 占位任务已移除（无意义的 100ms 占位闪烁）
+ * 启动时初始化：从后端同步任务列表
  */
 const init = async () => {
-  // 清理过时的 localStorage 记录（如果还有的话）
-  // localStorage 现在不再用于持久化任务，因为后端是真实数据源
-  try {
-    localStorage.removeItem('wan-music-download-tasks')
-  } catch (e) {
-    // 忽略
-  }
   await syncWithBackend()
 }
 
