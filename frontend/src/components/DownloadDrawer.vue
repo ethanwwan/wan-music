@@ -99,6 +99,20 @@
           </a-space>
         </div>
 
+        <!-- 格式信息（单文件显示实际格式；ZIP 显示格式分布；降级时显示警告） -->
+        <div v-if="task.status === 'done' && getFormatInfo(task).tags.length > 0" class="task-format">
+          <component
+            v-if="task.degraded"
+            :is="WarningOutlined"
+            class="degraded-icon"
+          />
+          <template v-for="(tag, idx) in getFormatInfo(task).tags" :key="idx">
+            <a-tag :color="tag.color" class="format-tag">
+              {{ tag.text }}
+            </a-tag>
+          </template>
+        </div>
+
         <!-- 错误信息 -->
         <a-collapse
           v-if="task.errors && task.errors.length > 0"
@@ -197,7 +211,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import * as icons from '@ant-design/icons-vue'
 const {
@@ -211,6 +225,7 @@ const {
   CloudDownloadOutlined,
   DeleteOutlined,
   AlertCircleOutlined = icons.WarningOutlined,
+  WarningOutlined,
   CloseOutlined,
   TrashOutlined
 } = icons
@@ -272,6 +287,68 @@ const formatFileSize = (bytes) => {
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }
+
+// 格式颜色映射
+const FORMAT_COLORS = {
+  flac: 'green',
+  ogg: 'orange',
+  mp3: 'blue',
+  m4a: 'cyan',
+  wav: 'purple',
+}
+
+// 格式显示名称
+const FORMAT_LABELS = {
+  flac: 'FLAC',
+  ogg: 'OGG',
+  mp3: 'MP3',
+  m4a: 'M4A',
+  wav: 'WAV',
+}
+
+// 根据 task 生成格式 tag 列表
+// 单文件：[{text: 'FLAC', color: 'green'}]
+// ZIP：[{text: 'FLAC × 10', color: 'green'}, {text: 'OGG × 2', color: 'orange'}]
+const getFormatInfo = (task) => {
+  const tags = []
+  if (task.single_file) {
+    // 单文件：直接显示 actual_format
+    const fmt = (task.actual_format || 'mp3').toLowerCase()
+    tags.push({
+      text: FORMAT_LABELS[fmt] || fmt.toUpperCase(),
+      color: FORMAT_COLORS[fmt] || 'default'
+    })
+  } else {
+    // ZIP：按格式数量倒序展示
+    const breakdown = task.format_breakdown || {}
+    const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1])
+    for (const [fmt, count] of entries) {
+      const f = fmt.toLowerCase()
+      tags.push({
+        text: `${FORMAT_LABELS[f] || f.toUpperCase()} × ${count}`,
+        color: FORMAT_COLORS[f] || 'default'
+      })
+    }
+  }
+  return { tags }
+}
+
+// 已通知过的降级任务 ID（避免重复弹窗）
+const notifiedDegradedIds = new Set()
+// 监听新完成的任务，若有降级则弹 notification
+watch(() => store.taskList.value, (tasks) => {
+  for (const t of tasks) {
+    if (t.status === 'done' && t.degraded && !notifiedDegradedIds.has(t.task_id)) {
+      notifiedDegradedIds.add(t.task_id)
+      const cnt = t.degraded_count || 1
+      const total = t.total || cnt
+      message.warning(
+        `《${t.name}》：${cnt}/${total} 首请求的无损不可用，已降级为有损格式`,
+        5
+      )
+    }
+  }
+}, { deep: true })
 
 const handleCancel = async (task) => {
   Modal.confirm({
@@ -498,6 +575,29 @@ onMounted(() => {
 
 .task-detail {
   margin-bottom: 12px;
+}
+
+/* 实际格式展示（单文件 / ZIP） */
+.task-format {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  background: var(--color-bg-muted, #f5f7fa);
+  border-radius: 6px;
+}
+
+.task-format .degraded-icon {
+  color: #fa8c16;
+  font-size: 14px;
+  margin-right: 2px;
+}
+
+.task-format .format-tag {
+  margin: 0;
+  font-size: 11px;
 }
 
 .detail-item {
