@@ -422,7 +422,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border-subtle, #e5e7eb);
 }
 
 .stats {
@@ -783,7 +782,6 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   padding-top: 12px;
-  border-top: 1px solid var(--color-border-subtle, #e5e7eb);
 }
 
 .error-msg {
