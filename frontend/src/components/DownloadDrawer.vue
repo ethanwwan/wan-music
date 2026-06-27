@@ -158,9 +158,10 @@
             取消
           </a-button>
 
-          <!-- 已完成：下载 + 删除 -->
+          <!-- 已完成：仅当有文件可下载时才显示下载按钮 -->
           <template v-else-if="task.status === 'done'">
             <a-button
+              v-if="task.file_size > 0"
               size="small"
               type="primary"
               @click="handleDownload(task)"
