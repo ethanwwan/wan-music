@@ -14,9 +14,14 @@
 ### 方式一：docker run
 
 ```bash
+# 1. 创建 cookie 目录（用于挂载，持久化登录状态）
+mkdir -p ./wan-music/cookie
+
+# 2. 启动容器
 docker run -d \
   --name wan-music \
   -p 6005:6005 \
+  -v $(pwd)/wan-music/cookie:/app/clients/cookie \
   --restart unless-stopped \
   ethanwwan/wan-music:latest
 ```
@@ -32,12 +37,18 @@ services:
     container_name: wan-music
     ports:
       - "6005:6005"
+    volumes:
+      - ./cookie:/app/clients/cookie
     restart: unless-stopped
 ```
 
 ```bash
 docker compose up -d
 ```
+
+> 💡 **为什么要挂载 cookie 目录？**  
+> 容器重建时会丢失所有数据，挂载后 `netease_cookie.txt` 持久化在宿主机，VIP 登录状态不会丢失。  
+> 文件位置：`./wan-music/cookie/netease_cookie.txt`（每行一个 `key=value` 格式，如 `MUSIC_U=xxx`）
 
 ## 🔗 链接
 
