@@ -698,6 +698,12 @@ const handleBatchDownload = async () => {
   white-space: nowrap;
 }
 
+.tracks-table th.col-pay,
+.tracks-table th.col-quality,
+.tracks-table th.col-action {
+  text-align: center;
+}
+
 .pay-tag {
   font-size: 11px;
   padding: 1px 6px;
