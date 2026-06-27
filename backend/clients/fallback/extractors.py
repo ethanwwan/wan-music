@@ -1,0 +1,348 @@
+"""通用响应提取器
+
+每个 ApiSource 在 extract_url / extract_info / extract_search / extract_lyric
+中引用这些函数（或自己定义的函数）。
+
+约定：所有提取器接收响应 dict，返回提取的数据。
+找不到时返回 None / [] / '' / {}，不抛异常。
+"""
+import re
+import time
+from typing import List, Dict, Any, Optional
+from urllib.parse import quote
+
+
+# ==================== 通用 URL 提取 ====================
+
+def extract_first_url(d: dict) -> str:
+    """从常见字段中找第一个 http URL
+
+    检查字段：url, data, download_url, song_file_url, music_url,
+             song_play_url, song_play_url_standard, song_play_url_hq
+    """
+    if not isinstance(d, dict):
+        return ''
+    # 直接字段
+    for k in ['url', 'data', 'download_url', 'song_file_url', 'music_url',
+              'song_play_url', 'song_play_url_standard', 'song_play_url_hq']:
+        v = d.get(k)
+        if isinstance(v, str) and v.startswith('http'):
+            return v
+        if isinstance(v, dict):
+            for kk in ['url', 'link', 'music_url']:
+                vv = v.get(kk)
+                if isinstance(vv, str) and vv.startswith('http'):
+                    return vv
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            vv = v[0].get('url') or v[0].get('link') or v[0].get('music_url')
+            if isinstance(vv, str) and vv.startswith('http'):
+                return vv
+    return ''
+
+
+def extract_nested_url(d: dict, *keys: str) -> str:
+    """从嵌套 dict 中按 keys 顺序查找 URL"""
+    cur = d
+    for k in keys:
+        if not isinstance(cur, dict):
+            return ''
+        cur = cur.get(k)
+    if isinstance(cur, str) and cur.startswith('http'):
+        return cur
+    if isinstance(cur, dict):
+        return extract_first_url(cur)
+    if isinstance(cur, list) and cur and isinstance(cur[0], dict):
+        return extract_first_url(cur[0])
+    return ''
+
+
+def extract_text_url(d: Any) -> str:
+    """有些 API（如 byfuns）直接返回纯文本 URL"""
+    if isinstance(d, str) and d.startswith('http'):
+        return d
+    return ''
+
+
+# ==================== 网易云特定提取器 ====================
+
+def extract_netease_official_url(d: dict) -> str:
+    """网易云官方 /eapi/song/enhance/player/url 响应
+
+    响应格式: {"data": [{"url": "..."}]}
+    """
+    if not isinstance(d, dict):
+        return ''
+    data = d.get('data')
+    if isinstance(data, list) and data:
+        url = data[0].get('url', '')
+        if url and url.startswith('http'):
+            return url
+    return ''
+
+
+def extract_xuanluoge_url(d: dict) -> str:
+    """xuanluoge 响应可能是 list 也可能是 dict
+
+    例子 1: [{"url": "https://..."}]
+    例子 2: {"data": [{"url": "https://..."}]}
+    """
+    if isinstance(d, list) and d:
+        return d[0].get('url', '') or ''
+    if isinstance(d, dict):
+        # 试 data[0].url
+        data = d.get('data')
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            return data[0].get('url', '')
+        if isinstance(data, dict):
+            return data.get('url', '')
+    return ''
+
+
+def extract_xuanluoge_song_info(d: dict) -> dict:
+    """xuanluoge getMusicInfo 响应
+
+    {"id":..., "name":..., "artists":..., "album":..., "picUrl":..., "duration":...}
+    """
+    if not isinstance(d, dict) or not d.get('id'):
+        return {}
+    return {
+        'id': d.get('id', 0),
+        'name': d.get('name', ''),
+        'artists': d.get('artists', ''),
+        'album': d.get('album', ''),
+        'picUrl': d.get('picUrl', ''),
+        'duration': d.get('duration', 0),
+    }
+
+
+def extract_netease_song_info(d: dict) -> dict:
+    """网易云官方 /api/song/detail 响应
+
+    {"songs": [{"id", "name", "artists" or "ar", "album" or "al",
+                "duration" or "dt", "fee", "noCopyrightRcmd", "st"}]}
+    """
+    songs = d.get('songs') if isinstance(d, dict) else None
+    if not songs:
+        return {}
+    s = songs[0]
+    artists = s.get('artists', s.get('ar', []))
+    album_info = s.get('album', s.get('al', {}))
+    artists_str = '/'.join(a['name'] for a in artists if isinstance(a, dict) and 'name' in a)
+    # 付费/版权标记
+    fee = s.get('fee', 0)
+    st = s.get('st', 0)
+    pay = (fee == 1) or (st < 0) or bool(s.get('noCopyrightRcmd'))
+    return {
+        'id': s.get('id', 0),
+        'name': s.get('name', ''),
+        'artists': artists_str,
+        'album': album_info.get('name', '') if isinstance(album_info, dict) else '',
+        'picUrl': album_info.get('picUrl', '') if isinstance(album_info, dict) else '',
+        'duration': s.get('duration') or s.get('dt') or 0,
+        'pay': pay,
+        'fee': fee,
+    }
+
+
+def extract_gdstudio_song_info(d: dict) -> dict:
+    """gdstudio /api.php?types=info 响应"""
+    if not isinstance(d, dict) or not d.get('id'):
+        return {}
+    artists = d.get('artist', [])
+    if isinstance(artists, list):
+        artists_str = '/'.join(str(a) for a in artists)
+    else:
+        artists_str = str(artists or '')
+    return {
+        'id': int(d.get('id', 0)),
+        'name': d.get('name', ''),
+        'artists': artists_str,
+        'album': d.get('album', ''),
+        'picUrl': '',
+        'duration': 0,
+    }
+
+
+def extract_haitangw_song_info(d: dict) -> str:
+    """haitangw parse 端点返回 data 里只有元信息，但据说 url 也在
+
+    响应: {"code":200, "data":{"rid":..., "name":..., "artist":..., ...}}
+    """
+    if not isinstance(d, dict):
+        return ''
+    data = d.get('data', {})
+    if isinstance(data, dict):
+        # haitanw 不会返回完整 url，跳过
+        return ''
+    return ''
+
+
+def extract_netease_official_search(d: dict) -> list:
+    """网易云 /api/cloudsearch/pc 响应
+
+    {"result": {"songs": [...], "songCount": N}}
+    """
+    result = d.get('result', {}) if isinstance(d, dict) else {}
+    return result.get('songs', []) if isinstance(result, dict) else []
+
+
+def extract_netease_official_lyric(d: dict) -> str:
+    """网易云 /api/song/lyric 响应"""
+    if not isinstance(d, dict):
+        return ''
+    lrc = d.get('lrc', {})
+    if isinstance(lrc, dict):
+        return lrc.get('lyric', '') or ''
+    return ''
+
+
+def extract_netease_search(d: dict) -> list:
+    """通用网易云搜索结果提取（统一接口）
+
+    支持官方、gdstudio、xuanluoge 等多种响应格式
+    """
+    if not isinstance(d, dict):
+        return []
+    # 官方 cloudsearch 格式
+    if 'result' in d and isinstance(d['result'], dict):
+        return d['result'].get('songs', [])
+    # gdstudio 直接返回 list
+    if isinstance(d.get('data'), list):
+        return d['data']
+    # 其它: xuanluoge 返回 list of dict
+    if 'songs' in d and isinstance(d['songs'], list):
+        return d['songs']
+    return []
+
+
+# ==================== 关键词转义 ====================
+
+def url_quote(s: str) -> str:
+    """URL 编码，支持中文"""
+    return quote(str(s), safe='')
+
+
+# ==================== 质量码映射 ====================
+
+QUALITY_BR_MAP = {
+    # platform: quality -> bitrate (kbps)
+    'standard': 128,
+    'exhigh': 320,
+    'lossless': 999,
+    'hires': 999,
+    'jymaster': 999,
+}
+
+
+def quality_to_br(quality: str, default: int = 999) -> int:
+    """将 quality 名称转为 bitrate 数（kbps）"""
+    return QUALITY_BR_MAP.get(quality, default)
+
+
+# ==================== SongInfo 标准化 ====================
+
+def normalize_netease_song(raw: dict) -> dict:
+    """将任意来源的歌曲 dict 标准化为前端期望的格式
+
+    输入可能是官方（ar/al 字段）、gdstudio（artist 列表）、xuanluoge（artists 字符串）
+    输出统一为 {id, name, artists, album, picUrl, duration, source, api_source}
+    """
+    if not isinstance(raw, dict):
+        return {}
+    # artist 字段可能在多个名字下
+    artists = raw.get('artists') or raw.get('artist') or raw.get('ar', [])
+    if isinstance(artists, list):
+        artists_str = '/'.join(
+            (a.get('name', '') if isinstance(a, dict) else str(a))
+            for a in artists
+        )
+    else:
+        artists_str = str(artists or '')
+
+    # album 字段
+    album = raw.get('album') or raw.get('al') or ''
+    if isinstance(album, dict):
+        album = album.get('name', '')
+
+    # picUrl 字段
+    pic = raw.get('picUrl') or raw.get('pic') or ''
+    if isinstance(pic, dict):
+        pic = pic.get('url', '')
+
+    # duration
+    dur = raw.get('duration') or raw.get('dt') or 0
+    try:
+        dur = int(dur)
+    except (TypeError, ValueError):
+        dur = 0
+
+    return {
+        'id': str(raw.get('id') or raw.get('rid') or ''),
+        'name': raw.get('name') or raw.get('title') or '',
+        'artists': artists_str,
+        'album': album,
+        'picUrl': pic,
+        'duration': dur,
+        'pay': bool(raw.get('pay') or raw.get('fee') == 1),
+        'fee': raw.get('fee', 0),
+    }
+
+
+def normalize_qq_song(raw: dict) -> dict:
+    """QQ 歌曲标准化"""
+    if not isinstance(raw, dict):
+        return {}
+    singers = raw.get('singer') or raw.get('singers') or []
+    if isinstance(singers, list):
+        artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
+    else:
+        artists_str = str(singers or '')
+
+    album_info = raw.get('album') or {}
+    if isinstance(album_info, dict):
+        album_name = album_info.get('name', album_info.get('title', ''))
+    else:
+        album_name = str(album_info or '')
+
+    return {
+        'id': str(raw.get('id') or raw.get('mid') or raw.get('songid') or ''),
+        'name': raw.get('name') or raw.get('title') or raw.get('songname') or '',
+        'artists': artists_str,
+        'album': album_name,
+        'picUrl': raw.get('picUrl') or '',
+        'duration': raw.get('duration') or raw.get('interval') or 0,
+    }
+
+
+def normalize_kugou_song(raw: dict) -> dict:
+    """酷狗歌曲标准化"""
+    if not isinstance(raw, dict):
+        return {}
+    singers = raw.get('Singers') or raw.get('singers') or []
+    if isinstance(singers, list):
+        artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
+    else:
+        artists_str = str(singers or '')
+
+    return {
+        'id': str(raw.get('FileHash') or raw.get('hash') or raw.get('id') or ''),
+        'name': raw.get('SongName') or raw.get('name') or raw.get('songname') or '',
+        'artists': artists_str,
+        'album': raw.get('AlbumName') or raw.get('album') or '',
+        'picUrl': '',
+        'duration': raw.get('Duration') or raw.get('duration') or 0,
+    }
+
+
+def normalize_bodian_song(raw: dict) -> dict:
+    """波点歌曲标准化"""
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        'id': str(raw.get('id') or raw.get('rid') or raw.get('musicRid') or ''),
+        'name': raw.get('name') or raw.get('songName') or raw.get('FSONGNAME') or '',
+        'artists': raw.get('artist') or raw.get('artists') or '',
+        'album': raw.get('album') or raw.get('albumName') or '',
+        'picUrl': '',
+        'duration': raw.get('duration') or raw.get('Duration') or 0,
+    }

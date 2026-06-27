@@ -109,9 +109,13 @@ class MusicClient:
         return client
     
     def search(self, keyword: str, platform: str = None, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
-        """搜索歌曲"""
+        """搜索歌曲（新版 client.search 返回 {data, total, ...}，提取 data 字段）"""
         client = self._get_client(platform)
-        return client.search(keyword, limit, offset, quality=quality)
+        result = client.search(keyword, limit, offset, quality=quality)
+        # 兼容老格式（直接 list）和新格式（dict with 'data' key）
+        if isinstance(result, dict):
+            return result.get('data', []) or []
+        return result or []
 
     def search_playlist(self, keyword: str, platform: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """搜索歌单"""
