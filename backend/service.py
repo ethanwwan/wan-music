@@ -138,9 +138,15 @@ class MusicService:
         return {'type': 0, 'data': [], 'error': f'暂不支持解析{resource_type}类型', 'warnings': []}
 
     def _search_by_keyword(self, keyword: str, search_type: int, platform: str, limit: int, quality: str = 'lossless') -> Dict[str, Any]:
-        """关键字搜索"""
+        """关键字搜索
+
+        错误处理策略：
+        - 单平台失败：放进 warnings['platform_errors']，不阻断（多平台降级）
+        - 全部平台都失败且无数据：返回 error 字段
+        """
         items = []
         warnings = []
+        platform_errors = []  # 各平台错误详情
 
         if search_type in (0, 1):
             try:
@@ -149,7 +155,9 @@ class MusicService:
                     s['_type'] = 'song'
                 items.extend(songs)
             except Exception as e:
-                logger.error(f"搜索歌曲失败: {e}")
+                msg = f"歌曲搜索失败: {e}"
+                logger.error(f"[{platform}] {msg}")
+                platform_errors.append({'platform': platform, 'type': 'song', 'message': str(e)})
 
         if search_type in (0, 2):
             try:
@@ -158,11 +166,29 @@ class MusicService:
                     p['_type'] = 'playlist'
                 items.extend(playlists)
             except Exception as e:
-                logger.error(f"搜索歌单失败: {e}")
+                msg = f"歌单搜索失败: {e}"
+                logger.error(f"[{platform}] {msg}")
+                platform_errors.append({'platform': platform, 'type': 'playlist', 'message': str(e)})
 
             # 标记歌单搜索不支持的平台（用于前端 UI 提示）
             if platform in ('kugou', 'bodian'):
                 warnings.append('playlist_search_unsupported')
+
+        # 把平台错误透传给前端
+        if platform_errors:
+            warnings.append({'code': 'platform_errors', 'details': platform_errors})
+
+        # 判断是否"全部平台都失败"（有错误但一条结果都没拿到）
+        if platform_errors and not items:
+            error_msg = '; '.join(
+                f"{e['platform']}: {e['message']}" for e in platform_errors
+            )
+            return {
+                'type': search_type,
+                'data': [],
+                'warnings': warnings,
+                'error': f'所有平台搜索均失败 ({error_msg})'
+            }
 
         return {'type': search_type, 'data': items, 'warnings': warnings}
 

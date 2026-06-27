@@ -306,6 +306,11 @@ export const unifiedSearch = async (keyword, type = 0, sources = ['netease'], qu
       if (!songResult.success || !playlistResult.success) {
         return { success: false, error: (songResult.message || playlistResult.message || '搜索失败') }
       }
+      // 任一类型完全失败 → 整体失败
+      if (songResult.data?.error && !songResult.data.data?.length &&
+          playlistResult.data?.error && !playlistResult.data.data?.length) {
+        return { success: false, error: `${songResult.data.error}; ${playlistResult.data.error}` }
+      }
       const songData = songResult.data?.data || []
       const playlistData = playlistResult.data?.data || []
       items = [...songData, ...playlistData]
@@ -320,6 +325,10 @@ export const unifiedSearch = async (keyword, type = 0, sources = ['netease'], qu
       const result = await _doSearch(keyword, type, sources, quality, limit)
       if (!result.success || !result.data) {
         return { success: false, error: result.message || '搜索失败' }
+      }
+      // 后端标记"所有平台失败" → 透传错误
+      if (result.data.error) {
+        return { success: false, error: result.data.error }
       }
       items = result.data.data || []
       warnings = result.data.warnings || []

@@ -50,7 +50,10 @@ const doSearch = async (keyword, searchType, sources, fromButton) => {
 
     if (fromButton) {
       const totalCount = (data.songs?.length || 0) + (data.playlists?.length || 0)
-      if (totalCount > 0) {
+      if (result.error) {
+        // 真实错误（网络/后端），优先显示后端消息
+        message.error(`搜索失败：${result.error}`)
+      } else if (totalCount > 0) {
         notifySearchResult(totalCount, result.fromCache)
       } else if (!(searchType === 2 && searchWarnings.value.includes('playlist_search_unsupported'))) {
         // 该情况由 UI 展示专门提示，这里不再通用 warn
