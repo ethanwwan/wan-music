@@ -673,7 +673,15 @@ onMounted(() => {
 }
 
 .task-progress {
-  margin-bottom: 8px;
+  margin: 4px 0;
+}
+
+/* 进度条更细：从默认 8px 改为 4px */
+.task-progress :deep(.ant-progress-outer) {
+  height: 4px !important;
+}
+.task-progress :deep(.ant-progress-bg) {
+  height: 4px !important;
 }
 
 .task-detail {
