@@ -524,6 +524,14 @@ const handleBatchDownload = async () => {
   background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-white) 100%);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .detail-cover-wrapper {
   flex-shrink: 0;
 }
@@ -549,7 +557,6 @@ const handleBatchDownload = async () => {
 .detail-info {
   flex: 1;
   min-width: 0;
-  padding-left: 1rem;
 }
 
 .detail-name {
