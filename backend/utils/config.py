@@ -40,17 +40,25 @@ def load_config() -> dict:
         return {}
 
 
-def resolve_port(default: int = 6005) -> int:
+def resolve_port(mode: str = 'prod', default: Optional[int] = None) -> int:
     """解析后端服务端口
 
-    优先级：环境变量 PORT / BACKEND_PORT > config.json:backend.prodBackendPort > 默认值
+    Args:
+        mode: 'dev' 用 devBackendPort（Flask dev server），'prod' 用 prodBackendPort（gunicorn / Docker）
+        default: 兜底端口；dev 默认 5005，prod 默认 6005
+
+    优先级：环境变量 PORT / BACKEND_PORT > config.json:backend.{mode}BackendPort > default
     """
+    if default is None:
+        default = 5005 if mode == 'dev' else 6005
+
     env_port = os.environ.get('PORT') or os.environ.get('BACKEND_PORT')
     if env_port:
         return int(env_port)
 
     cfg = load_config().get('backend', {})
-    if p := cfg.get('prodBackendPort'):
+    key = 'devBackendPort' if mode == 'dev' else 'prodBackendPort'
+    if p := cfg.get(key):
         return int(p)
 
     return default

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.config import resolve_port  # noqa: E402
 
-bind = f'0.0.0.0:{resolve_port()}'
+bind = f'0.0.0.0:{resolve_port(mode="prod")}'
 workers = int(os.environ.get('GUNICORN_WORKERS', '2'))
 threads = int(os.environ.get('GUNICORN_THREADS', '4'))
 timeout = int(os.environ.get('GUNICORN_TIMEOUT', '120'))

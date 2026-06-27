@@ -56,8 +56,8 @@ def internal_error(error):
 
 
 def _resolve_default_port() -> int:
-    """从项目根 config.json 解析默认端口（与 gunicorn.conf.py 共用 resolve_port）"""
-    return resolve_port()
+    """从项目根 config.json 解析 dev 端口（与 gunicorn.conf.py 共用 resolve_port）"""
+    return resolve_port(mode='dev')
 
 
 if __name__ == '__main__':
