@@ -43,7 +43,3 @@ docker compose up -d
 
 - GitHub: <https://github.com/ethanwwan/wan-music>
 - 完整文档: <https://github.com/ethanwwan/wan-music/blob/main/README.md>
-
-## 📄 License
-
-MIT
