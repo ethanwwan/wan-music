@@ -9,7 +9,7 @@
 - 🎵 **多平台支持**：网易云、QQ音乐、波点音乐、酷狗音乐
 - 🔍 **歌曲/歌单搜索**：跨平台统一搜索接口
 - ⬇️ **批量下载**：自动写入 ID3 标签（标题、歌手、专辑、歌词、封面）
-- 🐳 **一键部署**：Docker 多架构镜像（amd64 + arm64）
+- 🐳 **一键部署**：Docker 镜像（linux/amd64）
 - 🎨 **现代 Web UI**：Vue 3 + Vite + Ant Design Vue
 
 ## ⚙️ 统一配置
@@ -137,9 +137,9 @@ git tag -a v1.0.0 -m "Release 1.0.0"
 git push origin v1.0.0
 
 # GitHub Actions 自动：
-# 1) 构建多架构镜像 (linux/amd64 + linux/arm64)
-# 2) 推送到 Docker Hub
-# 3) Trivy 漏洞扫描
+# 1) 构建镜像 (linux/amd64)
+# 2) 推送到 Docker Hub（去 v 前缀，例如 v1.0.0 → 1.0.0）
+# 3) 同步 README 到 Docker Hub 描述
 # 4) 创建 GitHub Release
 ```
 
@@ -175,13 +175,10 @@ cd deploy && docker compose up -d
 
 | 事件 | 触发结果 |
 |------|---------|
-| `git push origin main` | 构建并推送 `:latest` + `:sha-<short>` |
-| `git push origin v1.2.3` | 构建并推送 `:v1.2.3` + `:1.2` + `:1` + `:latest` |
-| `git push origin v1.2.3-rc1` | 构建并推送 `:v1.2.3-rc1`（预发布） |
-| `pull_request` | 只构建不推送（用于验证） |
-| `workflow_dispatch` | 手动指定 tag |
+| `git push origin v1.2.3` | 构建并推送 `:1.2.3` + `:1.2` + `:1` + `:latest` |
+| `git push origin v1.2.3-rc1` | 构建并推送 `:1.2.3-rc1`（预发布） |
 
-镜像同时支持 `linux/amd64` 和 `linux/arm64`（Apple Silicon / Graviton / Raspberry Pi 4+）。
+镜像支持 `linux/amd64`。
 
 ### 拉取预构建镜像
 
@@ -237,7 +234,6 @@ server {
 
 - 非 root 用户运行（`wanmusic`）
 - 多阶段构建（不包含构建工具）
-- Trivy 自动漏洞扫描
 - `.dockerignore` 排除 cookie / .env / node_modules
 
 ## 📄 许可证
