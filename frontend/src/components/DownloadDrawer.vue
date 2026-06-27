@@ -520,54 +520,94 @@ onMounted(() => {
   flex: 1;
 }
 
+/* 任务卡片：使用阴影区分状态（更精致、更现代） */
 .task-card {
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   border-radius: 12px;
-  /* 统一使用主题变量，自动适配深浅色模式 */
   background: var(--color-surface-white, #fff);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-left: 4px solid var(--color-border-subtle, #e5e7eb); /* 默认统一边框 */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-/* 各种状态通过左侧色条 + 微妙背景区分 */
-/* 正常下载中：蓝色脉冲边框 + 微妙蓝色背景 + 微动画 */
-.task-card.status-running {
-  border-left-color: #3b82f6;
-  background: var(--color-bg-soft-blue, rgba(59, 130, 246, 0.05));
-  position: relative;
-  overflow: hidden;
+.task-card:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 8px 16px rgba(0, 0, 0, 0.08);
 }
 
-.task-card.status-running::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: linear-gradient(180deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%);
-  background-size: 100% 200%;
-  animation: running-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes running-pulse {
-  0%, 100% { background-position: 0 0; }
-  50% { background-position: 0 100%; }
-}
-
-.task-card.status-done {
-  border-left-color: #10b981;
-}
-
+/* 同步中：橙色辉光阴影 */
 .task-card.status-pending {
-  border-left-color: #fa8c16;
-  background: var(--color-bg-soft, rgba(250, 140, 22, 0.04));
+  box-shadow:
+    0 0 0 1px rgba(250, 140, 22, 0.15),
+    0 2px 8px rgba(250, 140, 22, 0.18),
+    0 4px 16px rgba(250, 140, 22, 0.10);
 }
 
+.task-card.status-pending:hover {
+  box-shadow:
+    0 0 0 1px rgba(250, 140, 22, 0.25),
+    0 4px 12px rgba(250, 140, 22, 0.24),
+    0 8px 24px rgba(250, 140, 22, 0.14);
+}
+
+/* 下载中：蓝色脉冲阴影（核心动画） */
+.task-card.status-running {
+  position: relative;
+  animation: running-shadow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes running-shadow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(59, 130, 246, 0.20),
+      0 2px 8px rgba(59, 130, 246, 0.20),
+      0 4px 16px rgba(59, 130, 246, 0.10);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(59, 130, 246, 0.35),
+      0 4px 16px rgba(59, 130, 246, 0.32),
+      0 8px 24px rgba(59, 130, 246, 0.18);
+  }
+}
+
+.task-card.status-running:hover {
+  animation-play-state: paused;
+  box-shadow:
+    0 0 0 1px rgba(59, 130, 246, 0.40),
+    0 4px 16px rgba(59, 130, 246, 0.32),
+    0 8px 24px rgba(59, 130, 246, 0.18);
+}
+
+/* 已完成：绿色辉光阴影（表示成功） */
+.task-card.status-done {
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.15),
+    0 2px 8px rgba(16, 185, 129, 0.18),
+    0 4px 16px rgba(16, 185, 129, 0.10);
+}
+
+.task-card.status-done:hover {
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.25),
+    0 4px 12px rgba(16, 185, 129, 0.24),
+    0 8px 24px rgba(16, 185, 129, 0.14);
+}
+
+/* 失败/取消：灰暗阴影 + 透明度 */
 .task-card.status-error,
 .task-card.status-cancelled {
-  border-left-color: #9ca3af;
-  opacity: 0.85;
+  opacity: 0.75;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.task-card.status-error:hover,
+.task-card.status-cancelled:hover {
+  opacity: 0.9;
 }
 
 .task-head {
