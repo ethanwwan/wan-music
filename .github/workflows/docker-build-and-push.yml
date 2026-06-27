@@ -1,0 +1,179 @@
+name: Docker Build and Push
+
+# ============================================================
+# 触发条件：
+#   1) push tag (v*.*.* 或 v*.*.*-*)  → 构建并推送镜像到 Docker Hub
+#   2) push main                     → 构建并推送 latest 镜像（不发布 Release）
+#   3) pull_request                  → 只构建不推送（用于验证）
+# ============================================================
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '手动指定 tag（例如 v1.0.0）'
+        required: true
+        default: 'manual'
+
+# 避免重复运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Docker Hub 配置（通过 GitHub Secrets 注入）
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/wan-music
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ============================================================
+      # 镜像 tag 策略
+      #   push tag v1.2.3      → :v1.2.3, :1.2, :1, :latest (only when main)
+      #   push tag v1.2.3-rc1  → :v1.2.3-rc1
+      #   push main            → :latest, :sha-<short>
+      #   PR                   → 不推送（仅 build）
+      #   manual               → 使用输入的 tag
+      # ============================================================
+
+      - name: Extract metadata (tag)
+        id: meta-tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata (main)
+        id: meta-main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata (manual)
+        id: meta-manual
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # tag 推送：v1.2.3 → 多个 tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # main 分支额外加 :latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            # commit sha 短码
+            type=sha,format=short
+            # 手动触发
+            type=raw,value=${{ inputs.tag }},enable={{is_event_workflow_dispatch}}
+          labels: |
+            org.opencontainers.image.title=Wan Music
+            org.opencontainers.image.description=多平台音乐搜索/解析/下载
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push (tag/main)
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 构建缓存：加速重复构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        if: github.event_name != 'pull_request' && always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            ## 🐳 Docker 镜像
+
+            镜像已推送到 Docker Hub：
+
+            ```bash
+              # 拉取指定版本
+              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/wan-music:${{ github.ref_name }}
+
+              # 启动服务
+              docker run -d \
+                --name wan-music \
+                -p 5002:5002 \
+                --restart unless-stopped \
+                ${{ secrets.DOCKERHUB_USERNAME }}/wan-music:${{ github.ref_name }}
+
+              # 或使用 docker compose
+              WAN_MUSIC_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/wan-music:${{ github.ref_name }} \
+                docker compose up -d
+            ```
+
+            **访问地址**：`http://localhost:5002`

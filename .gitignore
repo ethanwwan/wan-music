@@ -37,9 +37,6 @@ frontend/dist/
 # docker-compose*.yml
 .dockerignore
 
-# CI/CD
-.github/
-
 # Node
 node_modules/
 frontend/node_modules/
