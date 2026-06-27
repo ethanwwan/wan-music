@@ -85,11 +85,11 @@
             <div class="cache-info">
               <span class="size-text">{{ cacheSize }}</span>
               <a-button
-                type="primary"
+                class="clear-cache-btn"
+                type="text"
                 danger
                 size="small"
                 :loading="clearingCache"
-                class="clear-cache-btn"
                 @click="handleClearCache"
               >
                 <template #icon><DeleteOutlined /></template>

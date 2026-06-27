@@ -75,7 +75,16 @@
       <div v-if="historyRecords.length > 0" class="history-section">
         <div class="history-header">
           <span class="history-label">历史解析</span>
-          <span class="history-clear" @click="handleClearHistory">清除历史</span>
+          <a-button
+            class="clear-action-btn"
+            type="text"
+            danger
+            size="small"
+            @click="handleClearHistory"
+          >
+            <template #icon><DeleteOutlined /></template>
+            清除历史
+          </a-button>
         </div>
         <div class="history-tags">
           <span
@@ -95,6 +104,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
 import { platforms, loadPlatforms } from '../utils/platformsManager.js'
@@ -409,16 +419,6 @@ defineExpose({ addHistoryRecord })
   font-size: var(--font-size-body-sm);
 }
 
-.history-clear {
-  cursor: pointer;
-  transition: color 0.2s;
-  font-size: var(--font-size-body-sm);
-  color: var(--color-text-muted);
-}
-
-.history-clear:hover {
-  color: var(--color-error);
-}
 
 .history-tags {
   display: flex;
