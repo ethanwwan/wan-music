@@ -62,6 +62,7 @@ def _extract_pay_and_quality(track: dict, quality: str = 'lossless') -> dict:
 class NeteaseAPISource(Enum):
     """网易云API源枚举"""
     OFFICIAL = "official"
+    GDSTUDIO = "gdstudio"
     XUANLUOGE = "xuanluoge"
     HAITANGW = "haitangw"
 
@@ -87,6 +88,8 @@ class APIConstants:
 
     XUANLUOGE_URL = "http://118.24.104.108:3456/api.php"
     HAITANGW_URL = "https://musicapi.haitangw.net/music/wy.php"
+    # gdstudio - musicdl 列表里唯一还活着的网易云 search 端点
+    GDSTUDIO_URL = "https://music-api.gdstudio.xyz/api.php"
 
     COOKIE_FILE_PATH = "netease_cookie.txt"
 
@@ -188,29 +191,36 @@ class NeteaseClient(BaseMusicClient):
     def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
         """搜索歌曲
 
-        简化策略：
-        - 有 cookie → 走官方 API
-        - 无 cookie → 走第三方 API（xuanluoge → haitangw）
+        策略（参考 musicdl）：始终官方优先 + 多源降级
+        1. 官方 cloudsearch（POST，无 cookie 也能搜到结果；带 cookie 能拿到付费标记）
+        2. gdstudio（musicdl 列表中唯一仍可用的网易云 search 端点）
+        3. xuanluoge / haitangw（已失效但作为最后兜底）
         """
-        # 有 cookie：使用官方 API
-        if self._has_cookie:
-            songs = self._search_official(keyword, limit, offset, quality)
-            if not songs:
-                logger.warning(f"[{self.platform_name}] 搜索无结果 keyword={keyword!r} (官方API, cookie 可能失效)")
+        # 1. 官方 API：不带 cookie 也能搜到基础结果
+        songs = self._search_official(keyword, limit, offset, quality)
+        if songs:
             return songs
 
-        # 无 cookie：直接走第三方 API
-        logger.debug(f"[{self.platform_name}] 未配置 cookie，直接使用第三方 API")
+        # 2. gdstudio fallback
+        logger.info(f"[{self.platform_name}] 官方搜索无结果，尝试 gdstudio")
+        songs = self._search_gdstudio(keyword, limit)
+        if songs:
+            return songs
+
+        # 3. xuanluoge / haitangw 兜底（已不稳定，保留兼容）
         songs = self._search_xuanluoge(keyword, limit)
         if songs:
             return songs
         songs = self._search_haitangw(keyword, limit)
         if not songs:
-            logger.warning(f"[{self.platform_name}] 搜索无结果 keyword={keyword!r} (第三方 API 全部失败)")
+            logger.warning(f"[{self.platform_name}] 搜索无结果 keyword={keyword!r} (所有源失败)")
         return songs
 
     def _search_official(self, keyword: str, limit: int, offset: int, quality: str) -> List[Dict[str, Any]]:
-        """官方 API 搜索（依赖 cookie）"""
+        """官方 API 搜索（无需 cookie，带 cookie 时返回更完整的付费标记）
+
+        musicdl 用 POST，我们 POST/GET 都验证过一致。
+        """
         url = APIConstants.SEARCH_API
         params = {
             's': keyword,
@@ -241,6 +251,49 @@ class NeteaseClient(BaseMusicClient):
             return songs
         except Exception as e:
             logger.error(f"[{self.platform_name}] 官方 API 搜索失败: {e}")
+            return []
+
+    def _search_gdstudio(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
+        """gdstudio 第三方搜索（musicdl 验证过可用的网易云 search 端点）"""
+        try:
+            url = f"{APIConstants.GDSTUDIO_URL}?types=search&source=netease&name={urllib.parse.quote(keyword)}&count={limit}"
+            data = self._get(url, timeout=15)
+            if not isinstance(data, list) or not data:
+                return []
+
+            songs = []
+            for item in data[:limit]:
+                if not isinstance(item, dict):
+                    continue
+                # gdstudio 返回的 id 是字符串，统一转 int
+                try:
+                    sid = int(item.get('id', 0))
+                except (TypeError, ValueError):
+                    continue
+                if not sid:
+                    continue
+                artists_raw = item.get('artist', [])
+                if isinstance(artists_raw, list):
+                    artists = '/'.join(a for a in artists_raw if a)
+                else:
+                    artists = str(artists_raw or '')
+                songs.append({
+                    'id': sid,
+                    'name': item.get('name', ''),
+                    'artists': artists,
+                    'album': item.get('album', ''),
+                    'picUrl': '',  # gdstudio 返回 pic_id，需要额外查；前端会用 name 占位
+                    'artist_string': artists,
+                    'source': 'netease',
+                    'api_source': 'gdstudio',
+                    'duration': 0,
+                    'payInfo': {'free': True, 'vipOnly': False, 'label': '免费'},
+                    'qualityMap': {},
+                    'bestQuality': '',
+                })
+            return songs
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] gdstudio 搜索失败: {e}")
             return []
 
     def _search_xuanluoge(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
