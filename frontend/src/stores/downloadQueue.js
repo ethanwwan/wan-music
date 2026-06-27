@@ -23,41 +23,6 @@ const drawerOpen = ref(false)
 /** 任务订阅句柄：Map<taskId, unsubscribeFn> */
 const subscriptions = new Map()
 
-// ==================== localStorage 持久化 ====================
-
-const STORAGE_KEY = 'wan-music-download-queue'
-
-/**
- * 持久化 task_id 列表（仅存 id 和元数据，不存进度）
- * 进度信息从后端获取
- */
-const persistTaskIds = () => {
-  try {
-    const data = Array.from(tasks.value.values()).map(t => ({
-      task_id: t.task_id,
-      name: t.name,
-      created_at: t.created_at
-    }))
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch (e) {
-    console.error('[downloadQueue] 持久化失败:', e)
-  }
-}
-
-/**
- * 加载持久化的 task_id 列表
- */
-const loadPersistedTaskIds = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return []
-    return JSON.parse(stored)
-  } catch (e) {
-    console.error('[downloadQueue] 加载持久化失败:', e)
-    return []
-  }
-}
-
 // ==================== 任务管理 ====================
 
 /**
@@ -370,27 +335,17 @@ const completedCount = computed(() => {
 // ==================== 初始化 ====================
 
 /**
- * 启动时初始化：从 localStorage 加载 task_id + 同步后端
+ * 启动时初始化：直接同步后端任务列表
+ * 旧的 localStorage 占位任务已移除（无意义的 100ms 占位闪烁）
  */
 const init = async () => {
-  const persisted = loadPersistedTaskIds()
-  for (const item of persisted) {
-    tasks.value.set(item.task_id, {
-      task_id: item.task_id,
-      name: item.name,
-      status: 'pending',  // 标记为待同步
-      total: 0,
-      completed: 0,
-      failed: 0,
-      current: '同步中...',
-      file_size: 0,
-      errors: [],
-      error: '',
-      created_at: item.created_at,
-      completed_at: 0
-    })
+  // 清理过时的 localStorage 记录（如果还有的话）
+  // localStorage 现在不再用于持久化任务，因为后端是真实数据源
+  try {
+    localStorage.removeItem('wan-music-download-tasks')
+  } catch (e) {
+    // 忽略
   }
-  tasks.value = new Map(tasks.value)
   await syncWithBackend()
 }
 

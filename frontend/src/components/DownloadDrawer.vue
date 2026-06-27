@@ -244,8 +244,7 @@ const statusLabel = (status) => {
     running: '进行中',
     done: '已完成',
     error: '失败',
-    cancelled: '已取消',
-    pending: '同步中...'
+    cancelled: '已取消'
   }
   return labels[status] || status
 }
@@ -255,8 +254,7 @@ const getStatusColor = (status) => {
     running: 'blue',
     done: 'green',
     error: 'error',
-    cancelled: 'default',
-    pending: 'orange'
+    cancelled: 'default'
   }
   return colors[status] || 'default'
 }
@@ -547,26 +545,6 @@ onMounted(() => {
     0 0 16px rgba(0, 0, 0, 0.08),
     0 4px 8px rgba(0, 0, 0, 0.06),
     0 12px 28px rgba(0, 0, 0, 0.12) !important;
-}
-
-/* 同步中：橙色辉光（四方向均匀，使用更大的模糊半径和更高不透明度） */
-.task-card.status-pending {
-  box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.35),
-    0 0 12px rgba(250, 140, 22, 0.30),
-    0 0 24px rgba(250, 140, 22, 0.20),
-    0 2px 4px rgba(250, 140, 22, 0.20),
-    0 6px 18px rgba(250, 140, 22, 0.18) !important;
-}
-
-.task-card.status-pending:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.50),
-    0 0 16px rgba(250, 140, 22, 0.40),
-    0 0 32px rgba(250, 140, 22, 0.25),
-    0 4px 8px rgba(250, 140, 22, 0.24),
-    0 10px 28px rgba(250, 140, 22, 0.20) !important;
 }
 
 /* 下载中：蓝色脉冲阴影（核心动画，使用更强的颜色） */
