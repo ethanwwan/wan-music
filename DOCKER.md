@@ -39,17 +39,6 @@ services:
 docker compose up -d
 ```
 
-## ⚙️ 配置
-
-| 环境变量 | 默认 | 说明 |
-|---------|------|------|
-| `PORT` | `6005` | 服务端口 |
-
-## 🏷️ 镜像标签
-
-- `latest` — 最新稳定版
-- `1.0.0` — 完整版本号（生产环境推荐固定）
-
 ## 🔗 链接
 
 - GitHub: <https://github.com/ethanwwan/wan-music>
