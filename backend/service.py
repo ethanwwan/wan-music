@@ -36,23 +36,6 @@ from utils.metadata import write_metadata as _write_metadata
 
 logger = logging.getLogger(__name__)
 
-# 用户请求的"无损"音质（请求的是无损但实际拿到有损时算降级）
-_LOSSLESS_QUALITIES = frozenset({
-    'lossless', 'flac',
-    'master', 'jymaster',  # 母带
-    'hires', 'jyeffect',    # 高解析
-    'sky', 'dolby',         # 全景声
-})
-
-
-def _is_lossless_requested(quality: str) -> bool:
-    return quality in _LOSSLESS_QUALITIES
-
-
-def _is_lossless_format(fmt: str) -> bool:
-    return (fmt or '').lower().lstrip('.') == 'flac'
-
-
 # ==================== Music Service ====================
 
 class MusicService:
@@ -403,11 +386,6 @@ class BatchDownloadService:
             'completed_at': task.get('completed_at', 0),
             'single_file': task.get('single_file', False),
             'file_size': task.get('file_size', 0),
-            # 实际格式信息（用于前端展示）
-            'actual_format': task.get('actual_format'),
-            'degraded': task.get('degraded', False),
-            'degraded_count': task.get('degraded_count', 0),
-            'format_breakdown': task.get('format_breakdown', {}),
         }
 
     def _process_song(self, item: dict, settings: dict):
@@ -484,18 +462,11 @@ class BatchDownloadService:
                                     settings.get('filenameFormat', 'song-artist'))
                 )
 
-                # actual_format: 真实格式（magic bytes 检测后的小写扩展名，不含点）
-                actual_format = extension.lstrip('.') or 'mp3'
-                # 是否降级：用户请求的是无损，但实际拿到的是有损
-                degraded = _is_lossless_requested(quality) and not _is_lossless_format(actual_format)
-
                 return {
                     'tmp_path': tmp_path,
                     'arcname': arcname,
                     'lrc_content': None,
                     'name': name,
-                    'actual_format': actual_format,  # 用于前端展示实际格式
-                    'degraded': degraded,            # 是否从无损降级为有损
                 }
             except Exception as e:
                 last_error = e
@@ -563,15 +534,9 @@ class BatchDownloadService:
 
         # Phase 2: 单曲直接保留，多首打包 zip
         try:
-            # 统计实际格式分布
-            format_breakdown: dict[str, int] = {}
-            degraded_count = 0
+            # 累加实际文件大小（用于覆盖估算）
             actual_size_total = 0
             for r in completed_results:
-                fmt = r.get('actual_format', 'mp3')
-                format_breakdown[fmt] = format_breakdown.get(fmt, 0) + 1
-                if r.get('degraded'):
-                    degraded_count += 1
                 try:
                     actual_size_total += os.path.getsize(r['tmp_path'])
                 except OSError:
@@ -588,10 +553,6 @@ class BatchDownloadService:
                     task['single_file'] = True
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
-                    # 单文件：记录实际格式 + 降级标志
-                    task['actual_format'] = result.get('actual_format', 'mp3')
-                    task['degraded'] = result.get('degraded', False)
-                    task['format_breakdown'] = {}
                     # 单文件也用真实大小覆盖估算
                     task['file_size'] = actual_size_total or task.get('file_size', 0)
             else:
@@ -607,11 +568,6 @@ class BatchDownloadService:
                     task['zip_path'] = zip_path
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
-                    # ZIP：记录格式分布 + 降级数量
-                    task['actual_format'] = None
-                    task['degraded'] = degraded_count > 0
-                    task['degraded_count'] = degraded_count
-                    task['format_breakdown'] = format_breakdown
                     # 用真实大小覆盖估算（仅在成功时）
                     try:
                         task['file_size'] = os.path.getsize(zip_path)
