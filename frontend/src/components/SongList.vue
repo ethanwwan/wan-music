@@ -704,6 +704,11 @@ const handleBatchDownload = async () => {
   text-align: center;
 }
 
+/* 选择模式下 th.col-action 内的 a-space 居中 */
+.tracks-table th.col-action :deep(.ant-space) {
+  display: inline-flex;
+}
+
 .pay-tag {
   font-size: 11px;
   padding: 1px 6px;
