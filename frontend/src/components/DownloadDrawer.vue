@@ -109,7 +109,7 @@
           <a-collapse-panel :key="'errors-' + task.task_id" :header="`${task.errors.length} 首失败`">
             <a-list
               :data-source="task.errors.slice(0, 10)"
-              :size="small"
+              size="small"
               class="error-list"
             >
               <template #renderItem="{ item }">
