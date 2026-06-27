@@ -27,6 +27,7 @@
   --color-secondary: #5d5f5f;
   --color-text-muted: #595959;
   --color-outline: #727786;
+  --color-error: #d4380d;
 
   /* Border Colors */
   --color-border-subtle: #e5e5e5;
@@ -101,6 +102,7 @@
   --color-secondary: #a0a0a0;
   --color-text-muted: #8a8a8a;
   --color-outline: #6b6b6b;
+  --color-error: #ff7875;
 
   /* Border Colors */
   --color-border-subtle: #3a3a3a;
@@ -189,4 +191,22 @@ body {
 
 .ant-message-notice {
   transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ========================
+   清除操作按钮统一样式
+   - 默认灰色，鼠标悬停变红
+   - 用于：清除历史、清除缓存、清理已完成
+======================== */
+.clear-action-btn,
+.clear-cache-btn,
+.clear-task-btn {
+  color: var(--color-text-muted) !important;
+  transition: color 0.2s ease;
+}
+
+.clear-action-btn:hover,
+.clear-cache-btn:hover,
+.clear-task-btn:hover {
+  color: var(--color-error) !important;
 }

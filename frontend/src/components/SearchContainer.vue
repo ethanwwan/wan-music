@@ -82,7 +82,6 @@
             size="small"
             @click="handleClearHistory"
           >
-            <template #icon><DeleteOutlined /></template>
             清除历史
           </a-button>
         </div>
@@ -104,7 +103,6 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { DeleteOutlined } from '@ant-design/icons-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
 import { platforms, loadPlatforms } from '../utils/platformsManager.js'

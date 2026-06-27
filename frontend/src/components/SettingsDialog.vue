@@ -92,7 +92,6 @@
                 :loading="clearingCache"
                 @click="handleClearCache"
               >
-                <template #icon><DeleteOutlined /></template>
                 清除缓存
               </a-button>
             </div>
@@ -307,10 +306,6 @@ const handleOpenChange = (value) => {
 
 .clear-cache-btn {
   margin-left: auto;
-}
-
-.clear-cache-btn :deep(.ant-btn-icon) {
-  font-size: 14px;
 }
 
 .drawer-footer {

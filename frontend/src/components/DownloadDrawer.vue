@@ -25,10 +25,10 @@
         size="small"
         type="text"
         danger
+        class="clear-task-btn"
         @click="handleClearCompleted"
         :loading="clearing"
       >
-        <component :is="TrashOutlined" class="mr-1" />
         清理已完成
       </a-button>
     </div>
