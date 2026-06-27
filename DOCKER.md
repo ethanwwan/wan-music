@@ -46,9 +46,6 @@ services:
 docker compose up -d
 ```
 
-> 💡 **为什么要挂载 cookie 目录？**  
-> 容器重建时会丢失所有数据，挂载后 `netease_cookie.txt` 持久化在宿主机，VIP 登录状态不会丢失。  
-> 文件位置：`./wan-music/cookie/netease_cookie.txt`（每行一个 `key=value` 格式，如 `MUSIC_U=xxx`）
 
 ## 🔗 链接
 
