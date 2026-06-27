@@ -8,7 +8,7 @@
 import logging
 import sys
 
-from flask import Flask, redirect
+from flask import Flask, render_template, send_from_directory
 from flask_cors import CORS
 
 from routes import music_bp
@@ -22,27 +22,52 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    # static_url_path 保持默认 /static；Vite 输出的 /assets/* 和 /favicon.svg 用下面的显式路由转发
+    static_folder='static',
+    static_url_path='/static',
+)
 CORS(app)
 
-# 注册蓝图
+# 注册 API 蓝图
 app.register_blueprint(music_bp)
+
 
 @app.route('/')
 def index():
-    """首页 - 重定向到API文档"""
-    return redirect('/docs')
+    """首页 - 返回前端 SPA 的 index.html"""
+    return render_template('index.html')
 
 
 @app.route('/favicon.ico')
-def favicon():
+def favicon_ico():
+    """兼容旧浏览器请求 /favicon.ico"""
     return ('', 204)
+
+
+@app.route('/favicon.svg')
+@app.route('/assets/<path:filename>')
+def vite_static(filename=None):
+    """Vite 构建产物路径：/favicon.svg 和 /assets/* 从 static/ 目录服务"""
+    if filename is None:
+        # /favicon.svg
+        return send_from_directory(app.static_folder, 'favicon.svg', mimetype='image/svg+xml')
+    # /assets/<path>
+    return send_from_directory(app.static_folder + '/assets', filename)
 
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """健康检查"""
     return {'status': 'healthy'}
+
+
+# SPA catch-all：未匹配到的非 API 路径全部回退到 index.html
+@app.route('/<path:path>')
+def spa_fallback(path):
+    # API 蓝图已注册的路径不会走到这里
+    return render_template('index.html')
 
 
 @app.errorhandler(404)
