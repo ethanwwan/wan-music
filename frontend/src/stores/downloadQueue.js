@@ -121,7 +121,12 @@ const subscribeTask = (taskId) => {
         errors: data.errors || [],
         current: data.status === 'done' ? '完成' : '已取消',
         completed_at: Date.now() / 1000,
-        file_size: data.file_size || 0
+        file_size: data.file_size || 0,
+        // 实际格式信息（仅在 done 时才有值）
+        actual_format: data.actual_format,
+        degraded: data.degraded || false,
+        degraded_count: data.degraded_count || 0,
+        format_breakdown: data.format_breakdown || {},
       })
       subscriptions.delete(taskId)
     },
@@ -164,7 +169,12 @@ const refreshTask = async (taskId) => {
           errors: found.errors || [],
           error: found.error || '',
           completed_at: found.completed_at || 0,
-          file_size: found.file_size || 0
+          file_size: found.file_size || 0,
+          // 实际格式信息
+          actual_format: found.actual_format,
+          degraded: found.degraded || false,
+          degraded_count: found.degraded_count || 0,
+          format_breakdown: found.format_breakdown || {},
         })
         // 如果是进行中，重新订阅
         if (found.status === 'running') {
@@ -219,7 +229,12 @@ const syncWithBackend = async () => {
           error: bt.error || '',
           created_at: bt.created_at || Date.now() / 1000,
           completed_at: bt.completed_at || 0,
-          file_size: bt.file_size || 0
+          file_size: bt.file_size || 0,
+          // 实际格式信息
+          actual_format: bt.actual_format,
+          degraded: bt.degraded || false,
+          degraded_count: bt.degraded_count || 0,
+          format_breakdown: bt.format_breakdown || {},
         })
       } else {
         // 同步最新进度
@@ -234,7 +249,12 @@ const syncWithBackend = async () => {
             errors: bt.errors || [],
             error: bt.error || '',
             completed_at: bt.completed_at || 0,
-            file_size: bt.file_size || 0
+            file_size: bt.file_size || 0,
+            // 实际格式信息
+            actual_format: bt.actual_format,
+            degraded: bt.degraded || false,
+            degraded_count: bt.degraded_count || 0,
+            format_breakdown: bt.format_breakdown || {},
           })
         }
       }
