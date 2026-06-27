@@ -410,7 +410,7 @@ onMounted(() => {
 
 <style scoped>
 .download-drawer :deep(.ant-drawer-body) {
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -515,49 +515,64 @@ onMounted(() => {
 .task-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow-y: auto;
+  overflow-x: visible;       /* 关键：不要水平裁切，让卡片阴影能溢出 */
   flex: 1;
+  padding: 6px 4px;          /* 给卡片左右各留 4px 让阴影有空间显示 */
+}
+
+/* a-card 内部结构：让 .ant-card-body 也不裁切阴影 */
+.task-list :deep(.ant-card) {
+  overflow: visible !important;
+}
+.task-list :deep(.ant-card-body) {
+  overflow: visible !important;
 }
 
 /* 任务卡片：使用对称彩色辉光阴影（四周均匀分布） */
+/* 用 !important 防止 Ant Design Vue 的默认 .ant-card 样式覆盖 */
 .task-card {
   transition: all 0.25s ease;
   border-radius: 12px;
-  background: var(--color-surface-white, #fff);
+  background: var(--color-surface-white, #fff) !important;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 12px rgba(0, 0, 0, 0.06),
     0 2px 4px rgba(0, 0, 0, 0.04),
-    0 4px 12px rgba(0, 0, 0, 0.06);
+    0 6px 16px rgba(0, 0, 0, 0.08) !important;
 }
 
 .task-card:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 0 16px rgba(0, 0, 0, 0.08),
     0 4px 8px rgba(0, 0, 0, 0.06),
-    0 12px 24px rgba(0, 0, 0, 0.10);
+    0 12px 28px rgba(0, 0, 0, 0.12) !important;
 }
 
-/* 同步中：橙色辉光（四方向均匀） */
+/* 同步中：橙色辉光（四方向均匀，使用更大的模糊半径和更高不透明度） */
 .task-card.status-pending {
   box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.20),
-    0 0 8px rgba(250, 140, 22, 0.18),
-    0 2px 4px rgba(250, 140, 22, 0.16),
-    0 4px 16px rgba(250, 140, 22, 0.14);
+    0 0 0 1px rgba(250, 140, 22, 0.35),
+    0 0 12px rgba(250, 140, 22, 0.30),
+    0 0 24px rgba(250, 140, 22, 0.20),
+    0 2px 4px rgba(250, 140, 22, 0.20),
+    0 6px 18px rgba(250, 140, 22, 0.18) !important;
 }
 
 .task-card.status-pending:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.30),
-    0 0 12px rgba(250, 140, 22, 0.24),
-    0 4px 8px rgba(250, 140, 22, 0.20),
-    0 8px 24px rgba(250, 140, 22, 0.18);
+    0 0 0 1px rgba(250, 140, 22, 0.50),
+    0 0 16px rgba(250, 140, 22, 0.40),
+    0 0 32px rgba(250, 140, 22, 0.25),
+    0 4px 8px rgba(250, 140, 22, 0.24),
+    0 10px 28px rgba(250, 140, 22, 0.20) !important;
 }
 
-/* 下载中：蓝色脉冲阴影（核心动画） */
+/* 下载中：蓝色脉冲阴影（核心动画，使用更强的颜色） */
 .task-card.status-running {
   position: relative;
   animation: running-shadow-pulse 2s ease-in-out infinite;
@@ -566,17 +581,19 @@ onMounted(() => {
 @keyframes running-shadow-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 1px rgba(59, 130, 246, 0.25),
-      0 0 8px rgba(59, 130, 246, 0.20),
-      0 2px 4px rgba(59, 130, 246, 0.18),
-      0 4px 16px rgba(59, 130, 246, 0.14);
+      0 0 0 1px rgba(59, 130, 246, 0.40),
+      0 0 12px rgba(59, 130, 246, 0.32),
+      0 0 24px rgba(59, 130, 246, 0.22),
+      0 2px 4px rgba(59, 130, 246, 0.22),
+      0 6px 18px rgba(59, 130, 246, 0.20) !important;
   }
   50% {
     box-shadow:
-      0 0 0 1px rgba(59, 130, 246, 0.40),
-      0 0 16px rgba(59, 130, 246, 0.30),
-      0 4px 8px rgba(59, 130, 246, 0.24),
-      0 8px 24px rgba(59, 130, 246, 0.20);
+      0 0 0 1px rgba(59, 130, 246, 0.55),
+      0 0 20px rgba(59, 130, 246, 0.45),
+      0 0 40px rgba(59, 130, 246, 0.30),
+      0 4px 8px rgba(59, 130, 246, 0.28),
+      0 10px 28px rgba(59, 130, 246, 0.25) !important;
   }
 }
 
@@ -584,28 +601,31 @@ onMounted(() => {
   animation-play-state: paused;
   transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(59, 130, 246, 0.45),
-    0 0 16px rgba(59, 130, 246, 0.32),
-    0 4px 8px rgba(59, 130, 246, 0.24),
-    0 8px 24px rgba(59, 130, 246, 0.20);
+    0 0 0 1px rgba(59, 130, 246, 0.60),
+    0 0 20px rgba(59, 130, 246, 0.48),
+    0 0 40px rgba(59, 130, 246, 0.32),
+    0 4px 8px rgba(59, 130, 246, 0.28),
+    0 10px 28px rgba(59, 130, 246, 0.25) !important;
 }
 
 /* 已完成：绿色辉光（表示成功） */
 .task-card.status-done {
   box-shadow:
-    0 0 0 1px rgba(16, 185, 129, 0.20),
-    0 0 8px rgba(16, 185, 129, 0.18),
-    0 2px 4px rgba(16, 185, 129, 0.16),
-    0 4px 16px rgba(16, 185, 129, 0.14);
+    0 0 0 1px rgba(16, 185, 129, 0.35),
+    0 0 12px rgba(16, 185, 129, 0.30),
+    0 0 24px rgba(16, 185, 129, 0.20),
+    0 2px 4px rgba(16, 185, 129, 0.20),
+    0 6px 18px rgba(16, 185, 129, 0.18) !important;
 }
 
 .task-card.status-done:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(16, 185, 129, 0.30),
-    0 0 12px rgba(16, 185, 129, 0.24),
-    0 4px 8px rgba(16, 185, 129, 0.20),
-    0 8px 24px rgba(16, 185, 129, 0.18);
+    0 0 0 1px rgba(16, 185, 129, 0.50),
+    0 0 16px rgba(16, 185, 129, 0.40),
+    0 0 32px rgba(16, 185, 129, 0.25),
+    0 4px 8px rgba(16, 185, 129, 0.24),
+    0 10px 28px rgba(16, 185, 129, 0.20) !important;
 }
 
 /* 失败/取消：灰暗阴影 + 透明度 */
@@ -613,9 +633,10 @@ onMounted(() => {
 .task-card.status-cancelled {
   opacity: 0.75;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 0 8px rgba(0, 0, 0, 0.05),
     0 1px 2px rgba(0, 0, 0, 0.04),
-    0 2px 6px rgba(0, 0, 0, 0.06);
+    0 2px 6px rgba(0, 0, 0, 0.06) !important;
 }
 
 .task-card.status-error:hover,
