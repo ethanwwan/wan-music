@@ -45,8 +45,8 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # ============================================================
-      # 从 tag 显式计算版本（避免 metadata-action 的 match 正则匹配失败时只剩 sha 标签）
-      # 例如 v1.2.3 → version=1.2.3, major_minor=1.2, major=1
+      # 从 tag 提取版本号（去除 v 前缀）
+      # 例如 v1.2.3 → version=1.2.3
       # ============================================================
       - name: Compute version from tag
         id: version
@@ -54,30 +54,20 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#v}
-          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          {
-            echo "tag=$TAG"
-            echo "version=$VERSION"
-            echo "major_minor=$MAJOR_MINOR"
-            echo "major=$MAJOR"
-          } >> "$GITHUB_OUTPUT"
-          echo "Tag: $TAG → version=$VERSION, $MAJOR_MINOR, $MAJOR"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag: $TAG → version=$VERSION"
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # tag 策略（基于 shell 预计算的版本，type=raw 注入）：
-          #   push tag v1.2.3      → 1.2.3, 1.2, 1, latest
-          #   push tag v1.2.3-rc1  → 1.2.3-rc1
+          # tag 策略（精简到两个 tag）：
+          #   push tag v1.2.3      → 1.2.3, latest
+          #   push tag v1.2.3-rc1  → 1.2.3-rc1, latest
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=${{ steps.version.outputs.major_minor }}
-            type=raw,value=${{ steps.version.outputs.major }}
             type=raw,value=latest
-            type=sha,format=short
           labels: |
             org.opencontainers.image.title=Wan Music
             org.opencontainers.image.description=多平台音乐搜索/解析/下载
