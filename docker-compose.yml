@@ -10,11 +10,9 @@ services:
     image: ethanwwan/wan-music:latest
     container_name: wan-music
     restart: always
-    # 容器内用 root 运行，让 ./cookie bind mount 能正常读写宿主机上的 cookie 文件
-    # （Dockerfile 的 USER wanmusic 与宿主机用户 uid 通常对不上）
-    user: "0:0"
     ports:
       - "6005:6005"
     volumes:
       - ./cookie:/app/clients/cookie   # 持久化 cookie（VIP 登录状态）
+      - ./logs:/app/logs                # 持久化日志（容器内 logs/ 目录映射到宿主机）
 

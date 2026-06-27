@@ -32,6 +32,10 @@ config.local.json
 # 构建产物（前端 build 目录）
 frontend/dist/
 
+# 运行时日志（容器内 logs/ 目录）
+backend/logs/
+*.log
+
 # Docker (根目录 Dockerfile 和 docker/docker-compose.yml 提交到 git)
 # Dockerfile
 # docker-compose*.yml

@@ -41,7 +41,7 @@ class BaseMusicClient(ABC):
         **kwargs
     ) -> Dict[str, Any]:
         """统一请求封装
-        
+
         Args:
             method: HTTP方法 (get/post/put/delete)
             url: 请求URL
@@ -50,7 +50,7 @@ class BaseMusicClient(ABC):
             headers: 请求头
             timeout: 超时时间
             **kwargs: 其他参数
-        
+
         Returns:
             JSON响应数据，失败返回空字典
         """
@@ -67,10 +67,10 @@ class BaseMusicClient(ABC):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            logger.error(f"[{self.platform_name}] 请求失败: {url}, 错误: {e}")
+            logger.error(f"[{self.platform_name}] 请求失败 {url} | {type(e).__name__}: {e}")
             return {}
         except ValueError:
-            logger.error(f"[{self.platform_name}] 响应不是有效的JSON: {url}")
+            logger.error(f"[{self.platform_name}] 非JSON响应 {url}")
             return {}
     
     def _get(self, url: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:

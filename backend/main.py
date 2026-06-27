@@ -7,20 +7,20 @@
 """
 import logging
 import sys
+import time
 
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, request, send_from_directory
 from flask_cors import CORS
 
 from routes import music_bp
 from utils.config import resolve_port
+from utils.logging_config import setup_logging, LOG_FILE
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# 初始化日志：同时输出到 stderr 和 logs/wan-music.log
+setup_logging()
 
 logger = logging.getLogger(__name__)
+logger.info(f'日志文件: {LOG_FILE}')
 
 app = Flask(
     __name__,
@@ -32,6 +32,35 @@ CORS(app)
 
 # 注册 API 蓝图
 app.register_blueprint(music_bp)
+
+
+# ==================== HTTP 请求日志 ====================
+
+# 不打日志的路径（健康检查 + 静态资源噪声大）
+_QUIET_PATHS = {'/health', '/favicon.ico', '/favicon.svg'}
+
+
+@app.before_request
+def _start_timer():
+    request._start_time = time.time()
+
+
+@app.after_request
+def _log_request(response):
+    """只记录 API 请求，跳过静态资源/健康检查/首页"""
+    try:
+        if request.path in _QUIET_PATHS or request.path.startswith('/assets/'):
+            return response
+        # 跳过首页（前端 SPA，每次刷新都会打）
+        if request.path in {'/', '/docs'}:
+            return response
+        duration_ms = (time.time() - request._start_time) * 1000
+        logger.info(
+            f'{request.method} {request.path} {response.status_code} {duration_ms:.0f}ms'
+        )
+    except Exception:
+        pass
+    return response
 
 
 @app.route('/')

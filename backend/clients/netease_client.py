@@ -192,14 +192,20 @@ class NeteaseClient(BaseMusicClient):
         """
         # 有 cookie：使用官方 API
         if self._has_cookie:
-            return self._search_official(keyword, limit, offset, quality)
+            songs = self._search_official(keyword, limit, offset, quality)
+            if not songs:
+                logger.warning(f"[{self.platform_name}] 搜索无结果 keyword={keyword!r} (官方API, cookie 可能失效)")
+            return songs
 
         # 无 cookie：直接走第三方 API
         logger.debug(f"[{self.platform_name}] 未配置 cookie，直接使用第三方 API")
         songs = self._search_xuanluoge(keyword, limit)
         if songs:
             return songs
-        return self._search_haitangw(keyword, limit)
+        songs = self._search_haitangw(keyword, limit)
+        if not songs:
+            logger.warning(f"[{self.platform_name}] 搜索无结果 keyword={keyword!r} (第三方 API 全部失败)")
+        return songs
 
     def _search_official(self, keyword: str, limit: int, offset: int, quality: str) -> List[Dict[str, Any]]:
         """官方 API 搜索（依赖 cookie）"""
