@@ -24,7 +24,7 @@
           </div>
         </div>
         <div class="header-right">
-          <a-button type="primary" @click="handleBatchDownload">打包下载</a-button>
+          <a-button type="primary" @click="handleBatchDownload">全部下载</a-button>
         </div>
       </div>
 
@@ -54,7 +54,7 @@
                 </template>
                 <template v-else>
                   <a-space :size="8">
-                    <a-button size="small" type="primary" :disabled="selectedTrackIds.length === 0" @click="handleBatchDownloadSelected">下载选中</a-button>
+                    <a-button size="small" type="primary" :disabled="selectedTrackIds.length === 0" @click="handleBatchDownloadSelected">下载</a-button>
                     <a-button size="small" @click="exitSelectMode">取消</a-button>
                   </a-space>
                 </template>
