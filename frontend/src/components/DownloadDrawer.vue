@@ -171,9 +171,9 @@
             </a-button>
             <a-button
               size="small"
+              class="action-delete-btn"
               @click="handleRemove(task)"
             >
-              <component :is="DeleteOutlined" class="mr-1" />
               删除
             </a-button>
           </template>
@@ -182,9 +182,9 @@
           <template v-else>
             <a-button
               size="small"
+              class="action-delete-btn"
               @click="handleRemove(task)"
             >
-              <component :is="DeleteOutlined" class="mr-1" />
               删除
             </a-button>
           </template>
@@ -223,7 +223,6 @@ const {
   HeadphonesOutlined,
   StopOutlined,
   CloudDownloadOutlined,
-  DeleteOutlined,
   AlertCircleOutlined = icons.WarningOutlined,
   WarningOutlined,
   CloseOutlined,
@@ -790,6 +789,18 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   padding-top: 12px;
+}
+
+/* 删除按钮：默认灰文字，hover 时变红（和全局 clear 按钮风格一致） */
+.action-delete-btn {
+  color: var(--color-text-muted, #6b7280) !important;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.action-delete-btn:hover {
+  color: var(--color-error, #d4380d) !important;
+  border-color: var(--color-error, #d4380d) !important;
+  background: rgba(212, 56, 13, 0.06) !important;
 }
 
 .error-msg {
