@@ -461,7 +461,8 @@ const downloadSingle = async (track) => {
       name: track.name,
       artist: getArtist(track),
       album: getAlbum(track),
-      source: track.source || ''
+      source: track.source || '',
+      qualityMap: track.qualityMap || {}  // 必传：后端 _estimate_size 据此估算文件大小
     }], track.name)
   } catch (error) {
     const errorMsg = error?.message || String(error) || '未知错误'
