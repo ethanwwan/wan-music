@@ -520,36 +520,41 @@ onMounted(() => {
   flex: 1;
 }
 
-/* 任务卡片：使用阴影区分状态（更精致、更现代） */
+/* 任务卡片：使用对称彩色辉光阴影（四周均匀分布） */
 .task-card {
   transition: all 0.25s ease;
   border-radius: 12px;
   background: var(--color-surface-white, #fff);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 2px 8px rgba(0, 0, 0, 0.06);
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .task-card:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.06),
-    0 8px 16px rgba(0, 0, 0, 0.08);
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 12px 24px rgba(0, 0, 0, 0.10);
 }
 
-/* 同步中：橙色辉光阴影 */
+/* 同步中：橙色辉光（四方向均匀） */
 .task-card.status-pending {
   box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.15),
-    0 2px 8px rgba(250, 140, 22, 0.18),
-    0 4px 16px rgba(250, 140, 22, 0.10);
+    0 0 0 1px rgba(250, 140, 22, 0.20),
+    0 0 8px rgba(250, 140, 22, 0.18),
+    0 2px 4px rgba(250, 140, 22, 0.16),
+    0 4px 16px rgba(250, 140, 22, 0.14);
 }
 
 .task-card.status-pending:hover {
+  transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(250, 140, 22, 0.25),
-    0 4px 12px rgba(250, 140, 22, 0.24),
-    0 8px 24px rgba(250, 140, 22, 0.14);
+    0 0 0 1px rgba(250, 140, 22, 0.30),
+    0 0 12px rgba(250, 140, 22, 0.24),
+    0 4px 8px rgba(250, 140, 22, 0.20),
+    0 8px 24px rgba(250, 140, 22, 0.18);
 }
 
 /* 下载中：蓝色脉冲阴影（核心动画） */
@@ -561,39 +566,46 @@ onMounted(() => {
 @keyframes running-shadow-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 1px rgba(59, 130, 246, 0.20),
-      0 2px 8px rgba(59, 130, 246, 0.20),
-      0 4px 16px rgba(59, 130, 246, 0.10);
+      0 0 0 1px rgba(59, 130, 246, 0.25),
+      0 0 8px rgba(59, 130, 246, 0.20),
+      0 2px 4px rgba(59, 130, 246, 0.18),
+      0 4px 16px rgba(59, 130, 246, 0.14);
   }
   50% {
     box-shadow:
-      0 0 0 1px rgba(59, 130, 246, 0.35),
-      0 4px 16px rgba(59, 130, 246, 0.32),
-      0 8px 24px rgba(59, 130, 246, 0.18);
+      0 0 0 1px rgba(59, 130, 246, 0.40),
+      0 0 16px rgba(59, 130, 246, 0.30),
+      0 4px 8px rgba(59, 130, 246, 0.24),
+      0 8px 24px rgba(59, 130, 246, 0.20);
   }
 }
 
 .task-card.status-running:hover {
   animation-play-state: paused;
+  transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(59, 130, 246, 0.40),
-    0 4px 16px rgba(59, 130, 246, 0.32),
-    0 8px 24px rgba(59, 130, 246, 0.18);
+    0 0 0 1px rgba(59, 130, 246, 0.45),
+    0 0 16px rgba(59, 130, 246, 0.32),
+    0 4px 8px rgba(59, 130, 246, 0.24),
+    0 8px 24px rgba(59, 130, 246, 0.20);
 }
 
-/* 已完成：绿色辉光阴影（表示成功） */
+/* 已完成：绿色辉光（表示成功） */
 .task-card.status-done {
   box-shadow:
-    0 0 0 1px rgba(16, 185, 129, 0.15),
-    0 2px 8px rgba(16, 185, 129, 0.18),
-    0 4px 16px rgba(16, 185, 129, 0.10);
+    0 0 0 1px rgba(16, 185, 129, 0.20),
+    0 0 8px rgba(16, 185, 129, 0.18),
+    0 2px 4px rgba(16, 185, 129, 0.16),
+    0 4px 16px rgba(16, 185, 129, 0.14);
 }
 
 .task-card.status-done:hover {
+  transform: translateY(-1px);
   box-shadow:
-    0 0 0 1px rgba(16, 185, 129, 0.25),
-    0 4px 12px rgba(16, 185, 129, 0.24),
-    0 8px 24px rgba(16, 185, 129, 0.14);
+    0 0 0 1px rgba(16, 185, 129, 0.30),
+    0 0 12px rgba(16, 185, 129, 0.24),
+    0 4px 8px rgba(16, 185, 129, 0.20),
+    0 8px 24px rgba(16, 185, 129, 0.18);
 }
 
 /* 失败/取消：灰暗阴影 + 透明度 */
@@ -601,13 +613,15 @@ onMounted(() => {
 .task-card.status-cancelled {
   opacity: 0.75;
   box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
     0 1px 2px rgba(0, 0, 0, 0.04),
-    0 2px 6px rgba(0, 0, 0, 0.05);
+    0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .task-card.status-error:hover,
 .task-card.status-cancelled:hover {
   opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .task-head {
