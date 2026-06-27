@@ -706,7 +706,9 @@ const handleBatchDownload = async () => {
 
 /* 选择模式下 th.col-action 内的 a-space 居中 */
 .tracks-table th.col-action :deep(.ant-space) {
-  display: inline-flex;
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .pay-tag {
