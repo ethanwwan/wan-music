@@ -115,8 +115,12 @@
               <template #renderItem="{ item }">
                 <a-list-item>
                   <a-list-item-meta>
-                    <a-list-item-meta-title class="error-name">{{ item.name }}</a-list-item-meta-title>
-                    <a-list-item-meta-description class="error-reason">{{ item.reason }}</a-list-item-meta-description>
+                    <template #title>
+                      <span class="error-name">{{ item.name }}</span>
+                    </template>
+                    <template #description>
+                      <span class="error-reason">{{ item.reason }}</span>
+                    </template>
                   </a-list-item-meta>
                 </a-list-item>
               </template>
