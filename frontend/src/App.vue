@@ -114,10 +114,18 @@ const handlePlaySong = (track) => {
   }
 }
 
-/** 播放失败（无版权）：标记 + 提示 */
+/**
+ * 播放失败：标记源列表里的 track（而非 currentSong），避免重复提示
+ *  - currentSong 是 App.vue 内部的引用，列表里的 track 是另一个引用
+ *  - 必须两边都同步，否则 SongList 里的按钮无法正确禁用
+ */
 const handlePlayError = (track) => {
-  if (track) track.unavailable = true
-  message.warning(`《${track?.name}》因版权问题暂时无法播放`)
+  if (!track) return
+  track.unavailable = true  // currentSong 引用
+  // 同步标记源列表：搜索结果里的同一首歌
+  const songIndex = searchResults.value.findIndex(s => s.id === track.id)
+  if (songIndex !== -1) searchResults.value[songIndex].unavailable = true
+  message.warning(`《${track.name}》因版权问题暂时无法播放`)
 }
 
 onMounted(() => {
