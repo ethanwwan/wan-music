@@ -89,7 +89,8 @@ class MusicService:
                 'url': url_data.get('url', ''),
                 'quality': quality,
                 'lyric': lyric,
-                'source': url_data.get('source', 'netease')
+                'source': url_data.get('source', 'netease'),
+                'api_source': url_data.get('api_source') or song_info.get('api_source', ''),
                 # 不返回 fileType：后端用 magic bytes 检测真实类型
             }
         except Exception as e:

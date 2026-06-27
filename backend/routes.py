@@ -137,6 +137,7 @@ def get_song_info():
         'level': level,
         'fileType': song_info.get('fileType', 'mp3'),
         'source': song_info.get('source', source or 'netease'),
+        'api_source': song_info.get('api_source', ''),
         'available': bool(play_url),
         'lyric': song_info.get('lyric', '') or '',
     }, "获取歌曲信息成功"))

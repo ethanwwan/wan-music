@@ -183,7 +183,8 @@ def get_song_url(song_id: str, quality: str, platform: str = None) -> Dict[str, 
                 'type': real_type,
                 'size': 0,
                 'br': 0,
-                'source': result.get('source', platform or 'netease')
+                'source': result.get('source', platform or 'netease'),
+                'api_source': result.get('api_source', '')
             }]
         }
     except Exception as e:

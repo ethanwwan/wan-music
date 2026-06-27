@@ -446,25 +446,119 @@ class NeteaseClient(BaseMusicClient):
         try:
             url = f"{APIConstants.XUANLUOGE_URL}?miss=getMusicUrl&id={song_id}&level={quality}"
             data = self._get(url)
-            
+
             if isinstance(data, list):
                 download_url = data[0].get('url', '') if data else ''
             else:
                 download_url = data.get('data', [{}])[0].get('url', '')
-            
+
             if download_url and download_url.startswith('http'):
                 return download_url
             return None
         except Exception as e:
             logger.error(f"[{self.platform_name}] xuanluoge API获取歌曲URL失败: {e}")
             return None
-    
+
+    def _get_song_url_cenguigui(self, song_id: int, quality: str) -> Optional[str]:
+        """使用cenguigui API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level={quality}"
+            data = self._get(url)
+            download_url = (data or {}).get('data', {}).get('url', '')
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] cenguigui获取URL失败: {e}")
+            return None
+
+    def _get_song_url_bileizhen(self, song_id: int, quality: str) -> Optional[str]:
+        """使用bileizhen API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"https://api.bileizhen.top/api/netease?id={song_id}&level={quality}"
+            data = self._get(url)
+            download_url = (data or {}).get('data', {}).get('url', '')
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] bileizhen获取URL失败: {e}")
+            return None
+
+    def _get_song_url_gdstudio(self, song_id: int, quality: str) -> Optional[str]:
+        """使用gdstudio API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            # br: 128/320/999(hires-lossless)/740(lossless FLAC)
+            br_map = {'standard': 128, 'exhigh': 320, 'lossless': 999, 'hires': 999, 'jymaster': 999}
+            br = br_map.get(quality, 999)
+            url = f"https://music-api.gdstudio.xyz/api.php?types=url&id={song_id}&source=netease&br={br}"
+            data = self._get(url, timeout=15)
+            download_url = (data or {}).get('url', '') if isinstance(data, dict) else ''
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] gdstudio获取URL失败: {e}")
+            return None
+
+    def _get_song_url_cunyu(self, song_id: int, quality: str) -> Optional[str]:
+        """使用cunyu API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"https://www.cunyuapi.top/163music_play?id={song_id}&quality={quality}"
+            data = self._get(url, timeout=15)
+            download_url = (data or {}).get('song_file_url', '') if isinstance(data, dict) else ''
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] cunyu获取URL失败: {e}")
+            return None
+
+    def _get_song_url_rxtool(self, song_id: int, quality: str) -> Optional[str]:
+        """使用rxtool API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"https://api.rxtool.top/api/meteasecloudmusic.php?id={song_id}&level=hires"
+            data = self._get(url, timeout=15)
+            download_url = (data or {}).get('url', '') if isinstance(data, dict) else ''
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] rxtool获取URL失败: {e}")
+            return None
+
+    def _get_song_url_cocodownloader(self, song_id: int, quality: str) -> Optional[str]:
+        """使用cocodownloader API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"https://cocodownloader.markqq.com/api/url?id={song_id}&provider=netease&quality=jymaster"
+            data = self._get(url, timeout=15)
+            download_url = (data or {}).get('url', '') if isinstance(data, dict) else ''
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] cocodownloader获取URL失败: {e}")
+            return None
+
+    def _get_song_url_vincentzyu233(self, song_id: int, quality: str) -> Optional[str]:
+        """使用vincentzyu233 API获取歌曲URL（musicdl 验证可用）"""
+        try:
+            url = f"http://xwl.vincentzyu233.cn:51217/v2/music/netease?id={song_id}&quality=9"
+            data = self._get(url, timeout=15)
+            download_url = (data or {}).get('data', {}).get('url', '') if isinstance(data, dict) else ''
+            if download_url and download_url.startswith('http'):
+                return download_url
+            return None
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] vincentzyu233获取URL失败: {e}")
+            return None
+
     def _get_song_url_haitangw(self, song_id: int, quality: str) -> Optional[str]:
         """使用haitangw API获取歌曲URL"""
         try:
             url = f"{APIConstants.HAITANGW_URL}?id={song_id}&level={quality}&type=json"
             data = self._get(url)
-            
+
             download_url = data.get('data', {}).get('url', '')
             if download_url and download_url.startswith('http'):
                 return download_url
@@ -472,20 +566,20 @@ class NeteaseClient(BaseMusicClient):
         except Exception as e:
             logger.error(f"[{self.platform_name}] haitangw API获取歌曲URL失败: {e}")
             return None
-    
+
     def _get_song_url_backup(self, song_id: int, quality: str) -> Optional[str]:
         """使用备用API获取歌曲URL"""
         try:
             url = f"https://api.injahow.cn/meting/api?server=netease&type=url&id={song_id}&br={quality}"
             data = self._get(url)
-            
+
             if isinstance(data, dict) and data.get('url'):
                 return data['url']
             return None
         except Exception as e:
             logger.error(f"[{self.platform_name}] 备用API获取歌曲URL失败: {e}")
             return None
-    
+
     def _get_song_url_meting(self, song_id: int, quality: str) -> Optional[str]:
         """使用Meting API获取歌曲URL"""
         try:
@@ -507,23 +601,30 @@ class NeteaseClient(BaseMusicClient):
             return None
     
     def get_song_url(self, song_id: int, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取歌曲播放/下载URL（自动切换线路）"""
+        """获取歌曲播放/下载URL（多源自动降级）
+
+        策略（参考 musicdl）：始终尝试官方 → 9 个第三方源依次降级
+        - 有 cookie 时官方能拿到 HiRes/付费资源
+        - 无 cookie 或非 VIP 时官方返回空，自动落到第三方
+        """
         from .quality_config import is_valid_quality, get_default_quality
         if not is_valid_quality(quality):
             quality = get_default_quality()
 
         source_func_map = {
-            'official': self._get_song_url_official,    # 官方 API（VIP cookie 拿 HiRes）
-            'xuanluoge': self._get_song_url_xuanluoge,  # 第三方：官方失败时降级
-            'haitangw': self._get_song_url_haitangw,
-            'meting': self._get_song_url_meting
+            'official': self._get_song_url_official,        # 1. 官方（VIP cookie → HiRes）
+            'cenguigui': self._get_song_url_cenguigui,      # 2. cenguigui
+            'xuanluoge': self._get_song_url_xuanluoge,      # 3. xuanluoge
+            'bileizhen': self._get_song_url_bileizhen,      # 4. bileizhen
+            'gdstudio': self._get_song_url_gdstudio,        # 5. gdstudio
+            'cunyu': self._get_song_url_cunyu,              # 6. cunyu
+            'rxtool': self._get_song_url_rxtool,            # 7. rxtool
+            'cocodownloader': self._get_song_url_cocodownloader,  # 8. cocodownloader
+            'vincentzyu233': self._get_song_url_vincentzyu233,    # 9. vincentzyu233
+            'meting': self._get_song_url_meting,            # 10. meting
         }
-
-        # 没有 cookie 时跳过官方 API，直接使用第三方
-        if self._has_cookie:
-            sources_to_try = ['official', 'xuanluoge', 'haitangw', 'meting']
-        else:
-            sources_to_try = ['xuanluoge', 'haitangw', 'meting']
+        # 始终走完整链：cookie 失效/VIP 受限时官方会快速返回空，自动落到第三方
+        sources_to_try = list(source_func_map.keys())
 
         for source in sources_to_try:
             download_url = source_func_map[source](song_id, quality)
@@ -540,37 +641,40 @@ class NeteaseClient(BaseMusicClient):
         return {}  # 返回空字典而不是抛异常，保持与其他客户端一致
     
     def get_song_info(self, song_id: int) -> Dict[str, Any]:
-        """获取歌曲信息（按 cookie 可用性分线路）"""
-        # 线路1: 官方API（仅 cookie 可用时）
-        if self._has_cookie:
-            try:
-                url = APIConstants.SONG_DETAIL_API
-                params = {'ids': f'[{song_id}]'}
-                data = self._get(url, params=params)
-                if data and data.get('songs') and len(data['songs']) > 0:
-                    song = data['songs'][0]
-                    artists = song.get('artists', song.get('ar', []))
-                    album_info = song.get('album', song.get('al', {}))
-                    pq = _extract_pay_and_quality(song)
-                    return {
-                        'id': song.get('id', 0),
-                        'name': song.get('name', ''),
-                        'artists': '/'.join([a['name'] for a in artists]),
-                        'album': album_info.get('name', ''),
-                        'picUrl': album_info.get('picUrl', ''),
-                        'duration': song.get('duration') or song.get('dt') or 0,
-                        'source': 'netease',
-                        'api_source': 'official',
-                        **pq,
-                    }
-            except Exception as e:
-                logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
+        """获取歌曲详情（官方优先 + 多源降级）
 
-        # 线路2: xuanluoge（无 cookie 时也走这里）
+        策略（参考 musicdl）：始终尝试官方 → 多个 3rd party
+        官方 /api/song/detail 不需要 cookie 也能拿到完整信息
+        """
+        # 线路1: 官方 API（不带 cookie 也能用）
+        try:
+            url = APIConstants.SONG_DETAIL_API
+            params = {'ids': f'[{song_id}]'}
+            data = self._get(url, params=params)
+            if data and data.get('songs') and len(data['songs']) > 0:
+                song = data['songs'][0]
+                artists = song.get('artists', song.get('ar', []))
+                album_info = song.get('album', song.get('al', {}))
+                pq = _extract_pay_and_quality(song)
+                return {
+                    'id': song.get('id', 0),
+                    'name': song.get('name', ''),
+                    'artists': '/'.join([a['name'] for a in artists]),
+                    'album': album_info.get('name', ''),
+                    'picUrl': album_info.get('picUrl', ''),
+                    'duration': song.get('duration') or song.get('dt') or 0,
+                    'source': 'netease',
+                    'api_source': 'official',
+                    **pq,
+                }
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] 官方API获取歌曲信息失败: {e}")
+
+        # 线路2: xuanluoge
         try:
             url = f"{APIConstants.XUANLUOGE_URL}?miss=getMusicInfo&id={song_id}"
             data = self._get(url)
-            if data:
+            if data and data.get('id'):
                 return {
                     'id': data.get('id', 0),
                     'name': data.get('name', ''),
@@ -584,11 +688,34 @@ class NeteaseClient(BaseMusicClient):
         except Exception as e:
             logger.debug(f"[{self.platform_name}] xuanluoge获取歌曲信息失败: {e}")
 
-        # 线路3: haitangw
+        # 线路3: gdstudio (musicdl 验证可用)
+        try:
+            url = f"https://music-api.gdstudio.xyz/api.php?types=info&id={song_id}&source=netease"
+            data = self._get(url, timeout=15)
+            if isinstance(data, dict) and data.get('id'):
+                artists_raw = data.get('artist', [])
+                if isinstance(artists_raw, list):
+                    artists = '/'.join(a for a in artists_raw if a)
+                else:
+                    artists = str(artists_raw or '')
+                return {
+                    'id': int(data.get('id', song_id)),
+                    'name': data.get('name', ''),
+                    'artists': artists,
+                    'album': data.get('album', ''),
+                    'picUrl': '',
+                    'duration': 0,
+                    'source': 'netease',
+                    'api_source': 'gdstudio',
+                }
+        except Exception as e:
+            logger.debug(f"[{self.platform_name}] gdstudio获取歌曲信息失败: {e}")
+
+        # 线路4: haitangw（兜底）
         try:
             url = f"{APIConstants.HAITANGW_URL}?id={song_id}&type=json"
             data = self._get(url)
-            if data.get('data'):
+            if isinstance(data, dict) and data.get('data'):
                 song_info = data['data']
                 return {
                     'id': song_info.get('id', 0),
