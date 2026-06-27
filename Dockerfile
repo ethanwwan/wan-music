@@ -59,7 +59,7 @@ COPY --from=frontend-builder /app/frontend/dist/assets ./static/assets
 COPY --from=frontend-builder /app/frontend/dist/favicon.svg ./static/favicon.svg
 
 # 创建运行时目录（cookie 持久化、日志输出）
-RUN mkdir -p /app/clients/cookie /app/logs && chown -R wanmusic:wanmusic /app
+RUN mkdir -p /app/cookie /app/logs && chown -R wanmusic:wanmusic /app
 
 USER wanmusic
 

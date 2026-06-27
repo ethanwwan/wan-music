@@ -13,6 +13,6 @@ services:
     ports:
       - "6005:6005"
     volumes:
-      - ./cookie:/app/clients/cookie   # 持久化 cookie（VIP 登录状态）
+      - ./cookie:/app/cookie            # 持久化 cookie（VIP 登录状态）
       - ./logs:/app/logs                # 持久化日志（容器内 logs/ 目录映射到宿主机）
 

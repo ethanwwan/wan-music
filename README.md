@@ -226,7 +226,7 @@ server {
 
 ```bash
 # 1) 端口被占用 → 修改 docker-compose.yml 的 ports
-# 2) cookie 问题 → docker exec 检查 /app/clients/cookie/
+# 2) cookie 问题 → docker exec 检查 /app/cookie/
 # 3) 清理重建 → docker compose down -v && docker system prune -a
 ```
 

@@ -110,14 +110,16 @@ class NeteaseClient(BaseMusicClient):
         """加载本地cookie文件（按优先级依次尝试多个位置）
 
         候选路径：
-          1. clients/cookie/netease_cookie.txt     （与本文件同级的 cookie 目录）
-          2. cookie/netease_cookie.txt             （backend 下的 cookie 目录，原设计位置）
-          3. netease_cookie.txt                    （backend 根目录，旧位置）
-          4. cookie.txt                            （backend 根目录下的简写名）
+          1. /app/cookie/netease_cookie.txt        （Docker 部署，bind mount 位置）
+          2. clients/cookie/netease_cookie.txt     （与本文件同级的 cookie 目录）
+          3. cookie/netease_cookie.txt             （backend 下的 cookie 目录）
+          4. netease_cookie.txt                    （backend 根目录，旧位置）
+          5. cookie.txt                            （backend 根目录下的简写名）
         """
         import os
         # cookie 候选路径（按优先级排序）
         candidates = [
+            '/app/cookie/netease_cookie.txt',
             os.path.join(os.path.dirname(__file__), 'cookie', 'netease_cookie.txt'),
             os.path.join(os.path.dirname(__file__), '..', 'cookie', 'netease_cookie.txt'),
             os.path.join(os.path.dirname(__file__), '..', 'netease_cookie.txt'),
