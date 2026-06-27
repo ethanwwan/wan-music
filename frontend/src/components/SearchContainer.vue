@@ -50,12 +50,17 @@
           placeholder="数据源"
           size="large"
           style="width: 160px"
+          :loading="platforms === null"
+          :disabled="!platforms || platforms.length === 0"
           @change="handleDataSourceChange"
         >
-          <a-select-option value="netease">网易云音乐</a-select-option>
-          <a-select-option value="qq">QQ音乐</a-select-option>
-          <a-select-option value="kugou">酷狗音乐</a-select-option>
-          <a-select-option value="bodian">波点音乐</a-select-option>
+          <a-select-option
+            v-for="p in platforms || []"
+            :key="p.id"
+            :value="p.id"
+          >
+            {{ p.name }}
+          </a-select-option>
         </a-select>
         <a-button
           type="primary"
@@ -88,10 +93,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { settings, saveSettings } from '../utils/settingsManager.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
+import { platforms, loadPlatforms } from '../utils/platformsManager.js'
 
 const HISTORY_STORAGE_KEY = 'wan-music-history-records'
 
@@ -140,10 +146,20 @@ const totalBadge = computed(() => activeCount.value + completedCount.value)
 const inputValue = ref('')
 const historyRecords = ref([])
 
-// 从 localStorage 读取上次选择的数据源
+// 从 localStorage 读取上次选择的数据源（兜底为 'netease'，加载到平台列表后再校验）
 const savedDataSource = localStorage.getItem('wan-music-selected-data-source')
 const selectedDataSource = ref(savedDataSource || 'netease')
 const selectedSources = ref([selectedDataSource.value])
+
+// 平台列表加载完成后，若上次选择已失效则回退到第一个可用平台
+watch(platforms, (list) => {
+  if (list && list.length > 0 && !list.some(p => p.id === selectedDataSource.value)) {
+    const fallback = list[0].id
+    selectedDataSource.value = fallback
+    selectedSources.value = [fallback]
+    localStorage.setItem('wan-music-selected-data-source', fallback)
+  }
+})
 
 const selectedQuality = computed({
   get: () => settings.selectedQuality || 'lossless',
@@ -196,6 +212,7 @@ const handleClearHistory = () => {
 
 onMounted(() => {
   loadHistoryRecords()
+  loadPlatforms()
 })
 
 defineExpose({ addHistoryRecord })

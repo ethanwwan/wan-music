@@ -32,12 +32,8 @@
       type="song"
       :items="detailTracks"
       :detail-info="currentDetail"
-      :current-page="currentDetailPage"
-      :page-size="detailPageSize"
-      :total-tracks="detailTracks.length"
       @track-play="handleTrackPlay"
       @track-unavailable="handleTrackUnavailable"
-      @page-change="goToDetailPage"
     />
 
     <!-- 一级页面：单曲列表 -->
@@ -45,27 +41,16 @@
       v-show="displayMode === 'search' && !currentDetail && songs.length > 0"
       type="song"
       :items="songs"
-      :current-page="1"
-      :page-size="songs.length"
-      :total-tracks="songs.length"
       @track-play="handleTrackPlay"
       @track-unavailable="handleTrackUnavailable"
     />
 
-    <!-- 一级页面：歌单列表（带分页） -->
+    <!-- 一级页面：歌单列表 -->
     <SongList
       v-show="displayMode === 'playlist' && !currentDetail && playlists.length > 0"
       type="playlist"
-      :items="currentPageData"
+      :items="playlists"
       @item-click="handleItemClick"
-    />
-
-    <!-- 分页组件（歌单 tab） -->
-    <Pagination
-      v-if="displayMode === 'playlist' && !currentDetail && totalPages > 1"
-      :total-count="totalCount"
-      :page-size="playlistPageSize"
-      v-model="currentPage"
     />
 
     <!-- 当前 tab 搜索结果为空时显示提示 -->
@@ -89,7 +74,6 @@ import { message, notification } from 'ant-design-vue'
 import { settings } from '../utils/settingsManager.js'
 import musicApi from '../services/musicApi.js'
 import SongList from './SongList.vue'
-import Pagination from './Pagination.vue'
 
 const props = defineProps({
   songs: {
@@ -162,9 +146,6 @@ watch(
 const currentDetail = ref(null)
 const detailTracks = ref([])
 
-const currentDetailPage = ref(1)
-const detailPageSize = ref(20)
-
 // 缓存
 const PLAYLIST_CACHE_KEY = 'wan-music-playlist-cache'
 const cache = ref({ playlist: {} })
@@ -182,14 +163,15 @@ const saveCache = (data) => {
 
 cache.value.playlist = loadCache()
 
-// 分页
-const currentPage = ref(1)
-/** 歌单 tab 每页 6 个（移动端 3 行 × 2 列） */
-const playlistPageSize = ref(6)
-
 watch(() => props.searchType, () => {
   currentSearchType.value = getDefaultSearchType()
 })
+
+const handleSearchTabClick = (tabKey) => {
+  currentSearchType.value = tabKey
+  // 通知 App.vue 切换 tab 时重新拉取对应数据
+  emit('search-type-change', tabKey)
+}
 
 const hasSearchResults = computed(() => props.songs.length > 0 || props.playlists.length > 0)
 
@@ -199,39 +181,16 @@ const isPlaylistSearchUnsupported = computed(() =>
 
 const displayMode = computed(() => currentSearchType.value)
 
-const totalCount = computed(() => displayMode.value === 'playlist' ? props.playlists.length : props.songs.length)
-
-const isCurrentTabEmpty = computed(() => totalCount.value === 0)
+const isCurrentTabEmpty = computed(() =>
+  displayMode.value === 'search' ? props.songs.length === 0 : props.playlists.length === 0
+)
 
 const emptyTabName = computed(() => {
   const names = { search: '歌曲', playlist: '歌单' }
   return names[currentSearchType.value] || '结果'
 })
 
-const totalPages = computed(() => Math.ceil(totalCount.value / playlistPageSize.value))
-
-const currentPageData = computed(() => {
-  const start = (currentPage.value - 1) * playlistPageSize.value
-  const end = start + playlistPageSize.value
-  return displayMode.value === 'playlist' ? props.playlists.slice(start, end) : []
-})
-
-// tab 切换
-const handleSearchTabClick = (tabKey) => {
-  currentSearchType.value = tabKey
-  currentPage.value = 1
-  if (displayMode.value !== 'playlist' ? props.songs.length === 0 : props.playlists.length === 0) {
-    emit('search-type-change', tabKey)
-  }
-}
-
-// 详情页分页
-const detailTotalPages = computed(() => Math.ceil(detailTracks.value.length / detailPageSize.value))
-const goToDetailPage = (page) => {
-  if (page >= 1 && page <= detailTotalPages.value) currentDetailPage.value = page
-}
-
-const hasResults = computed(() => currentDetail.value || totalCount.value > 0)
+const hasResults = computed(() => currentDetail.value || hasSearchResults.value)
 
 const handleTrackPlay = (track) => emit('track-play', track)
 
@@ -248,7 +207,6 @@ const handleItemClick = async ({ item, action }) => {
 }
 
 const handleParsePlaylist = async (item) => {
-  currentDetailPage.value = 1
   currentDetail.value = { ...item, loading: true }
 
   if (settings.enableCache && cache.value.playlist[item.id]) {
@@ -312,7 +270,6 @@ const handleParsePlaylist = async (item) => {
 const goBack = () => {
   currentDetail.value = null
   detailTracks.value = []
-  currentDetailPage.value = 1
 }
 </script>
 

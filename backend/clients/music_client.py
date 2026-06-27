@@ -90,12 +90,12 @@ class MusicClient:
             logger.info(f"已取消注册平台: {platform}")
     
     def get_platforms(self) -> List[Dict[str, str]]:
-        """获取可用平台列表"""
+        """获取可用平台列表（id / name / color / description）"""
         return [
-            {'value': 'netease', 'label': '网易云音乐', 'description': '网易云音乐平台'},
-            {'value': 'qq', 'label': 'QQ音乐', 'description': 'QQ音乐平台'},
-            {'value': 'bodian', 'label': '波点音乐', 'description': '波点音乐平台'},
-            {'value': 'kugou', 'label': '酷狗音乐', 'description': '酷狗音乐平台'}
+            {'id': 'netease', 'name': '网易云', 'color': '#e72d2c', 'description': '网易云音乐平台'},
+            {'id': 'qq',      'name': 'QQ音乐', 'color': '#31c27c', 'description': 'QQ音乐平台'},
+            {'id': 'bodian',  'name': '波点音乐', 'color': '#ff7e29', 'description': '波点音乐平台'},
+            {'id': 'kugou',   'name': '酷狗音乐', 'color': '#2a8eff', 'description': '酷狗音乐平台'}
         ]
     
     def _get_client(self, platform: str) -> BaseMusicClient:

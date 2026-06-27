@@ -88,7 +88,29 @@ curl http://localhost:5002/health
 # {"status": "healthy"}
 ```
 
-### 2. 统一搜索
+### 2. 获取平台列表
+
+**`GET /platforms`**
+
+返回后端支持的音乐平台元数据（id / name / color / description），前端从该接口读取并动态渲染下拉选项，避免硬编码平台列表。
+
+```bash
+curl http://localhost:5002/platforms
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    {"id": "netease", "name": "网易云",   "color": "#e72d2c", "description": "网易云音乐平台"},
+    {"id": "qq",      "name": "QQ音乐",  "color": "#31c27c", "description": "QQ音乐平台"},
+    {"id": "bodian",  "name": "波点音乐", "color": "#ff7e29", "description": "波点音乐平台"},
+    {"id": "kugou",   "name": "酷狗音乐", "color": "#2a8eff", "description": "酷狗音乐平台"}
+  ]
+}
+```
+
+### 3. 统一搜索
 
 **`POST /search`**
 
@@ -130,7 +152,7 @@ curl http://localhost:5002/health
 **warnings**：
 - `playlist_search_unsupported`：当前平台不支持搜索歌单
 
-### 3. 获取歌曲信息
+### 4. 获取歌曲信息
 
 **`POST /song`**
 
@@ -170,7 +192,7 @@ curl http://localhost:5002/health
 
 `available=false` 表示该歌曲因版权问题无法播放。
 
-### 4. 获取歌单详情
+### 5. 获取歌单详情
 
 **`POST /playlist`**
 

@@ -19,7 +19,7 @@
             <div class="detail-meta">
               <span class="meta-item">{{ creatorLabel }}：{{ detailInfo.creator }}</span>
               <span class="meta-separator">•</span>
-              <span class="meta-item">共 {{ totalTracks }} 首歌曲</span>
+              <span class="meta-item">共 {{ items.length }} 首歌曲</span>
             </div>
           </div>
         </div>
@@ -28,7 +28,7 @@
         </div>
       </div>
 
-      <div v-if="paginatedTracks.length > 0" class="tracks-table-wrapper">
+      <div v-if="sortedTracks.length > 0" class="tracks-table-wrapper">
         <table class="tracks-table">
           <thead>
             <tr>
@@ -63,7 +63,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="(track, index) in paginatedTracks"
+              v-for="(track, index) in sortedTracks"
               :key="track.id"
               class="track-row"
               :class="{
@@ -80,7 +80,7 @@
                 />
               </td>
               <td class="col-index">
-                <span>{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+                <span>{{ index + 1 }}</span>
               </td>
               <td class="col-cover">
                 <div class="track-cover-wrapper">
@@ -146,14 +146,6 @@
           </tbody>
         </table>
       </div>
-
-      <Pagination
-        v-if="Math.ceil(sortedTracks.length / pageSize) > 1"
-        :total-count="sortedTracks.length"
-        :page-size="pageSize"
-        :model-value="currentPage"
-        @update:model-value="(page) => emit('page-change', page)"
-      />
     </template>
 
     <!-- 歌单列表 -->
@@ -209,10 +201,10 @@
 import { ref, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
-import { parseMusicInfo, dataSources } from '../services/musicApi.js'
+import { parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
-import Pagination from './Pagination.vue'
+import { getPlatformById } from '../utils/platformsManager.js'
 
 const props = defineProps({
   /** 'song' | 'playlist' */
@@ -228,22 +220,10 @@ const props = defineProps({
   detailInfo: {
     type: Object,
     default: null
-  },
-  currentPage: {
-    type: Number,
-    default: 1
-  },
-  pageSize: {
-    type: Number,
-    default: 20
-  },
-  totalTracks: {
-    type: Number,
-    default: 0
   }
 })
 
-const emit = defineEmits(['track-parsed', 'track-play', 'page-change', 'item-click', 'track-unavailable'])
+const emit = defineEmits(['track-parsed', 'track-play', 'item-click', 'track-unavailable'])
 
 const listContainerClass = computed(() => {
   if (props.type === 'song' && props.detailInfo) return 'detail-view'
@@ -257,15 +237,6 @@ const creatorLabel = computed(() => {
 })
 
 const sortedTracks = computed(() => [...props.items])
-
-const paginatedTracks = computed(() => {
-  if (props.totalTracks > 0) {
-    const start = (props.currentPage - 1) * props.pageSize
-    const end = start + props.pageSize
-    return sortedTracks.value.slice(start, end)
-  }
-  return sortedTracks.value
-})
 
 // 状态
 const parsingTrackId = ref(null)
@@ -309,7 +280,7 @@ const getArtist = (track) =>
   (Array.isArray(track?.ar) && track.ar[0]?.name) ||
   ''
 
-const getSourceInfo = (sourceId) => dataSources.find(s => s.id === sourceId) || null
+const getSourceInfo = (sourceId) => getPlatformById(sourceId)
 
 const getAlbum = (track) => track?.album || track?.al?.name || ''
 
@@ -569,8 +540,8 @@ const handleBatchDownload = async () => {
   width: 80px;
   height: 80px;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
   border-radius: var(--radius-md);
 }
@@ -667,8 +638,8 @@ const handleBatchDownload = async () => {
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
 }
 
@@ -941,8 +912,8 @@ const handleBatchDownload = async () => {
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background: linear-gradient(135deg, var(--color-primary-light) 0%, color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-container)) 50%, var(--color-primary-light) 100%);
 }
 

@@ -6,8 +6,6 @@
       class="mini-player"
       :class="{ playing: isPlaying }"
       @click="togglePlay"
-      @mouseenter="isHovered = true"
-      @mouseleave="isHovered = false"
     >
       <!-- 圆形进度条边框 -->
       <svg class="progress-ring" viewBox="0 0 60 60">
@@ -64,6 +62,8 @@
               v-for="(line, idx) in lyricLines"
               :key="idx"
               :class="{ active: idx === currentLyricIndex }"
+              :title="`点击跳转到 ${line.text}`"
+              @click="seekTo(line.time)"
             >{{ line.text }}</li>
           </ul>
         </div>
@@ -94,7 +94,6 @@ const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const showIcon = ref(false)
-const isHovered = ref(false)
 
 // ==================== 歌词（随 /song 响应一并返回，无需单独请求） ====================
 
@@ -128,6 +127,13 @@ const formatTime = (time) => {
   const m = Math.floor(time / 60)
   const s = Math.floor(time % 60)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+/** 双击歌词跳转播放位置 */
+const seekTo = (time) => {
+  if (!audioRef.value || typeof time !== 'number') return
+  audioRef.value.currentTime = time
+  currentTime.value = time
 }
 
 /** 解析 LRC 文本为 {time, text} 数组 */
@@ -203,13 +209,25 @@ const initAudio = () => {
   audioRef.value.src = props.currentSong?.url || ''
 }
 
-// 切歌时重置 + 重新解析歌词
-watch(() => props.currentSong, (newSong) => {
+// 切歌时重置 + 重新解析歌词 + 加载新音频 + 自动播放
+watch(() => props.currentSong, async (newSong) => {
   if (newSong) {
     lyricLines.value = parseLrc(newSong.lrc)
     currentTime.value = 0
+    initAudio()
+    try {
+      await audioRef.value.play()
+      isPlaying.value = true
+      emit('play')
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        isPlaying.value = false
+      }
+    }
   } else {
     lyricLines.value = []
+    audioRef.value?.pause()
+    isPlaying.value = false
   }
 }, { immediate: true, deep: true })
 
@@ -337,12 +355,23 @@ onUnmounted(() => {
   visibility: hidden;
   transform: translateY(10px);
   transition: all 0.2s ease;
-  pointer-events: none;
   display: flex;
   flex-direction: column;
 }
 
-.mini-player:hover .mini-player-panel {
+/* 透明桥接：从面板左边缘向左延伸 70px 到悬浮球，
+   鼠标从悬浮球到面板的过渡区不丢 hover */
+.mini-player-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -70px;
+  width: 70px;
+}
+
+.mini-player:hover .mini-player-panel,
+.mini-player-panel:hover {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -415,6 +444,14 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.lyric-list li:hover {
+  color: var(--color-text);
+  background: var(--color-surface-container-low);
 }
 
 .lyric-list li.active {

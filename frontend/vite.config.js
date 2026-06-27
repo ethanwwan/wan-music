@@ -50,6 +50,12 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = frontendCfg.apiProxyTarget
     || `http://localhost:${backendPort || 5005}`
 
+  // 代理路径列表（server 和 preview 复用）
+  const proxyPaths = ['/search', '/song', '/playlist', '/download', '/api', '/health', '/platforms']
+  const buildProxy = () => Object.fromEntries(
+    proxyPaths.map(p => [p, { target: proxyTarget, changeOrigin: true }])
+  )
+
   return {
     plugins: [vue()],
     resolve: {
@@ -60,26 +66,12 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: vitePort,
-      proxy: {
-        '/search': { target: proxyTarget, changeOrigin: true },
-        '/song': { target: proxyTarget, changeOrigin: true },
-        '/playlist': { target: proxyTarget, changeOrigin: true },
-        '/download': { target: proxyTarget, changeOrigin: true },
-        '/api': { target: proxyTarget, changeOrigin: true },
-        '/health': { target: proxyTarget, changeOrigin: true }
-      }
+      proxy: buildProxy()
     },
     preview: {
       host: '0.0.0.0',
       port: vitePort,
-      proxy: {
-        '/search': { target: proxyTarget, changeOrigin: true },
-        '/song': { target: proxyTarget, changeOrigin: true },
-        '/playlist': { target: proxyTarget, changeOrigin: true },
-        '/download': { target: proxyTarget, changeOrigin: true },
-        '/api': { target: proxyTarget, changeOrigin: true },
-        '/health': { target: proxyTarget, changeOrigin: true }
-      }
+      proxy: buildProxy()
     },
     build: {
       // 把环境变量注入到前端（必须以 VITE_ 或 BACKEND_ 开头才能暴露给客户端）

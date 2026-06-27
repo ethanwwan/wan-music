@@ -10,14 +10,6 @@ import { getQualityLabel } from '../config/qualityLevels.js'
 
 // ==================== 数据源 ====================
 
-/** 平台元数据（用于 UI 标签 / 颜色） */
-export const dataSources = [
-  { id: 'netease', name: '网易云', color: '#e72d2c' },
-  { id: 'qq',      name: 'QQ音乐', color: '#31c27c' },
-  { id: 'kugou',   name: '酷狗',   color: '#2a8eff' },
-  { id: 'bodian',  name: '波点',   color: '#ff7e29' }
-]
-
 const STORAGE_KEY_DATA_SOURCE = 'wan-music-selected-data-source'
 
 // ==================== 工具函数 ====================
@@ -94,6 +86,12 @@ const setCachedSearchResult = (type, keyword, data) => {
 
 // ==================== 通用请求 ====================
 
+/** GET 请求 */
+const get = async (url) => {
+  const response = await fetch(url, { method: 'GET' })
+  return response.json()
+}
+
 /** POST application/x-www-form-urlencoded */
 const postForm = async (url, params) => {
   const response = await fetch(url, {
@@ -112,6 +110,14 @@ const postJson = async (url, data) => {
     body: JSON.stringify(data)
   })
   return response.json()
+}
+
+// ==================== /platforms 平台列表 ====================
+
+/** GET /platforms（从后端拉取支持的平台元数据，避免前端硬编码） */
+export const getPlatforms = async () => {
+  const r = await get('/platforms')
+  return r?.data || []
 }
 
 // ==================== /song 单曲接口 ====================
@@ -261,25 +267,58 @@ const mapSearchPlaylist = (playlist) => ({
  * @param {Array<string>} sources 数据源列表
  * @param {string} quality 音质
  * 返回：{ type, songs, playlists, warnings }，warnings 用于前端友好提示
+ * 歌曲 limit 50，歌单 limit 20（通过两次请求实现，无需后端支持多种 limit）
  */
+const SONG_SEARCH_LIMIT = 50
+const PLAYLIST_SEARCH_LIMIT = 20
+
+const _doSearch = async (keyword, type, sources, quality, limit) => {
+  const requestData = { keyword, type, limit, quality }
+  if (sources.length === 1) requestData.source = sources[0]
+  return postJson('/search', requestData)
+}
+
 export const unifiedSearch = async (keyword, type = 0, sources = ['netease'], quality = 'lossless') => {
   try {
     const cacheKey = `${type}-${keyword}-${sources.join(',')}-${quality}`
     const cached = getCachedSearchResult('unified', cacheKey)
     if (cached) return { success: true, data: cached, fromCache: true }
 
-    const requestData = { keyword, type, limit: 50, quality }
-    if (sources.length === 1) requestData.source = sources[0]
+    let respType = type
+    let items = []
+    let warnings = []
 
-    const result = await postJson('/search', requestData)
-    if (!result.success || !result.data) {
-      return { success: false, error: result.message || '搜索失败' }
+    if (type === 0) {
+      // 全部：分两次请求（歌曲 50 / 歌单 20）
+      const [songResult, playlistResult] = await Promise.all([
+        _doSearch(keyword, 1, sources, quality, SONG_SEARCH_LIMIT),
+        _doSearch(keyword, 2, sources, quality, PLAYLIST_SEARCH_LIMIT),
+      ])
+      if (!songResult.success || !playlistResult.success) {
+        return { success: false, error: (songResult.message || playlistResult.message || '搜索失败') }
+      }
+      const songData = songResult.data?.data || []
+      const playlistData = playlistResult.data?.data || []
+      items = [...songData, ...playlistData]
+      warnings = [
+        ...(songResult.data?.warnings || []),
+        ...(playlistResult.data?.warnings || []),
+      ]
+      respType = 0
+    } else {
+      // 单类型：单次请求
+      const limit = type === 2 ? PLAYLIST_SEARCH_LIMIT : SONG_SEARCH_LIMIT
+      const result = await _doSearch(keyword, type, sources, quality, limit)
+      if (!result.success || !result.data) {
+        return { success: false, error: result.message || '搜索失败' }
+      }
+      items = result.data.data || []
+      warnings = result.data.warnings || []
     }
 
-    const { type: respType, data: items, warnings } = result.data
     const songs = []
     const playlists = []
-    for (const item of items || []) {
+    for (const item of items) {
       if (item._type === 'playlist') playlists.push(mapSearchPlaylist(item))
       else songs.push(mapSearchSong(item))
     }
@@ -390,11 +429,11 @@ export const downloadBatchAsZip = async (taskId) => {
 }
 
 export default {
-  dataSources,
   isHttpUrl,
   parseMusicInfo,
   getPlaylistById,
   unifiedSearch,
+  getPlatforms,
   startBatchTask,
   getBatchList,
   cancelBatchTask,
