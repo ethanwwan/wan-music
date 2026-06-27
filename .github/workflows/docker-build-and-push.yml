@@ -87,6 +87,9 @@ jobs:
 
   # ============================================================
   # Job 1.5: 同步 README 到 Docker Hub
+  # 失败不阻塞 release（描述同步是锦上添花，不是发布链路关键步骤）
+  # DOCKERHUB_TOKEN 必须是 Access Token，且权限 ≥ "Read & Write"
+  # （Docker Hub → Account Settings → Security → New Access Token）
   # ============================================================
   sync-readme:
     name: Sync README to Docker Hub
@@ -94,17 +97,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v3
+        uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           short-description: "Wan Music - 多平台音乐搜索、解析、下载工具"
           readme-filepath: ./README.md
+          ignore-empty-readme: true
 
   # ============================================================
   # Job 2: 创建 GitHub Release（仅 tag 触发）
