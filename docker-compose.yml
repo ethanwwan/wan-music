@@ -12,9 +12,6 @@ services:
     restart: always
     ports:
       - "6005:6005"
-    environment:
-      # 显式指定端口，防止宿主机上的 PORT/BACKEND_PORT 环境变量被继承到容器
-      PORT: "6005"
     volumes:
       - ./cookie:/app/clients/cookie   # 持久化 cookie（VIP 登录状态）
-
+      
