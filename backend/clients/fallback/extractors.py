@@ -342,43 +342,136 @@ def _best_quality(quality_map: dict) -> str:
 
 
 def normalize_qq_song(raw: dict) -> dict:
-    """QQ 歌曲标准化（兼容 xunhuisi 搜索 + QQ 官方 get_song_detail_yqq）
+    """QQ 歌曲标准化（兼容 client_search_cp / get_song_detail_yqq / xunhuisi 兜底）
 
-    xunhuisi 搜索字段：index/name/singer/mid
-    QQ 官方字段：name/title/singer/album/interval/pay/file
+    字段来源：
+      - QQ 官方 client_search_cp: songid/songmid/songname/singer[]/albummid/albumname/
+        size128/size320/sizeflac/sizeape/pay/preview/interval
+      - QQ 官方 get_song_detail_yqq: name/title/singer[]/album{name,mid}/interval/pay/file{}
+      - xunhuisi (兜底): name/singer/mid
     """
     if not isinstance(raw, dict):
         return {}
-    # 优先用已标准化的 artists 字段（extract_info 路径），其次回退到原始字段
-    singers = raw.get('artists') or raw.get('singer') or raw.get('singers') or []
+    # id
+    song_id = str(
+        raw.get('songmid') or raw.get('mid') or raw.get('id') or raw.get('songid') or ''
+    )
+
+    # 歌手
+    singers = raw.get('singer') or raw.get('artists') or raw.get('singers') or []
     if isinstance(singers, list):
-        artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
+        artists_str = '/'.join(
+            s.get('name', '') if isinstance(s, dict) else str(s) for s in singers
+        )
     else:
         artists_str = str(singers or '')
 
-    # album：可能是 dict（QQ 官方）或字符串
-    album = raw.get('album') or ''
-    if isinstance(album, dict):
-        album = album.get('name') or album.get('title') or ''
+    # 专辑：client_search_cp 给 albumname/albummid，info 路径给 album{name,mid}
+    album_name = raw.get('albumname') or raw.get('albumName') or ''
+    if not album_name:
+        album = raw.get('album') or ''
+        if isinstance(album, dict):
+            album_name = album.get('name') or album.get('title') or ''
+        else:
+            album_name = str(album or '')
 
-    # picUrl
+    # 封面：优先用 raw.picUrl，否则用官方模板 y.gtimg.cn
     pic = raw.get('picUrl') or raw.get('cover') or ''
+    if not pic:
+        albummid = raw.get('albummid') or raw.get('albumMid') or ''
+        if not albummid and isinstance(raw.get('album'), dict):
+            albummid = raw['album'].get('mid') or raw['album'].get('albumMid') or ''
+        if albummid:
+            pic = f'https://y.gtimg.cn/music/photo_new/T002R300x300M000{albummid}.jpg'
 
-    # 音质（extract_info 已生成 qualityMap 时直接用）
-    quality_map = raw.get('qualityMap') or {}
+    # duration：官方 search 是 interval(秒)，info 路径是 interval(秒)；转毫秒
+    interval = raw.get('interval') or raw.get('duration') or 0
+    try:
+        dur_ms = int(interval) * 1000 if int(interval) < 100000 else int(interval)
+    except (TypeError, ValueError):
+        dur_ms = 0
+
+    # 音质：官方 search 给 size128/size320/sizeflac/sizeape，info 路径给 file.size_*
+    quality_map = _extract_qq_quality_map(raw)
+
+    # 付费：client_search_cp 给 pay{payplay,paydownload,payalbum}，
+    # info 路径给 pay{pay_month,pay_play}。任一>0 即付费
+    pay_obj = raw.get('pay') or {}
+    if isinstance(pay_obj, dict):
+        pay_play = pay_obj.get('payplay') or pay_obj.get('pay_play') or 0
+        pay_down = pay_obj.get('paydownload') or pay_obj.get('pay_down') or 0
+        pay_album = pay_obj.get('payalbum') or pay_obj.get('pay_month') or 0
+        pay = bool(int(pay_play) or int(pay_down) or int(pay_album))
+        fee = 1 if pay else 0
+    else:
+        pay = bool(raw.get('pay') or raw.get('fee') or raw.get('isPay'))
+        fee = int(raw.get('fee') or 0)
 
     return {
-        'id': str(raw.get('id') or raw.get('mid') or raw.get('songid') or ''),
-        'name': raw.get('name') or raw.get('title') or raw.get('songname') or '',
+        'id': song_id,
+        'name': raw.get('songname') or raw.get('name') or raw.get('title') or '',
         'artists': artists_str,
-        'album': album,
+        'album': album_name,
         'picUrl': pic,
-        'duration': raw.get('duration') or raw.get('interval') or 0,
-        'pay': bool(raw.get('pay') or raw.get('isPay') or raw.get('fee')),
-        'fee': raw.get('fee') or 0,
+        'duration': dur_ms,
+        'pay': pay,
+        'fee': fee,
         'qualityMap': quality_map,
-        'bestQuality': _best_quality(quality_map) or raw.get('bestQuality') or '',
+        'bestQuality': _best_quality(quality_map),
     }
+
+
+# QQ 搜索/信息源 file.size_* / size128 等字段 → 前端 quality
+_QQ_QUALITY_FIELDS = {
+    'standard': ['size128', 'size_128mp3'],   # 128kbps MP3
+    'exhigh':   ['size320', 'size_320mp3'],   # 320kbps MP3
+    'lossless': ['sizeflac', 'size_flac'],    # FLAC
+    'hires':    ['sizehires', 'size_hires'],  # 24bit HiRes
+    'jymaster': ['sizejymaster', 'size_jymaster'],
+}
+
+
+def _extract_qq_quality_map(raw: dict) -> dict:
+    """从 QQ 搜索/信息源 raw 提取 qualityMap
+
+    支持两套字段：
+      - client_search_cp 顶层: size128 / size320 / sizeflac / sizeape
+      - get_song_detail_yqq 的 file.* : size_128mp3 / size_320mp3 / size_flac / size_hires
+    """
+    file_obj = raw.get('file') if isinstance(raw.get('file'), dict) else {}
+    qmap = {}
+    for quality_key, fields in _QQ_QUALITY_FIELDS.items():
+        size = 0
+        for f in fields:
+            # 先看 file.* 嵌套路径
+            if f in file_obj and file_obj[f]:
+                try:
+                    size = int(file_obj[f])
+                    if size > 0:
+                        break
+                except (TypeError, ValueError):
+                    pass
+            # 再看顶层
+            v = raw.get(f)
+            if v:
+                try:
+                    size = int(v)
+                    if size > 0:
+                        break
+                except (TypeError, ValueError):
+                    pass
+        if size > 0:
+            qmap[quality_key] = {
+                'size': size,
+                'br': {
+                    'standard': 128000,
+                    'exhigh': 320000,
+                    'lossless': 999000,
+                    'hires': 1411000,
+                    'jymaster': 1900000,
+                }.get(quality_key, 0),
+            }
+    return qmap
 
 
 def normalize_kugou_song(raw: dict) -> dict:

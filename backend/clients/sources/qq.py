@@ -2,7 +2,8 @@
 
 所有数据来源：musicdl qq.py + 实测（见 scripts/probe_apis.py）
 
-QQ 官方 API 鉴权复杂（sign/cookie），主要依赖第三方解析 API。
+QQ 官方 c.y.qq.com/soso/fcgi-bin/client_search_cp 免登录免 sign，
+返回完整字段（album/cover/qualityMap/pay）。
 """
 from ..fallback.api_source import ApiSource
 from ..fallback.extractors import (
@@ -25,43 +26,59 @@ QQ_LXMUSIC_HEADERS = {
 }
 
 
+def _qq_album_cover(albummid: str, size: int = 300) -> str:
+    """QQ 官方封面 URL 模板：https://y.gtimg.cn/music/photo_new/T002R{size}x{size}M000{albummid}.jpg"""
+    if not albummid:
+        return ''
+    return f'https://y.gtimg.cn/music/photo_new/T002R{size}x{size}M000{albummid}.jpg'
+
+
+def extract_qq_official_search(d: dict) -> list:
+    """从 QQ 官方 client_search_cp 响应提取歌曲列表
+
+    响应路径：data.song.list[]
+    关键字段：
+      - songid / songmid / songname
+      - singer: [{id, mid, name}]
+      - albumid / albummid / albumname
+      - interval (秒) / pubtime
+      - pay: {payalbum, paydownload, payinfo, payplay, paytrackmouth, paytrackprice}
+      - size128 / size320 / sizeape / sizeflac / sizeogg
+      - preview: {trybegin, tryend}
+    """
+    if not isinstance(d, dict):
+        return []
+    return d.get('data', {}).get('song', {}).get('list', []) or []
+
+
 # ==================== 搜索源 ====================
 
 QQ_SEARCH_SOURCES = [
-    # 1. xunhuisi（实测可用，参数名 name）- 也支持按 mid/name 查详情
+    # 1. QQ 官方 client_search_cp - 免登录免 sign，返回完整字段（album/cover/qualityMap/pay）
+    ApiSource(
+        name='qq_official_search',
+        platform='qq',
+        priority=0,
+        description='QQ 官方 client_search_cp（c.y.qq.com 完整字段）',
+        can_search=True,
+        search_url='https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={keyword_encoded}&n={limit}&format=json',
+        extract_search=extract_qq_official_search,
+        headers=QQ_COMMON_HEADERS,
+        timeout=15,
+    ),
+    # 2. xunhuisi（兜底：name 搜索 + mid 解析）
     ApiSource(
         name='xunhuisi_search',
         platform='qq',
-        priority=0,
-        description='xunhuisi (实测可用，name 参数)',
+        priority=10,
+        description='xunhuisi (name 搜索兜底)',
         can_search=True,
         search_url='https://api.xunhuisi.store/API/QQMusic/Song.php?name={keyword_encoded}&type=json',
         extract_search=lambda d: d.get('data', []) if isinstance(d, dict) else [],
         headers=QQ_COMMON_HEADERS,
         timeout=15,
     ),
-    # 2. QQ 官方 musicu.fcg（musicdl 列表，复杂 sign/cookie）
-    ApiSource(
-        name='qq_official_search',
-        platform='qq',
-        priority=10,
-        description='QQ 官方 musicu.fcg DoSearchForQQMusicMobile（需 sign/cookie）',
-        enabled=False,  # 复杂签名
-        can_search=True,
-        method='POST',
-        search_url='https://u.y.qq.com/cgi-bin/musicu.fcg',
-        post_data={
-            'comm': '{"format":"json","inCharset":"utf-8","outCharset":"utf-8","notice":0,"platform":"yqq.json","needNewCode":1,"uin":"0"}',
-            'req_0': '{"module":"music.search.SearchCgiService","method":"DoSearchForQQMusicMobile","param":{"searchid":"12345678","query":"{keyword}","num_per_page":{limit},"page_num":1}}',
-        },
-        extract_search=lambda d: (
-            d.get('req_0', {}).get('data', {}).get('body', {}).get('song', {}).get('list', [])
-            if isinstance(d, dict) else []
-        ),
-        headers=QQ_COMMON_HEADERS,
-        timeout=15,
-    ),
-    # 3. nki search - musicdl 列表（实测 404）
+    # 2. nki search - musicdl 列表（实测 404）
     ApiSource(
         name='nki_search',
         platform='qq',

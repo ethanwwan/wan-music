@@ -7,9 +7,9 @@
   - 酷我音乐（kuwo_client）
 
 提供统一的 API 接口（search / get_song），前端可指定数据源和平台。
+所有平台 search 走官方 API，一次返回完整元信息（album / cover / qualityMap / pay）。
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
 from .base_client import BaseMusicClient
@@ -19,24 +19,6 @@ from .kugou_client import KugouClient, kugou_client
 from .kuwo_client import KuwoClient, kuwo_client
 
 logger = logging.getLogger(__name__)
-
-
-def _merge_song_info(base: dict, info: dict) -> dict:
-    """把 info 链返回的字段补全到 search 拿到的歌曲上
-
-    只补空字段，避免覆盖 search 链已有的真实数据
-    """
-    if not info:
-        return base
-    for key in ('album', 'picUrl', 'artists', 'pay', 'fee', 'qualityMap', 'bestQuality'):
-        cur = base.get(key)
-        if not cur and info.get(key):
-            base[key] = info[key]
-    # 兜底：补完 qualityMap 后重算 bestQuality（info 链可能没给 bestQuality）
-    if base.get('qualityMap') and not base.get('bestQuality'):
-        from .fallback.extractors import _best_quality
-        base['bestQuality'] = _best_quality(base['qualityMap'])
-    return base
 
 
 class MusicClient:
@@ -80,33 +62,12 @@ class MusicClient:
     def search(self, keyword: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
         """搜索歌曲（永远只搜歌曲；URL 由 service 层另行解析）
 
-        拿到搜索结果后，对每首并发调一次 info 链补全元信息
-        （album/picUrl/qualityMap 等），因为部分搜索源（如 xunhuisi）
-        搜索结果缺少这些字段。
+        4 个平台 search 链都走官方 API，一次返回完整元信息
+        （album / cover / qualityMap / pay），不需要后置补全
         """
         client = self._get_client(platform)
         result = client.search(keyword, limit=limit)
-        songs = result.get('data', []) if isinstance(result, dict) else []
-        if not songs or not getattr(client, 'parse_info_chain', None):
-            return songs
-
-        def _enrich(song: dict) -> dict:
-            try:
-                info, _src = client.parse_info_chain.try_fetch(
-                    'parse_info', song_id=str(song.get('id') or ''),
-                )
-                return _merge_song_info(song, info or {})
-            except Exception as e:  # noqa
-                logger.debug(f'enrich song {song.get("id")} failed: {e}')
-                return song
-
-        try:
-            with ThreadPoolExecutor(max_workers=min(8, len(songs))) as pool:
-                enriched = list(pool.map(_enrich, songs))
-            return enriched
-        except Exception as e:  # noqa
-            logger.debug(f'enrich batch failed: {e}')
-            return songs
+        return result.get('data', []) if isinstance(result, dict) else []
 
     def get_song(self, song_id: Any, quality: str = 'lossless',
                  platform: str = None, with_lyric: bool = True) -> Optional[Dict[str, Any]]:
