@@ -8,6 +8,34 @@
     <a-empty v-else-if="searched && songs.length === 0" description="未找到相关结果" />
 
     <div v-else-if="songs.length > 0" class="tracks-table-wrapper">
+      <!-- 歌单详情头部：仅 playlist 模式展示 -->
+      <div v-if="type === 'playlist' && detail" class="detail-header">
+        <div class="header-left">
+          <div class="detail-cover-wrapper">
+            <img
+              v-if="detail.cover"
+              :src="proxyImg(detail.cover)"
+              :alt="detail.name"
+              class="detail-cover"
+            />
+            <div v-else class="cover-placeholder"></div>
+          </div>
+          <div class="detail-info">
+            <h1 class="detail-name">{{ detail.name }}</h1>
+            <div class="detail-meta">
+              <template v-if="detail.creator">
+                <span class="meta-item">创建者：{{ detail.creator }}</span>
+                <span class="meta-separator">•</span>
+              </template>
+              <span class="meta-item">共 {{ detail.trackCount || songs.length }} 首歌曲</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-right">
+          <a-button type="primary" @click="downloadAllInPlaylist">全部下载</a-button>
+        </div>
+      </div>
+
       <table class="tracks-table">
         <thead>
           <tr>
@@ -140,6 +168,10 @@ import { getPlatformById } from '../utils/platformsManager.js'
 
 const props = defineProps({
   songs: { type: Array, default: () => [] },
+  /** 搜索类型：'song'（单曲）| 'playlist'（歌单）| 'unknown' */
+  type: { type: String, default: 'song' },
+  /** 歌单详情：{ name, creator, cover, trackCount }（仅 playlist 模式有） */
+  detail: { type: Object, default: null },
   loading: { type: Boolean, default: false },
   searched: { type: Boolean, default: false }
 })
@@ -334,6 +366,27 @@ const handleBatchDownloadSelected = async () => {
     message.error(`下载失败：${error?.message || error}`)
   }
 }
+
+// 歌单模式：一键全部下载（跳过选择模式）
+const downloadAllInPlaylist = async () => {
+  if (props.songs.length === 0) return
+  const items = props.songs.map(buildDownloadItem)
+  const name = props.detail?.name || '歌单'
+  const label = items.length > 1 ? `${name}（${items.length}首）` : items[0].name
+  try {
+    await startDownload(items, label)
+  } catch (error) {
+    message.error(`下载失败：${error?.message || error}`)
+  }
+}
+
+// 包装图片 URL 走 /image 代理（避免跨域 ORB 阻断）
+const proxyImg = (url) => {
+  if (!url || typeof url !== 'string') return ''
+  if (url.startsWith('/image') || url.startsWith('data:') || url.startsWith('blob:')) return url
+  if (!/^https?:\/\//.test(url)) return url
+  return `/image?url=${encodeURIComponent(url)}`
+}
 </script>
 
 <style scoped>
@@ -428,6 +481,36 @@ const handleBatchDownloadSelected = async () => {
 .col-pay { width: 70px; text-align: center; }
 .col-quality { width: 90px; text-align: center; }
 .col-action { width: 130px; text-align: center; }
+
+/* ==================== 歌单详情头部（toolbar）=================== */
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: var(--color-surface-container-low);
+  border-bottom: 1px solid var(--color-border-subtle);
+  gap: 20px;
+}
+.header-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.detail-cover-wrapper {
+  width: 96px; height: 96px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-container);
+  flex-shrink: 0;
+}
+.detail-cover { width: 100%; height: 100%; object-fit: cover; }
+.cover-placeholder { width: 100%; height: 100%; background: var(--color-surface-container); }
+.detail-info { min-width: 0; }
+.detail-name {
+  font-size: 20px; font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--color-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.detail-meta { display: flex; align-items: center; gap: 8px; color: var(--color-text-muted); font-size: 13px; }
+.meta-separator { color: var(--color-text-muted); opacity: 0.5; }
 
 .track-cover-wrapper {
   width: 40px;

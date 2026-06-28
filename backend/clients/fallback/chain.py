@@ -268,6 +268,8 @@ class FallbackChain:
             return isinstance(data, dict) and bool(data.get('name') or data.get('id'))
         if op == 'parse_lyric':
             return isinstance(data, str) and len(data.strip()) > 0
+        if op == 'parse_playlist':
+            return isinstance(data, dict) and bool(data.get('tracks') or data.get('name'))
         return bool(data)
 
     def _load_cookie(self, cookie_file: str) -> dict:

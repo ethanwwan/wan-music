@@ -6,7 +6,12 @@
 第三方源质量分级：lossless < exhigh < standard；特殊品质 jymaster 走 jymaster/ff/p/h 标签。
 """
 from ..fallback.api_source import ApiSource
-from ..fallback.extractors import extract_first_url, extract_text_url
+from ..fallback.extractors import (
+    extract_first_url,
+    extract_text_url,
+    extract_kuwo_playlist as _extract_kuwo_playlist,
+    extract_gdstudio_playlist as _extract_gdstudio_playlist,
+)
 
 
 KUWO_COMMON_HEADERS = {
@@ -427,5 +432,41 @@ KUWO_PARSE_LYRIC_SOURCES = [
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+    ),
+]
+
+
+# ==================== 歌单解析 ====================
+
+KUWO_PARSE_PLAYLIST_SOURCES = [
+    # 1. 酷我官方 playListInfo（需登录态，匿名访问多返回 -1）
+    ApiSource(
+        name='kuwo_official_playlist',
+        platform='kuwo',
+        priority=0,
+        description='酷我官方 playListInfo（分页：pn=page, rn=100）',
+        can_parse_playlist=True,
+        parse_playlist_url=(
+            'https://m.kuwo.cn/newh5app/wapi/api/www/playlist/playListInfo'
+            '?pid={playlist_id}&pn={page}&rn={size}'
+        ),
+        extract_playlist=_extract_kuwo_playlist,
+        headers={
+            **KUWO_COMMON_HEADERS,
+            'Referer': 'https://m.kuwo.cn/',
+        },
+        timeout=15,
+    ),
+    # 2. gdstudio 跨平台歌单（兜底，gdstudio 实际固定返回网易云格式）
+    ApiSource(
+        name='gdstudio_playlist',
+        platform='kuwo',
+        priority=20,
+        description='gdstudio 跨平台歌单（兜底，gdstudio 实际固定返回网易云格式）',
+        can_parse_playlist=True,
+        parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=kuwo',
+        extract_playlist=_extract_gdstudio_playlist,
+        headers={'User-Agent': 'Mozilla/5.0'},
+        timeout=20,
     ),
 ]

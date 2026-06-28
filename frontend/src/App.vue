@@ -19,6 +19,8 @@
         <SearchResult
           :key="searchSession"
           :songs="searchResults"
+          :type="searchType"
+          :detail="searchDetail"
           :loading="loading"
           :searched="searched"
           @track-play="handlePlaySong"

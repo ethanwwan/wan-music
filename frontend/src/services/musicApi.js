@@ -211,6 +211,8 @@ export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()])
     return {
       success: true,
       data: items,
+      type: inner.type || 'song',         // 'song' | 'playlist' | 'unknown'
+      detail: inner.detail || null,        // 仅 type==='playlist' 时有
       error: inner.error || '',
     }
   } catch (error) {

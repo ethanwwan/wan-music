@@ -20,7 +20,7 @@ from typing import Dict, List, Any, Optional
 
 import requests
 
-from clients.music_client import music_client, search_music, get_song, get_platforms
+from clients.music_client import music_client, search_music, get_song, get_platforms, parse_playlist
 from utils.url_parser import parse_url
 from utils.filename import (
     sanitize_filename as _sanitize_filename,
@@ -74,8 +74,9 @@ class MusicService:
     def _resolve_from_url(self, parsed: Dict[str, str]) -> Dict[str, Any]:
         """URL 解析后获取详情（支持歌曲链接和歌单链接）
 
-        - music URL: 直接拿歌曲信息
-        - playlist URL: 返回明确错误（chain 框架暂无歌单 track 解析实现）
+        返回带 type 字段，前端根据 type 决定是否展示 toolbar：
+        - type='song': 单曲列表（无 toolbar）
+        - type='playlist': 歌单（detail 含 name/cover/creator/trackCount）
         """
         resource_type = parsed.get('type')
         resource_id = parsed['id']
@@ -84,22 +85,42 @@ class MusicService:
         if resource_type == 'music':
             song_info = self.get_song_info(resource_id, 'lossless', source_platform)
             if song_info and song_info.get('id') and song_info.get('url'):
-                return {'data': [song_info], 'warnings': []}
+                return {
+                    'data': [song_info],
+                    'type': 'song',
+                    'warnings': [],
+                }
             return {
                 'data': [],
+                'type': 'song',
                 'error': '未找到歌曲信息（可能 URL 已失效）',
                 'warnings': [],
             }
 
         if resource_type == 'playlist':
+            playlist = parse_playlist(resource_id, platform=source_platform)
+            if playlist and playlist.get('tracks'):
+                return {
+                    'data': playlist['tracks'],
+                    'type': 'playlist',
+                    'detail': {
+                        'name': playlist.get('name') or '歌单',
+                        'creator': playlist.get('creator') or '',
+                        'cover': playlist.get('cover') or '',
+                        'trackCount': playlist.get('trackCount') or len(playlist['tracks']),
+                    },
+                    'warnings': [],
+                }
             return {
                 'data': [],
-                'error': '歌单链接解析暂未实现（请直接搜索歌曲）',
+                'type': 'playlist',
+                'error': f'{source_platform} 平台暂不支持歌单解析',
                 'warnings': [],
             }
 
         return {
             'data': [],
+            'type': 'unknown',
             'error': f'暂不支持解析 {resource_type} 类型的链接',
             'warnings': [],
         }
@@ -108,11 +129,12 @@ class MusicService:
         """关键字搜索歌曲"""
         try:
             songs = search_music(keyword, platform, limit)
-            return {'data': songs, 'warnings': []}
+            return {'data': songs, 'type': 'song', 'warnings': []}
         except Exception as e:
             logger.error(f"[{platform}] 搜索失败: {e}")
             return {
                 'data': [],
+                'type': 'song',
                 'error': f'搜索失败: {e}',
                 'warnings': [],
             }

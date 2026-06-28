@@ -79,6 +79,18 @@ class MusicClient:
         client = self._get_client(platform)
         return client.get_song(str(song_id), quality, with_lyric=with_lyric)
 
+    def parse_playlist(self, playlist_id: str, platform: str = None,
+                       page: int = 1, size: int = 100) -> Optional[Dict[str, Any]]:
+        """解析歌单：返回 {'name','creator','cover','trackCount','tracks', 'source', 'api_source'}
+
+        Returns:
+            None 表示该平台暂不支持歌单解析
+        """
+        client = self._get_client(platform)
+        if not hasattr(client, 'parse_playlist'):
+            return None
+        return client.parse_playlist(playlist_id, page=page, size=size)
+
 
 # 全局单例
 music_client = MusicClient()
@@ -94,6 +106,12 @@ def get_song(song_id: str, quality: str, platform: str = None,
              with_lyric: bool = True) -> Optional[Dict[str, Any]]:
     """获取歌曲完整信息（向后兼容，新接口推荐用 music_client.get_song）"""
     return music_client.get_song(song_id, quality, platform, with_lyric=with_lyric)
+
+
+def parse_playlist(playlist_id: str, platform: str = None,
+                   page: int = 1, size: int = 100) -> Optional[Dict[str, Any]]:
+    """解析歌单（向后兼容函数）"""
+    return music_client.parse_playlist(playlist_id, platform, page=page, size=size)
 
 
 def get_platforms() -> List[Dict[str, str]]:

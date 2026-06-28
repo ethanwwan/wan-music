@@ -15,6 +15,7 @@ from .sources.kuwo import (
     KUWO_PARSE_URL_SOURCES,
     KUWO_PARSE_INFO_SOURCES,
     KUWO_PARSE_LYRIC_SOURCES,
+    KUWO_PARSE_PLAYLIST_SOURCES,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class KuwoClient(BaseMusicClient):
         self.parse_url_chain = FallbackChain(KUWO_PARSE_URL_SOURCES, platform='kuwo', strategy='serial')
         self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='serial')
         self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='serial')
+        self.parse_playlist_chain = FallbackChain(KUWO_PARSE_PLAYLIST_SOURCES, platform='kuwo', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """搜索歌曲"""
@@ -98,6 +100,32 @@ class KuwoClient(BaseMusicClient):
             'parse_url': self.parse_url_chain.get_health(),
             'parse_info': self.parse_info_chain.get_health(),
             'parse_lyric': self.parse_lyric_chain.get_health(),
+            'parse_playlist': self.parse_playlist_chain.get_health(),
+        }
+
+    def parse_playlist(self, playlist_id: str, page: int = 1,
+                       size: int = 100) -> Optional[Dict[str, Any]]:
+        """解析歌单：返回 {'name','creator','cover','trackCount','tracks', 'source', 'api_source'}
+
+        串行：调用链中第一个成功解析的源
+        """
+        data, source = self.parse_playlist_chain.try_fetch(
+            'parse_playlist',
+            playlist_id=str(playlist_id),
+            page=page,
+            size=size,
+            target_platform=self.platform_id,
+        )
+        if not data or not isinstance(data, dict):
+            return None
+        # 给每首歌曲补上平台标记
+        for t in data.get('tracks', []) or []:
+            if not t.get('source'):
+                t['source'] = self.platform_id
+        return {
+            **data,
+            'platform': self.platform_id,
+            'api_source': source or 'unknown',
         }
 
 

@@ -39,12 +39,16 @@ export const parseMusic = async (input, source) => {
     const result = await musicApi.unifiedSearch(input, [source || settings.selectedSource || 'netease'])
     if (!result.success) {
       searchResults.value = []
+      searchType.value = 'song'
+      searchDetail.value = null
       message.error(`搜索失败：${result.error}`)
       return
     }
 
     const items = result.data || []
     searchResults.value = items
+    searchType.value = result.type || 'song'
+    searchDetail.value = result.detail || null
 
     if (items.length > 0) {
       notifySearchResult(items.length, result.fromCache)
@@ -56,6 +60,8 @@ export const parseMusic = async (input, source) => {
     }
   } catch {
     searchResults.value = []
+    searchType.value = 'song'
+    searchDetail.value = null
     message.error('搜索失败，请稍后重试')
   } finally {
     loading.value = false

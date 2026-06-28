@@ -82,18 +82,22 @@ class ApiSource:
     can_parse_url: bool = False
     can_parse_info: bool = False
     can_parse_lyric: bool = False
+    can_parse_playlist: bool = False
 
-    # URL 模板
+    # URL 模板（支持 {keyword}、{song_id}、{quality}、{limit}、{rid}、{hash}、{playlist_id}、{page}、{size} 等占位符）
     search_url: str = ''
     parse_url_url: str = ''
     parse_info_url: str = ''
     parse_lyric_url: str = ''
+    parse_playlist_url: str = ''
 
-    # 提取器
+    # 提取器（从 JSON 响应中提取数据）
     extract_search: Optional[Callable[[dict], list]] = None
     extract_url: Optional[Callable[[dict], str]] = None
     extract_info: Optional[Callable[[dict], dict]] = None
     extract_lyric: Optional[Callable[[dict], str]] = None
+    extract_playlist: Optional[Callable[[dict], dict]] = None  # 返回 {'name','creator','cover','trackCount','tracks':[...]}
+
 
     # HTTP
     method: str = 'GET'
@@ -114,12 +118,13 @@ class ApiSource:
     _stats: dict = field(default_factory=lambda: {'ok': 0, 'fail': 0, 'last_error': '', 'last_used': 0, 'total_ms': 0})
 
     def supports(self, op: str) -> bool:
-        """检查是否支持某操作：'search' | 'parse_url' | 'parse_info' | 'parse_lyric'"""
+        """检查是否支持某操作：'search' | 'parse_url' | 'parse_info' | 'parse_lyric' | 'parse_playlist'"""
         flag = {
             'search': self.can_search,
             'parse_url': self.can_parse_url,
             'parse_info': self.can_parse_info,
             'parse_lyric': self.can_parse_lyric,
+            'parse_playlist': self.can_parse_playlist,
         }.get(op, False)
         return self.enabled and flag
 
@@ -130,6 +135,7 @@ class ApiSource:
             'parse_url': self.parse_url_url,
             'parse_info': self.parse_info_url,
             'parse_lyric': self.parse_lyric_url,
+            'parse_playlist': self.parse_playlist_url,
         }.get(op, '')
 
     def get_extractor(self, op: str):
@@ -139,6 +145,7 @@ class ApiSource:
             'parse_url': self.extract_url,
             'parse_info': self.extract_info,
             'parse_lyric': self.extract_lyric,
+            'parse_playlist': self.extract_playlist,
         }.get(op)
 
     def to_dict(self) -> dict:
