@@ -274,17 +274,121 @@ QQ_PARSE_URL_SOURCES = [
 
 # ==================== 歌曲元信息源 ====================
 
+# QQ file.size_* 字段 → 前端 quality 字段映射
+_QQ_FILE_QUALITY_MAP = {
+    'standard': 'size_128mp3',  # 128kbps MP3
+    'exhigh':   'size_320mp3',  # 320kbps MP3
+    'lossless': 'size_flac',    # FLAC
+    'hires':    'size_hires',   # 24bit HiRes
+}
+
+
+def _extract_qq_official_info(d: dict, song_id: str = '') -> dict:
+    """从 QQ 官方 get_song_detail_yqq 响应提取歌曲元信息
+
+    响应路径: songinfo.data.track_info
+    关键字段:
+      - name / title / mid / id
+      - singer: [{name}, ...]
+      - album: {name, mid} → cover_url = f"https://y.gtimg.cn/music/photo_new/T002R800x800M000{album.mid}.jpg"
+      - interval (秒)
+      - pay: {pay_month, pay_play, pay_down, price_track, ...}
+      - file: {size_128mp3, size_320mp3, size_flac, size_hires, size_ape, ...}
+    """
+    if not isinstance(d, dict):
+        return {}
+    track = d.get('songinfo', {}).get('data', {}).get('track_info', {}) or {}
+    if not track:
+        return {}
+    # 歌手列表
+    singers = track.get('singer') or []
+    if isinstance(singers, list):
+        artists_str = '/'.join(
+            s.get('name', '') for s in singers if isinstance(s, dict) and s.get('name')
+        )
+    else:
+        artists_str = ''
+    # 专辑
+    album = track.get('album') or {}
+    if isinstance(album, dict):
+        album_name = album.get('name', '') or album.get('title', '')
+        album_mid = album.get('mid', '') or album.get('albumMid', '')
+    else:
+        album_name, album_mid = '', ''
+    # 封面：官方封面 URL 模板
+    pic = ''
+    if album_mid:
+        pic = f'https://y.gtimg.cn/music/photo_new/T002R300x300M000{album_mid}.jpg'
+    # 时长（秒 → 毫秒）
+    interval = int(track.get('interval') or 0) * 1000
+    # 付费信息
+    pay_info = track.get('pay') or {}
+    pay_month = pay_info.get('pay_month', 0)
+    pay_play = pay_info.get('pay_play', 0)
+    pay_down = pay_info.get('pay_down', 0)
+    pay = bool(pay_month or pay_play or pay_down)
+    fee = 1 if (pay_month or pay_play) else 0
+    # 音质大小
+    file_info = track.get('file') or {}
+    quality_map = {}
+    for quality_key, file_field in _QQ_FILE_QUALITY_MAP.items():
+        size = file_info.get(file_field) or 0
+        if size > 0:
+            quality_map[quality_key] = {
+                'size': int(size),
+                # bitrate 从字段名推断
+                'br': {
+                    'standard': 128000,
+                    'exhigh': 320000,
+                    'lossless': 999000,
+                    'hires': 1411000,
+                }.get(quality_key, 0),
+            }
+    return {
+        'id': track.get('mid') or track.get('songmid') or song_id,
+        'name': track.get('name') or track.get('title') or '',
+        'artists': artists_str,
+        'album': album_name,
+        'picUrl': pic,
+        'duration': interval,
+        'pay': pay,
+        'fee': fee,
+        'qualityMap': quality_map,
+    }
+
+
 QQ_PARSE_INFO_SOURCES = [
-    # 1. xunhuisi 返回的 title/singer/cover 可作为元信息
+    # 1. QQ 官方 get_song_detail_yqq（musicdl 列表，最完整：album/cover/qualityMap/pay）
+    ApiSource(
+        name='qq_official_info',
+        platform='qq',
+        priority=0,
+        description='QQ 官方 get_song_detail_yqq (musicu.fcg)',
+        can_parse_info=True,
+        method='POST',
+        parse_info_url='https://u.y.qq.com/cgi-bin/musicu.fcg',
+        # 用 dict 让 chain 走 is_json=True (json.dumps) 路径，避免对字符串误做 .format()
+        is_json=True,
+        post_data={
+            'songinfo': {
+                'method': 'get_song_detail_yqq',
+                'module': 'music.pf_song_detail_svr',
+                'param': {'song_mid': '{song_id}'},
+            }
+        },
+        # 用 helper 提取（支持 song_id 兜底）
+        extract_info=lambda d, song_id='': _extract_qq_official_info(d, song_id),
+        headers=QQ_COMMON_HEADERS,
+        timeout=10,
+    ),
+    # 2. xunhuisi_info（兜底，priority 10）
     ApiSource(
         name='xunhuisi_info',
         platform='qq',
-        priority=0,
+        priority=10,
         description='xunhuisi (mid 解析，title/singer/cover)',
         can_parse_info=True,
         parse_info_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
-        # xunhuisi 字段：title / singer / cover，映射成 name/artist 以便通用校验和标准化
-        # id 从 kwargs 兜底（xunhuisi 不返回 mid）
         extract_info=lambda d, song_id='': {
             'id': song_id,
             'name': d.get('title', ''),
@@ -294,25 +398,6 @@ QQ_PARSE_INFO_SOURCES = [
         } if isinstance(d, dict) and d.get('code') == 200 else {},
         headers=QQ_COMMON_HEADERS,
         timeout=15,
-    ),
-    # 2. QQ 官方 get_song_detail_yqq - musicdl 列表
-    ApiSource(
-        name='qq_official_info',
-        platform='qq',
-        priority=10,
-        description='QQ 官方 get_song_detail_yqq (musicu.fcg)',
-        can_parse_info=True,
-        method='POST',
-        parse_info_url='https://u.y.qq.com/cgi-bin/musicu.fcg',
-        post_data={
-            'songinfo': '{"method":"get_song_detail_yqq","module":"music.pf_song_detail_svr","param":{"song_mid":"{song_id}"}}'
-        },
-        extract_info=lambda d: (
-            d.get('songinfo', {}).get('data', {}).get('track_info', {})
-            if isinstance(d, dict) else {}
-        ),
-        headers=QQ_COMMON_HEADERS,
-        timeout=10,
     ),
     # 3. vkeys info - musicdl 列表
     ApiSource(

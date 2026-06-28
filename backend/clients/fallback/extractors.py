@@ -342,51 +342,110 @@ def _best_quality(quality_map: dict) -> str:
 
 
 def normalize_qq_song(raw: dict) -> dict:
-    """QQ 歌曲标准化"""
+    """QQ 歌曲标准化（兼容 xunhuisi 搜索 + QQ 官方 get_song_detail_yqq）
+
+    xunhuisi 搜索字段：index/name/singer/mid
+    QQ 官方字段：name/title/singer/album/interval/pay/file
+    """
     if not isinstance(raw, dict):
         return {}
-    # 优先用已标准化的 artists 字段；其次回退到原始 singer 字段
+    # 优先用已标准化的 artists 字段（extract_info 路径），其次回退到原始字段
     singers = raw.get('artists') or raw.get('singer') or raw.get('singers') or []
     if isinstance(singers, list):
         artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
     else:
         artists_str = str(singers or '')
 
-    album_info = raw.get('album') or {}
-    if isinstance(album_info, dict):
-        album_name = album_info.get('name', album_info.get('title', ''))
-    else:
-        album_name = str(album_info or '')
+    # album：可能是 dict（QQ 官方）或字符串
+    album = raw.get('album') or ''
+    if isinstance(album, dict):
+        album = album.get('name') or album.get('title') or ''
+
+    # picUrl
+    pic = raw.get('picUrl') or raw.get('cover') or ''
+
+    # 音质（extract_info 已生成 qualityMap 时直接用）
+    quality_map = raw.get('qualityMap') or {}
 
     return {
         'id': str(raw.get('id') or raw.get('mid') or raw.get('songid') or ''),
         'name': raw.get('name') or raw.get('title') or raw.get('songname') or '',
         'artists': artists_str,
-        'album': album_name,
-        'picUrl': raw.get('picUrl') or '',
+        'album': album,
+        'picUrl': pic,
         'duration': raw.get('duration') or raw.get('interval') or 0,
-        'bestQuality': '',
+        'pay': bool(raw.get('pay') or raw.get('isPay') or raw.get('fee')),
+        'fee': raw.get('fee') or 0,
+        'qualityMap': quality_map,
+        'bestQuality': _best_quality(quality_map) or raw.get('bestQuality') or '',
     }
 
 
 def normalize_kugou_song(raw: dict) -> dict:
-    """酷狗歌曲标准化"""
+    """将酷狗搜索/信息源 dict 标准化为前端格式
+
+    musicdl 酷狗搜索字段：SongName / SingerName / AlbumName / Duration / FileHash / Image
+    扩展字段：HQFileSize / HQBitrate / SQFileSize / SQBitrate / Privilege / PayType
+    """
     if not isinstance(raw, dict):
         return {}
-    singers = raw.get('Singers') or raw.get('singers') or []
-    if isinstance(singers, list):
-        artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
-    else:
-        artists_str = str(singers or '')
+    # artist 字段可能在多个名字下
+    artists = raw.get('SingerName') or raw.get('singerName') or raw.get('singer') or ''
+    if not artists and isinstance(raw.get('Singers'), list):
+        artists = '/'.join(
+            (s.get('name', '') if isinstance(s, dict) else str(s))
+            for s in raw.get('Singers', [])
+        )
+
+    # album
+    album = raw.get('AlbumName') or raw.get('album') or ''
+
+    # picUrl：Image 字段是模板 URL（含 {size}），替换为 240
+    pic = raw.get('Image') or raw.get('image') or raw.get('album_img') or raw.get('imgUrl') or raw.get('picUrl') or ''
+    if isinstance(pic, str) and '{size}' in pic:
+        pic = pic.replace('{size}', '240')
+
+    # duration（酷狗是秒，其他源是毫秒）
+    dur = raw.get('Duration') or raw.get('duration') or 0
+    try:
+        dur = int(dur)
+    except (TypeError, ValueError):
+        dur = 0
+    # 如果 < 10000 当作秒，转成毫秒
+    if 0 < dur < 10000:
+        dur = dur * 1000
+
+    # 音质：酷狗搜索有 HQ/SQ/基础字段
+    quality_map = {}
+    sq_size = raw.get('SQFileSize') or 0
+    sq_br = raw.get('SQBitrate') or 0
+    hq_size = raw.get('HQFileSize') or 0
+    hq_br = raw.get('HQBitrate') or 0
+    base_size = raw.get('FileSize') or 0
+    base_br = raw.get('Bitrate') or 0
+    if sq_br and sq_size:
+        quality_map['lossless'] = {'br': int(sq_br) * 1000, 'size': int(sq_size)}
+    if hq_br and hq_size:
+        quality_map['exhigh'] = {'br': int(hq_br) * 1000, 'size': int(hq_size)}
+    if base_br and base_size:
+        quality_map['standard'] = {'br': int(base_br) * 1000, 'size': int(base_size)}
+
+    # 付费：Privilege=8 (普通) / 10 (VIP) / 4 (专辑) / 0 (免费)
+    privilege = raw.get('Privilege') or 0
+    pay_type = raw.get('PayType') or 0
+    pay = (privilege >= 4) or (pay_type >= 1)
 
     return {
         'id': str(raw.get('FileHash') or raw.get('hash') or raw.get('id') or ''),
         'name': raw.get('SongName') or raw.get('name') or raw.get('songname') or '',
-        'artists': artists_str,
-        'album': raw.get('AlbumName') or raw.get('album') or '',
-        'picUrl': '',
-        'duration': raw.get('Duration') or raw.get('duration') or 0,
-        'bestQuality': '',
+        'artists': artists,
+        'album': album,
+        'picUrl': pic,
+        'duration': dur,
+        'pay': pay,
+        'fee': pay_type,
+        'qualityMap': quality_map,
+        'bestQuality': _best_quality(quality_map),
     }
 
 
@@ -396,6 +455,7 @@ def normalize_kuwo_song(raw: dict) -> dict:
     musicdl 酷我搜索结果字段：
       - MUSICRID: 'MUSIC_123456'  → 取数字部分作为 rid
       - SONGNAME / ARTIST / ALBUM / DURATION / hts_MVPIC
+      - minfo (mp3/minfo/...) quality 描述
     """
     if not isinstance(raw, dict):
         return {}
@@ -405,13 +465,34 @@ def normalize_kuwo_song(raw: dict) -> dict:
     if not rid:
         rid = str(raw.get('id') or raw.get('rid') or '')
 
+    # duration 转换（酷我是秒，info 源是毫秒）
+    dur = raw.get('DURATION') or raw.get('duration') or 0
+    try:
+        dur = int(dur)
+    except (TypeError, ValueError):
+        dur = 0
+    if 0 < dur < 100000:
+        dur = dur * 1000
+
+    # picUrl: hts_MVPIC 是模板 URL {size} 替换
+    pic = raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or ''
+    if isinstance(pic, str) and '{size}' in pic:
+        pic = pic.replace('{size}', '300')
+
+    # 音质：酷我官方搜索响应在 minfo 字段有 mp3/minfo128/...
+    # 简化处理：没有标准 qualityMap，bestQuality 留空
+    quality_map = {}
+
     return {
         'id': str(rid),
         'name': raw.get('SONGNAME') or raw.get('name') or raw.get('songName') or raw.get('title') or '',
         # 优先用已标准化的 artists 字段（extract_info 路径），再回退到原始字段
         'artists': raw.get('artists') or raw.get('ARTIST') or raw.get('artist') or raw.get('singer') or '',
         'album': raw.get('ALBUM') or raw.get('album') or '',
-        'picUrl': raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or '',
-        'duration': raw.get('DURATION') or raw.get('duration') or 0,
-        'bestQuality': '',
+        'picUrl': pic,
+        'duration': dur,
+        'pay': bool(raw.get('pay') or raw.get('isPay') or raw.get('fee')),
+        'fee': raw.get('fee') or 0,
+        'qualityMap': quality_map,
+        'bestQuality': _best_quality(quality_map),
     }
