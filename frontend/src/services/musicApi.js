@@ -78,7 +78,7 @@ const setCachedSearch = (keyword, source, data) => {
 
 const get = async (url) => {
   const response = await fetch(url, { method: 'GET' })
-  return response.json()
+  return safeJson(response)
 }
 
 const postJson = async (url, data) => {
@@ -87,7 +87,28 @@ const postJson = async (url, data) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
-  return response.json()
+  return safeJson(response)
+}
+
+// 安全 JSON 解析：空响应或非 JSON 时返回明确的错误对象
+const safeJson = async (response) => {
+  const text = await response.text()
+  if (!text) {
+    return {
+      success: false,
+      error: `请求失败 (HTTP ${response.status})：后端无响应，请检查后端服务是否启动`,
+      message: `HTTP ${response.status}`,
+    }
+  }
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    return {
+      success: false,
+      error: `请求失败 (HTTP ${response.status})：返回非 JSON 数据`,
+      message: text.slice(0, 200),
+    }
+  }
 }
 
 // ==================== /platforms ====================
@@ -170,7 +191,7 @@ export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()])
 
     const result = await postJson('/search', { keyword, source, limit: 50 })
     if (!result?.success) {
-      return { success: false, error: result?.message || '搜索失败' }
+      return { success: false, error: result?.error || result?.message || '搜索失败' }
     }
 
     const inner = result.data || {}
