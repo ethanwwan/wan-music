@@ -1,169 +1,72 @@
 """音乐客户端抽象基类
 
-定义所有音乐平台客户端必须实现的接口规范，提供公共方法。
+定义所有音乐平台客户端必须实现的接口规范。
 
-参考 musicdl 的 BaseMusicClient 设计模式：
-https://github.com/CharlesPikachu/musicdl/blob/master/musicdl/modules/sources/base.py
+设计原则：
+  - 方法粒度对齐"用户场景"（search / get_song），不沿用上游 API 路径
+  - 失败用显式 Optional/None 表达，不靠"空字符串字段"隐式表达
+  - search 永远只搜歌曲（不分歌单），URL 解析另走 _resolve_from_url
 """
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import requests
 
-from .quality_config import QualityLevel, get_default_quality, is_valid_quality
-import logging
-
-logger = logging.getLogger(__name__)
+from .quality_config import get_default_quality, is_valid_quality
 
 
 class BaseMusicClient(ABC):
-    """音乐客户端抽象基类
-    
-    所有音乐平台客户端必须继承此类并实现所有抽象方法。
-    提供统一的接口规范和公共工具方法。
-    """
-    
+    """音乐客户端抽象基类"""
+
     def __init__(self):
-        """初始化客户端"""
         self.session = requests.Session()
         self.platform_name = "base"
         self.platform_id = "base"
-    
-    def _request(
-        self,
-        method: str,
-        url: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        timeout: int = 10,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """统一请求封装
 
-        Args:
-            method: HTTP方法 (get/post/put/delete)
-            url: 请求URL
-            params: URL参数
-            data: 请求体数据
-            headers: 请求头
-            timeout: 超时时间
-            **kwargs: 其他参数
-
-        Returns:
-            JSON响应数据，失败返回空字典
-        """
-        try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                params=params,
-                data=data,
-                headers=headers,
-                timeout=timeout,
-                **kwargs
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"[{self.platform_name}] 请求失败 {url} | {type(e).__name__}: {e}")
-            return {}
-        except ValueError:
-            logger.error(f"[{self.platform_name}] 非JSON响应 {url}")
-            return {}
-    
-    def _get(self, url: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-        """GET请求封装"""
-        return self._request('GET', url, params=params, **kwargs)
-    
-    def _post(self, url: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-        """POST请求封装"""
-        return self._request('POST', url, data=data, **kwargs)
-    
-    def _handle_error(self, error: Exception, context: str = "") -> None:
-        """统一错误处理"""
-        logger.error(f"[{self.platform_name}] {context} 错误: {error}")
-    
     @abstractmethod
-    def search(self, keyword: str, limit: int = 50, offset: int = 0, quality: str = 'lossless') -> List[Dict[str, Any]]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """搜索歌曲
-        
-        Args:
-            keyword: 搜索关键词
-            limit: 返回数量
-            offset: 偏移量
-        
+
         Returns:
-            歌曲列表
+            {
+                'data': [{'id', 'name', 'artists', 'album', 'picUrl', 'duration',
+                          'source', 'api_source'}, ...],
+                'search_source': str,   # 命中的源名（None 表示完全失败）
+                'warnings': list,       # 警告信息
+            }
         """
         pass
-    
+
     @abstractmethod
-    def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """搜索歌单
-        
-        Args:
-            keyword: 搜索关键词
-            limit: 返回数量
-        
+    def get_song(self, song_id: Any, quality: str = 'lossless',
+                 with_lyric: bool = True) -> Optional[Dict[str, Any]]:
+        """一次性获取歌曲完整信息：元信息 + 播放 URL + (可选) 歌词
+
         Returns:
-            歌单列表
+            None 表示完全失败
+            成功时至少包含 {'id', 'url', 'source', 'quality', 'api_source'}，
+            失败的部分字段可能为 ''（歌词等可选字段）
         """
         pass
-    
-    @abstractmethod
-    def get_song_url(self, song_id: Any, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取歌曲播放/下载URL
-        
-        Args:
-            song_id: 歌曲ID
-            quality: 音质 (standard/exhigh/lossless/hires/sky/jyeffect/jymaster/dolby)
-        
-        Returns:
-            包含url的字典
-        """
-        pass
-    
-    @abstractmethod
-    def get_song_info(self, song_id: Any) -> Dict[str, Any]:
-        """获取歌曲信息
-        
-        Args:
-            song_id: 歌曲ID
-        
-        Returns:
-            歌曲信息
-        """
-        pass
-    
-    @abstractmethod
-    def get_lyric(self, song_id: Any) -> str:
-        """获取歌词
-        
-        Args:
-            song_id: 歌曲ID
-        
-        Returns:
-            歌词文本
-        """
-        pass
-    
-    @abstractmethod
-    def get_playlist(self, playlist_id: Any) -> Dict[str, Any]:
-        """获取歌单
-        
-        Args:
-            playlist_id: 歌单ID
-        
-        Returns:
-            歌单详情（包含歌曲列表）
-        """
-        pass
-    
-    def get_platform_info(self) -> Dict[str, str]:
-        """获取平台信息"""
-        return {
-            'id': self.platform_id,
-            'name': self.platform_name
-        }
+
+    def get_health(self) -> dict:
+        """获取客户端健康状态（子类可覆盖）"""
+        return {}
+
+    @staticmethod
+    def _normalize_quality(quality: str) -> str:
+        """音质归一化（无效时回退到 lossless）"""
+        return quality if is_valid_quality(quality) else get_default_quality()
+
+    def close(self):
+        """关闭 session"""
+        try:
+            self.session.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()

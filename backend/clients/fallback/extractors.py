@@ -292,7 +292,8 @@ def normalize_qq_song(raw: dict) -> dict:
     """QQ 歌曲标准化"""
     if not isinstance(raw, dict):
         return {}
-    singers = raw.get('singer') or raw.get('singers') or []
+    # 优先用已标准化的 artists 字段；其次回退到原始 singer 字段
+    singers = raw.get('artists') or raw.get('singer') or raw.get('singers') or []
     if isinstance(singers, list):
         artists_str = '/'.join(s.get('name', '') if isinstance(s, dict) else str(s) for s in singers)
     else:
@@ -352,7 +353,8 @@ def normalize_kuwo_song(raw: dict) -> dict:
     return {
         'id': str(rid),
         'name': raw.get('SONGNAME') or raw.get('name') or raw.get('songName') or raw.get('title') or '',
-        'artists': raw.get('ARTIST') or raw.get('artist') or raw.get('singer') or '',
+        # 优先用已标准化的 artists 字段（extract_info 路径），再回退到原始字段
+        'artists': raw.get('artists') or raw.get('ARTIST') or raw.get('artist') or raw.get('singer') or '',
         'album': raw.get('ALBUM') or raw.get('album') or '',
         'picUrl': raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or '',
         'duration': raw.get('DURATION') or raw.get('duration') or 0,

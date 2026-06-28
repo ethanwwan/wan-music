@@ -1,303 +1,306 @@
 <template>
-  <div v-if="hasResults || currentDetail || hasSearchResults || hasSearched" class="search-result-panel">
-    <!-- 返回按钮（二级页面时显示） -->
-    <div v-if="currentDetail" class="back-bar">
-      <a-button type="link" @click="goBack" class="back-button">
-        ← 返回搜索结果
-      </a-button>
-    </div>
-
-    <!-- 搜索类型Tab（只要搜索过就显示，避免切歌单 tab 时 tabs 消失） -->
-    <div v-if="hasSearched && !currentDetail" class="search-tabs">
-      <a-button
-        v-for="tab in searchTabs"
-        :key="tab.key"
-        type="text"
-        :class="['search-tab', { active: currentSearchType === tab.key }]"
-        @click="handleSearchTabClick(tab.key)"
-      >
-        {{ tab.label }}
-      </a-button>
-    </div>
-
-    <!-- 加载中：tab 切换 或 详情加载 -->
-    <div v-if="tabLoading || (currentDetail && currentDetail.loading)" class="loading-view">
+  <div v-if="hasContent" class="search-result-panel">
+    <div v-if="loading" class="loading-view">
       <div class="loading-spinner"></div>
       <span class="loading-text">正在加载中...</span>
     </div>
 
-    <!-- 二级页面：歌单/专辑/歌手详情 -->
-    <SongList
-      v-if="currentDetail && !currentDetail.loading && detailTracks.length > 0"
-      type="song"
-      :items="detailTracks"
-      :detail-info="currentDetail"
-      @track-play="handleTrackPlay"
-      @track-unavailable="handleTrackUnavailable"
-    />
+    <a-empty v-else-if="searched && songs.length === 0" description="未找到相关结果" />
 
-    <!-- 一级页面：单曲列表 -->
-    <SongList
-      v-show="displayMode === 'search' && !currentDetail && songs.length > 0"
-      type="song"
-      :items="songs"
-      @track-play="handleTrackPlay"
-      @track-unavailable="handleTrackUnavailable"
-    />
+    <div v-else-if="songs.length > 0" class="tracks-table-wrapper">
+      <!-- 工具栏：批量下载 + 退出选择 -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <template v-if="!isSelectMode">
+            <a-button type="primary" @click="enterSelectMode">批量下载</a-button>
+          </template>
+          <template v-else>
+            <span class="select-hint">已选 {{ selectedIds.length }}/{{ songs.length }}</span>
+            <a-button size="small" type="primary" :disabled="selectedIds.length === 0" @click="handleBatchDownloadSelected">下载</a-button>
+            <a-button size="small" @click="exitSelectMode">取消</a-button>
+          </template>
+        </div>
+      </div>
 
-    <!-- 一级页面：歌单列表 -->
-    <SongList
-      v-show="displayMode === 'playlist' && !currentDetail && playlists.length > 0"
-      type="playlist"
-      :items="playlists"
-      @item-click="handleItemClick"
-    />
-
-    <!-- 当前 tab 搜索结果为空时显示提示（加载中时不展示空提示） -->
-    <div v-if="!loading && !tabLoading && hasSearched && !currentDetail && isCurrentTabEmpty" class="empty-tab-hint">
-      <a-empty
-        v-if="displayMode === 'playlist' && isPlaylistSearchUnsupported"
-        description="该平台不支持歌单搜索，请粘贴歌单链接进行解析（网易云/QQ 音乐支持歌单搜索）"
-      >
-        <template #image>
-          <span style="font-size: 48px;">🚫</span>
-        </template>
-      </a-empty>
-      <a-empty v-else :description="`未找到相关${emptyTabName}`" />
+      <table class="tracks-table">
+        <thead>
+          <tr>
+            <th v-if="isSelectMode" class="col-select">
+              <a-checkbox
+                :checked="isAllSelected"
+                :indeterminate="isPartiallySelected"
+                @change="handleSelectAll"
+              />
+            </th>
+            <th class="col-index">序号</th>
+            <th class="col-cover"></th>
+            <th class="col-name">歌名</th>
+            <th class="col-album">专辑名</th>
+            <th class="col-quality">音质</th>
+            <th class="col-action">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="(track, index) in songs"
+            :key="track.id"
+            class="track-row"
+            :class="{
+              'unavailable': track.unavailable,
+              'selected-for-batch': isSelectMode && selectedIds.includes(track.id)
+            }"
+          >
+            <td v-if="isSelectMode" class="col-select" @click.stop>
+              <a-checkbox
+                :checked="selectedIds.includes(track.id)"
+                @change="() => toggleSelect(track)"
+              />
+            </td>
+            <td class="col-index">{{ index + 1 }}</td>
+            <td class="col-cover">
+              <div class="track-cover-wrapper">
+                <img
+                  v-if="track.picUrl"
+                  :src="track.picUrl"
+                  :alt="track.name"
+                  class="track-cover"
+                  :class="{ 'grayscale': track.unavailable }"
+                  loading="lazy"
+                />
+                <div v-else class="track-cover-placeholder"></div>
+              </div>
+            </td>
+            <td class="col-name">
+              <div class="track-name-row">
+                <span class="track-name" :class="{ 'unavailable-text': track.unavailable }">{{ track.name }}</span>
+                <span v-if="track.unavailable" class="unavailable-reason">无版权</span>
+                <span
+                  v-if="track.source"
+                  class="source-tag"
+                  :style="{ backgroundColor: getPlatformColor(track.source) + '20', color: getPlatformColor(track.source) }"
+                >
+                  {{ getPlatformName(track.source) }}
+                </span>
+              </div>
+              <div class="track-artist" :class="{ 'unavailable-text': track.unavailable }">{{ track.artists }}</div>
+            </td>
+            <td class="col-album" :class="{ 'unavailable-text': track.unavailable }">{{ track.album }}</td>
+            <td class="col-quality">
+              <div v-if="track.bestQuality" class="quality-info">
+                <span class="quality-label">{{ getQualityLabel(track.bestQuality) }}</span>
+                <span v-if="getQualitySize(track)" class="quality-size">{{ getQualitySize(track) }}</span>
+              </div>
+            </td>
+            <td class="col-action">
+              <a-button
+                type="text"
+                :disabled="parsingId === track.id && parsingType === 'play' || track.unavailable"
+                :loading="parsingId === track.id && parsingType === 'play'"
+                :title="track.unavailable ? '该歌曲无版权' : '播放'"
+                @click.stop="playTrack(track)"
+              >
+                <template #icon><PlayCircleOutlined /></template>
+              </a-button>
+              <a-button
+                type="text"
+                :disabled="parsingId === track.id && parsingType === 'download' || track.unavailable"
+                :loading="parsingId === track.id && parsingType === 'download'"
+                :title="track.unavailable ? '该歌曲无版权' : '下载'"
+                @click.stop="downloadSingle(track)"
+              >
+                <template #icon><ArrowDownOutlined /></template>
+              </a-button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { message, notification } from 'ant-design-vue'
+import { ref, computed } from 'vue'
+import { message } from 'ant-design-vue'
+import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
+import { parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
-import musicApi from '../services/musicApi.js'
-import SongList from './SongList.vue'
+import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
+import { getPlatformById } from '../utils/platformsManager.js'
 
 const props = defineProps({
-  songs: {
-    type: Array,
-    default: () => []
-  },
-  playlists: {
-    type: Array,
-    default: () => []
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  },
-  tabLoading: {
-    type: Boolean,
-    default: false
-  },
-  searchType: {
-    type: String,
-    default: 'keyword' // 'keyword' | 'music_link' | 'playlist_link'
-  },
-  warnings: {
-    type: Array,
-    default: () => [] // 后端搜索返回的警告列表，如 ['playlist_search_unsupported']
-  }
+  songs: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false },
+  searched: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['track-play', 'search-type-change'])
+const emit = defineEmits(['track-play', 'track-unavailable'])
 
-// 搜索类型Tab配置
-const searchTabs = computed(() => {
-  switch (props.searchType) {
-    case 'music_link':
-      return [{ key: 'search', label: '单曲' }]
-    case 'playlist_link':
-      return [{ key: 'playlist', label: '歌单' }]
-    default:
-      return [
-        { key: 'search', label: '单曲' },
-        { key: 'playlist', label: '歌单' }
-      ]
-  }
-})
+const hasContent = computed(() => props.loading || props.searched || props.songs.length > 0)
 
-const getDefaultSearchType = () => {
-  switch (props.searchType) {
-    case 'music_link': return 'search'
-    case 'playlist_link': return 'playlist'
-    default: return 'search'
-  }
-}
+const parsingId = ref(null)
+const parsingType = ref(null)
 
-const currentSearchType = ref(getDefaultSearchType())
+const isSelectMode = ref(false)
+const selectedIds = ref([])
 
-// 是否已搜索过
-const hasSearched = ref(false)
-let prevLoading = false
-watch(
-  [() => props.songs, () => props.playlists, () => props.loading],
-  ([songs, playlists, loading]) => {
-    if (prevLoading && !loading) hasSearched.value = true
-    prevLoading = loading
-    if (songs.length > 0 || playlists.length > 0) hasSearched.value = true
-  },
-  { deep: true, immediate: true }
+const isAllSelected = computed(() =>
+  selectedIds.value.length > 0 && selectedIds.value.length === props.songs.length
 )
-
-// 二级页面状态
-const currentDetail = ref(null)
-const detailTracks = ref([])
-
-// 缓存
-const PLAYLIST_CACHE_KEY = 'wan-music-playlist-cache'
-/** 缓存 24 小时（与平台/搜索一致） */
-const PLAYLIST_CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const cache = ref({ playlist: {} })
-
-const loadCache = () => {
-  try {
-    const stored = localStorage.getItem(PLAYLIST_CACHE_KEY)
-    if (!stored) return {}
-    const parsed = JSON.parse(stored)
-    if (!parsed.playlist) return {}
-    // 过滤过期/空数据条目
-    const now = Date.now()
-    for (const id of Object.keys(parsed.playlist)) {
-      const entry = parsed.playlist[id]
-      if (!entry?._ts || now - entry._ts > PLAYLIST_CACHE_TTL_MS) {
-        delete parsed.playlist[id]
-        continue
-      }
-      // 空歌单视为无缓存
-      if (!entry.tracks || entry.tracks.length === 0) {
-        delete parsed.playlist[id]
-      }
-    }
-    return parsed
-  } catch { return {} }
-}
-
-const saveCache = (data) => {
-  try { localStorage.setItem(PLAYLIST_CACHE_KEY, JSON.stringify(data)) } catch { /* 静默 */ }
-}
-
-cache.value.playlist = loadCache()
-
-watch(() => props.searchType, () => {
-  currentSearchType.value = getDefaultSearchType()
+const isPartiallySelected = computed(() => {
+  const total = props.songs.length
+  return total > 0 && selectedIds.value.length > 0 && selectedIds.value.length < total
 })
 
-const handleSearchTabClick = (tabKey) => {
-  currentSearchType.value = tabKey
-  // 通知 App.vue 切换 tab 时重新拉取对应数据
-  emit('search-type-change', tabKey)
+const getPlatformName = (id) => getPlatformById(id)?.name || id
+const getPlatformColor = (id) => getPlatformById(id)?.color || '#999'
+
+const QUALITY_LABELS = {
+  standard: '标准', exhigh: '极高', lossless: '无损', hires: 'Hi-Res',
+  dolby: '杜比', sky: '环绕声', jymaster: '母带', jyeffect: '臻音',
+}
+const getQualityLabel = (key) => (key ? (QUALITY_LABELS[key] || key) : '')
+const formatSize = (bytes) => {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+const getQualitySize = (track) => {
+  const key = track.bestQuality
+  return key ? formatSize(track.qualityMap?.[key]?.size) : ''
 }
 
-const hasSearchResults = computed(() => props.songs.length > 0 || props.playlists.length > 0)
-
-const isPlaylistSearchUnsupported = computed(() =>
-  props.warnings?.includes('playlist_search_unsupported') || false
-)
-
-const displayMode = computed(() => currentSearchType.value)
-
-const isCurrentTabEmpty = computed(() =>
-  displayMode.value === 'search' ? props.songs.length === 0 : props.playlists.length === 0
-)
-
-const emptyTabName = computed(() => {
-  const names = { search: '歌曲', playlist: '歌单' }
-  return names[currentSearchType.value] || '结果'
-})
-
-const hasResults = computed(() => currentDetail.value || hasSearchResults.value)
-
-const handleTrackPlay = (track) => emit('track-play', track)
-
-const handleTrackUnavailable = (track) => {
-  const songIndex = props.songs.findIndex(s => s.id === track.id)
-  if (songIndex !== -1) props.songs[songIndex].unavailable = true
-
-  const detailIndex = detailTracks.value.findIndex(t => t.id === track.id)
-  if (detailIndex !== -1) detailTracks.value[detailIndex].unavailable = true
+const toggleSelect = (track) => {
+  const ids = selectedIds.value
+  if (ids.includes(track.id)) {
+    selectedIds.value = ids.filter(id => id !== track.id)
+  } else {
+    selectedIds.value = [...ids, track.id]
+    isSelectMode.value = true
+  }
 }
 
-const handleItemClick = async ({ item, action }) => {
-  if (action === 'playlist') await handleParsePlaylist(item)
+const handleSelectAll = (e) => {
+  const checked = typeof e === 'boolean' ? e : (e?.target?.checked ?? false)
+  selectedIds.value = checked ? props.songs.map(t => t.id) : []
 }
 
-const handleParsePlaylist = async (item) => {
-  currentDetail.value = { ...item, loading: true }
+const enterSelectMode = () => { isSelectMode.value = true }
+const exitSelectMode = () => {
+  isSelectMode.value = false
+  selectedIds.value = []
+}
 
-  if (settings.enableCache && cache.value.playlist[item.id]) {
-    const cached = cache.value.playlist[item.id]
-    currentDetail.value = {
-      id: cached.id,
-      name: cached.name,
-      coverImgUrl: cached.coverImgUrl,
-      creator: cached.creator,
-      trackCount: cached.trackCount,
-      loading: false
-    }
-    detailTracks.value = cached.tracks
-    notification.success({
-      message: '读取缓存数据成功',
-      description: `从缓存找到 ${detailTracks.value.length} 首歌曲`
-    })
+const markUnavailable = (track) => {
+  track.unavailable = true
+  emit('track-unavailable', track)
+}
+
+// 播放单首：调后端 /song 拿真实 URL + 歌词
+const playTrack = async (track) => {
+  if (track.unavailable) {
+    message.warning(`《${track.name}》因版权问题暂时无法播放`)
+    return
+  }
+  if (!track?.id) {
+    message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
     return
   }
 
+  parsingId.value = track.id
+  parsingType.value = 'play'
+
   try {
-    const result = await musicApi.getPlaylistById(item.id, item.source || '')
-
-    if (result.success && result.data) {
-      const playlist = result.data
-      currentDetail.value = {
-        id: playlist.id,
-        name: playlist.name,
-        coverImgUrl: playlist.coverImgUrl,
-        creator: playlist.creator,
-        trackCount: playlist.trackCount,
-        loading: false
-      }
-      detailTracks.value = playlist.tracks || []
-
-      cache.value.playlist[item.id] = {
-        _ts: Date.now(),
-        id: playlist.id,
-        name: playlist.name,
-        coverImgUrl: playlist.coverImgUrl,
-        creator: playlist.creator,
-        trackCount: playlist.trackCount,
-        tracks: detailTracks.value
-      }
-      // 空歌单不缓存（下次走网络重试）
-      if (detailTracks.value.length > 0) {
-        saveCache(cache.value.playlist)
-      }
-
-      if (detailTracks.value.length > 0) {
-        notification.success({
-          message: '解析歌单成功',
-          description: `从网络获取 ${detailTracks.value.length} 首歌曲`
-        })
-      }
-    } else {
-      const errorMsg = result.error || result.message || '解析失败'
-      if (result.errorType === 'privacy') {
-        message.warning({ content: '该歌单已设置隐私保护，无法查看（QQ音乐官方限制）', duration: 4 })
-      } else {
-        message.error(errorMsg)
-      }
-      currentDetail.value = null
+    const quality = settings.selectedQuality || 'lossless'
+    const info = await parseMusicInfo(track.id, quality, track.source)
+    if (!info?.url || !info.available) {
+      markUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法播放`)
+      return
     }
-  } catch {
-    message.error('解析失败，请稍后重试')
-    currentDetail.value = null
+    emit('track-play', {
+      ...track,
+      id: info.id,
+      name: info.name,
+      artist: info.artist,
+      album: info.album,
+      cover: info.cover,
+      url: info.url,
+      duration: info.duration,
+      fileExtension: info.fileExtension,
+      lrc: info.lyric || '',
+    })
+    message.success(`开始播放：${track.name}`)
+  } catch (error) {
+    message.error(`播放失败：${error?.message || error}`)
+  } finally {
+    parsingId.value = null
+    parsingType.value = null
   }
 }
 
-const goBack = () => {
-  currentDetail.value = null
-  detailTracks.value = []
+const startDownload = (musicList, label) => queueStore.addTask(
+  musicList,
+  label,
+  {
+    selectedQuality: settings.selectedQuality || 'lossless',
+    filenameFormat: settings.filenameFormat || 'song-artist',
+    writeMetadata: settings.writeMetadata !== false,
+  }
+).then(() => {
+  message.success(`已加入下载队列：${musicList.length} 首歌曲`)
+  queueStore.openDrawer()
+})
+
+const buildDownloadItem = (track) => ({
+  id: track.id,
+  name: track.name,
+  artist: track.artists,
+  album: track.album,
+  source: track.source || '',
+  qualityMap: track.qualityMap || {},
+})
+
+const downloadSingle = async (track) => {
+  if (track.unavailable) {
+    message.warning(`《${track.name}》因版权问题暂时无法下载`)
+    return
+  }
+  if (!track.id) {
+    message.error(`《${track.name}》缺少歌曲ID，请重新搜索`)
+    return
+  }
+  parsingId.value = track.id
+  parsingType.value = 'download'
+  try {
+    await startDownload([buildDownloadItem(track)], track.name)
+  } catch (error) {
+    const msg = error?.message || String(error) || '未知错误'
+    if (msg.includes('已下架') || msg.includes('无法获取') || msg.includes('未找到') || msg.includes('版权')) {
+      markUnavailable(track)
+      message.warning(`《${track.name}》因版权问题暂时无法下载`)
+    } else {
+      message.error(`下载失败：${msg}`)
+    }
+  } finally {
+    parsingId.value = null
+    parsingType.value = null
+  }
+}
+
+const handleBatchDownloadSelected = async () => {
+  if (selectedIds.value.length === 0) {
+    message.warning('请先选择要下载的歌曲')
+    return
+  }
+  const tracks = props.songs.filter(t => selectedIds.value.includes(t.id))
+  const items = tracks.map(buildDownloadItem)
+  const label = items.length > 1 ? `${items[0].name}等${items.length}首` : items[0].name
+  try {
+    await startDownload(items, label)
+    exitSelectMode()
+  } catch (error) {
+    message.error(`下载失败：${error?.message || error}`)
+  }
 }
 </script>
 
@@ -309,11 +312,6 @@ const goBack = () => {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-}
-.empty-tab-hint {
-  padding: 48px 16px;
-  display: flex;
-  justify-content: center;
 }
 
 .loading-view {
@@ -345,61 +343,160 @@ const goBack = () => {
   to { transform: rotate(360deg); }
 }
 
-.back-bar {
-  padding: 1rem 1.5rem;
-  background: var(--color-surface-container-low);
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.back-button {
-  font-size: 14px;
-  color: var(--color-primary);
-  padding: 0;
-}
-
-.back-button:hover {
-  color: var(--color-primary-dark);
-}
-
-.search-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 1.5rem;
-}
-
-.search-tab {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 1rem;
-  font-size: 14px;
-  color: var(--color-on-surface);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 600;
-}
-
-.search-tab:deep(.ant-btn) {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  height: auto;
-  color: var(--color-on-surface);
-  font-weight: 600;
-}
-
-.search-tab:hover {
   background: var(--color-surface-container-low);
-  color: var(--color-primary);
 }
 
-.search-tab.active {
-  background: var(--color-primary);
-  color: #fff;
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+
+.select-hint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-right: 8px;
+}
+
+.tracks-table-wrapper {
+  overflow-x: auto;
+}
+
+.tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.tracks-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-container-low);
+  white-space: nowrap;
+}
+
+.tracks-table td {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.track-row:hover {
+  background: var(--color-primary-light);
+}
+
+.track-row.unavailable {
+  background-color: #f5f5f5 !important;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.track-row.selected-for-batch {
+  background: var(--color-primary-light);
+}
+
+.col-select { width: 40px; text-align: center; }
+.col-index { width: 40px; text-align: center; color: var(--color-text-muted); font-size: 14px; }
+.col-cover { width: 56px; padding: 8px; }
+.col-name { width: 280px; overflow: hidden; }
+.col-album { font-size: 14px; color: var(--color-text-muted); width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-quality { width: 80px; text-align: center; }
+.col-action { width: 100px; text-align: center; }
+
+.track-cover-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.track-cover { width: 100%; height: 100%; object-fit: cover; }
+.track-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-container) 100%);
+}
+.track-cover.grayscale { filter: grayscale(100%); opacity: 0.5; }
+
+.track-name-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: nowrap;
+  margin-bottom: 2px;
+  max-width: 100%;
+}
+.track-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-artist {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.source-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.unavailable-reason {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #ff4d4f;
+  background: #fff1f0;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.unavailable-text { color: #999 !important; }
+
+.quality-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.quality-label { font-size: 12px; font-weight: 500; color: var(--color-on-surface); }
+.quality-size { font-size: 10px; color: var(--color-text-muted); }
+
+.tracks-table td.col-action :deep(.ant-btn) {
+  margin: 0 4px;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tracks-table td.col-action :deep(.anticon) {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-on-surface);
+}
+
+.dark .track-row.unavailable { background-color: #2a2a2a !important; }
+.dark .unavailable-reason { color: #ff7875; background: #2a1a1a; }
 </style>

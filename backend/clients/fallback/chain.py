@@ -220,11 +220,15 @@ class FallbackChain:
             # 非 JSON（如纯文本 URL）
             d = {'_text': r.text.strip()}
 
-        # 提取
+        # 提取（同时支持 (d) 和 (d, **kwargs) 两种签名）
         extractor = source.get_extractor(op)
         if extractor is None:
             return d  # 原始数据
-        return extractor(d) if callable(extractor) else d
+        try:
+            return extractor(d, **resolved) if callable(extractor) else d
+        except TypeError:
+            # 提取器只接受 (d) 一个参数
+            return extractor(d) if callable(extractor) else d
 
     def _format_post_data(self, post_data, resolved: dict):
         """对 post_data 中的字符串值做占位符替换

@@ -283,7 +283,15 @@ QQ_PARSE_INFO_SOURCES = [
         description='xunhuisi (mid 解析，title/singer/cover)',
         can_parse_info=True,
         parse_info_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
-        extract_info=lambda d: d if isinstance(d, dict) and d.get('code') == 200 else {},
+        # xunhuisi 字段：title / singer / cover，映射成 name/artist 以便通用校验和标准化
+        # id 从 kwargs 兜底（xunhuisi 不返回 mid）
+        extract_info=lambda d, song_id='': {
+            'id': song_id,
+            'name': d.get('title', ''),
+            'artists': d.get('singer', ''),
+            'album': '',
+            'picUrl': d.get('cover', ''),
+        } if isinstance(d, dict) and d.get('code') == 200 else {},
         headers=QQ_COMMON_HEADERS,
         timeout=15,
     ),

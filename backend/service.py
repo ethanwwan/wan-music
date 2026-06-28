@@ -1,6 +1,6 @@
 """业务服务层
 
-- MusicService: 搜索 / 歌曲 / 歌单（路由层直接调用的 3 个方法）
+- MusicService: 搜索 / 歌曲（路由层直接调用的 2 个方法）
 - BatchDownloadService: 批量下载（任务管理 + 异步下载 + 状态源）
 
 设计原则：
@@ -16,12 +16,11 @@ import time
 import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 import requests
 
-from clients.music_client import music_client, search_music, get_song_url, get_song_detail, get_lyric, get_playlist_detail
-from clients.quality_config import QualityLevel
+from clients.music_client import music_client, search_music, get_song, get_platforms
 from utils.url_parser import parse_url
 from utils.filename import (
     sanitize_filename as _sanitize_filename,
@@ -39,71 +38,28 @@ logger = logging.getLogger(__name__)
 # ==================== Music Service ====================
 
 class MusicService:
-    """音乐业务服务 - 3 个公开方法供路由调用"""
+    """音乐业务服务 - 2 个公开方法供路由调用：search / get_song"""
 
     # ==================== 公开 API（路由直接调用） ====================
 
-    def search(self, keyword: str, search_type: int = 0, platform: str = None,
-               limit: int = 50, quality: str = 'lossless') -> Dict[str, Any]:
-        """
-        统一搜索方法
-        1. keyword 是 URL → 解析详情
-        2. 否则按 search_type 搜索
+    def search(self, keyword: str, platform: str = None,
+               limit: int = 50) -> Dict[str, Any]:
+        """统一搜索
 
-        返回：{'type': 0/1/2, 'data': [...], 'warnings': [...]}
+        1. keyword 是 URL → 解析后拿歌曲详情
+        2. 否则按关键词搜歌曲
+
+        返回：{'data': [...], 'warnings': [...]}
         """
         parsed = parse_url(keyword)
         if parsed:
-            return self._search_by_url(parsed)
-        return self._search_by_keyword(keyword, search_type, platform, limit, quality)
+            return self._resolve_from_url(parsed)
+        return self._search_by_keyword(keyword, platform, limit)
 
-    def get_song_info(self, song_id: str, quality: str = 'lossless', platform: str = None) -> Dict[str, Any]:
-        """
-        获取完整歌曲信息（基本信息 + 播放 URL + 歌词）
-
-        播放和下载都走这个接口。返回空 dict 表示歌曲不可用。
-        """
-        try:
-            song_info = get_song_detail(song_id, platform)
-            if not song_info or not song_info.get('id'):
-                return {}
-
-            # 校验音质（无效时回退到 lossless）
-            valid_qualities = [q.value for q in QualityLevel]
-            if quality not in valid_qualities:
-                quality = 'lossless'
-
-            url_info = get_song_url(song_id, quality, platform)
-            url_data = url_info.get('data', [{}])[0] if isinstance(url_info, dict) else {}
-
-            lyric_raw = get_lyric(song_id, platform)
-            lyric = lyric_raw.get('lyric', '') if isinstance(lyric_raw, dict) else lyric_raw
-
-            return {
-                'id': str(song_info.get('id', song_id)),
-                'name': song_info.get('name', ''),
-                'artists': song_info.get('artists', ''),
-                'album': song_info.get('album', ''),
-                'picUrl': song_info.get('picUrl', ''),
-                'duration': song_info.get('duration', 0),
-                'url': url_data.get('url', ''),
-                'quality': quality,
-                'lyric': lyric,
-                'source': url_data.get('source', 'netease'),
-                'api_source': url_data.get('api_source') or song_info.get('api_source', ''),
-                # 不返回 fileType：后端用 magic bytes 检测真实类型
-            }
-        except Exception as e:
-            logger.error(f"获取歌曲信息失败: {e}")
-            return {}
-
-    def get_playlist_detail(self, playlist_id: str, platform: str = None) -> Dict[str, Any]:
-        """获取歌单详情"""
-        try:
-            return get_playlist_detail(playlist_id, platform)
-        except Exception as e:
-            logger.error(f"获取歌单详情失败: {e}")
-            return {}
+    def get_song_info(self, song_id: str, quality: str = 'lossless',
+                      platform: str = None) -> Optional[Dict[str, Any]]:
+        """获取歌曲完整信息（基本信息 + 播放 URL + 歌词）"""
+        return get_song(song_id, quality, platform)
 
     def get_platforms(self) -> List[Dict[str, str]]:
         """获取可用平台列表（前端从 /platforms 接口读取，避免硬编码）"""
@@ -115,82 +71,51 @@ class MusicService:
 
     # ==================== 私有方法（仅服务内部使用） ====================
 
-    def _search_by_url(self, parsed: Dict[str, str]) -> Dict[str, Any]:
-        """URL 解析后获取详情"""
-        resource_type = parsed['type']
+    def _resolve_from_url(self, parsed: Dict[str, str]) -> Dict[str, Any]:
+        """URL 解析后获取详情（支持歌曲链接和歌单链接）
+
+        - music URL: 直接拿歌曲信息
+        - playlist URL: 返回明确错误（chain 框架暂无歌单 track 解析实现）
+        """
+        resource_type = parsed.get('type')
         resource_id = parsed['id']
         source_platform = parsed['platform']
 
         if resource_type == 'music':
             song_info = self.get_song_info(resource_id, 'lossless', source_platform)
-            if song_info and song_info.get('id'):
-                song_info['_type'] = 'song'
-                return {'type': 1, 'data': [song_info], 'warnings': []}
-            return {'type': 1, 'data': [], 'error': '未找到歌曲信息', 'warnings': []}
-
-        if resource_type == 'playlist':
-            playlist_info = self.get_playlist_detail(resource_id, source_platform)
-            if playlist_info and playlist_info.get('id'):
-                playlist_info['_type'] = 'playlist'
-                return {'type': 2, 'data': [playlist_info], 'warnings': []}
-            return {'type': 2, 'data': [], 'error': '未找到歌单信息', 'warnings': []}
-
-        return {'type': 0, 'data': [], 'error': f'暂不支持解析{resource_type}类型', 'warnings': []}
-
-    def _search_by_keyword(self, keyword: str, search_type: int, platform: str, limit: int, quality: str = 'lossless') -> Dict[str, Any]:
-        """关键字搜索
-
-        错误处理策略：
-        - 单平台失败：放进 warnings['platform_errors']，不阻断（多平台降级）
-        - 全部平台都失败且无数据：返回 error 字段
-        """
-        items = []
-        warnings = []
-        platform_errors = []  # 各平台错误详情
-
-        if search_type in (0, 1):
-            try:
-                songs = search_music(keyword, platform, limit, quality=quality)
-                for s in songs:
-                    s['_type'] = 'song'
-                items.extend(songs)
-            except Exception as e:
-                msg = f"歌曲搜索失败: {e}"
-                logger.error(f"[{platform}] {msg}")
-                platform_errors.append({'platform': platform, 'type': 'song', 'message': str(e)})
-
-        if search_type in (0, 2):
-            try:
-                playlists = music_client.search_playlist(keyword, platform, limit)
-                for p in playlists:
-                    p['_type'] = 'playlist'
-                items.extend(playlists)
-            except Exception as e:
-                msg = f"歌单搜索失败: {e}"
-                logger.error(f"[{platform}] {msg}")
-                platform_errors.append({'platform': platform, 'type': 'playlist', 'message': str(e)})
-
-            # 标记歌单搜索不支持的平台（用于前端 UI 提示）
-            if platform in ('kugou', 'kuwo'):
-                warnings.append('playlist_search_unsupported')
-
-        # 把平台错误透传给前端
-        if platform_errors:
-            warnings.append({'code': 'platform_errors', 'details': platform_errors})
-
-        # 判断是否"全部平台都失败"（有错误但一条结果都没拿到）
-        if platform_errors and not items:
-            error_msg = '; '.join(
-                f"{e['platform']}: {e['message']}" for e in platform_errors
-            )
+            if song_info and song_info.get('id') and song_info.get('url'):
+                return {'data': [song_info], 'warnings': []}
             return {
-                'type': search_type,
                 'data': [],
-                'warnings': warnings,
-                'error': f'所有平台搜索均失败 ({error_msg})'
+                'error': '未找到歌曲信息（可能 URL 已失效）',
+                'warnings': [],
             }
 
-        return {'type': search_type, 'data': items, 'warnings': warnings}
+        if resource_type == 'playlist':
+            return {
+                'data': [],
+                'error': '歌单链接解析暂未实现（请直接搜索歌曲）',
+                'warnings': [],
+            }
+
+        return {
+            'data': [],
+            'error': f'暂不支持解析 {resource_type} 类型的链接',
+            'warnings': [],
+        }
+
+    def _search_by_keyword(self, keyword: str, platform: str, limit: int) -> Dict[str, Any]:
+        """关键字搜索歌曲"""
+        try:
+            songs = search_music(keyword, platform, limit)
+            return {'data': songs, 'warnings': []}
+        except Exception as e:
+            logger.error(f"[{platform}] 搜索失败: {e}")
+            return {
+                'data': [],
+                'error': f'搜索失败: {e}',
+                'warnings': [],
+            }
 
 
 music_service = MusicService()
@@ -200,7 +125,6 @@ music_service = MusicService()
 
 class BatchDownloadService:
     """批量下载服务
-
     职责：
     - 管理任务状态（task_id → {status, progress, file_path, ...}）
     - 后台并发下载 + 写 metadata + 打包 ZIP
@@ -224,8 +148,6 @@ class BatchDownloadService:
     }
 
     def __init__(self):
-        # 任务存储（task_id -> 任务状态）
-        # 单进程 Flask 足够用，多进程部署需改为 Redis/DB
         self._tasks: dict[str, dict] = {}
         self._lock = threading.Lock()
 
@@ -409,7 +331,7 @@ class BatchDownloadService:
         for attempt in range(3):
             try:
                 song_info = music_service.get_song_info(song_id, quality, source)
-                url = song_info.get('url')
+                url = song_info.get('url') if song_info else None
                 if not url:
                     return None
 

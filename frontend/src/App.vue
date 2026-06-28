@@ -4,13 +4,13 @@
       <a-layout-content class="app-main">
         <div class="hero-header">
           <h1 class="hero-title">Wan Music - 多平台音乐下载</h1>
-          <p class="hero-subtitle">支持网易云 / QQ 音乐 / 酷狗 / 波点，搜索歌曲/歌单，解析真实下载地址。</p>
+          <p class="hero-subtitle">支持网易云 / QQ 音乐 / 酷狗 / 酷我，搜索歌曲，解析真实下载地址。</p>
         </div>
 
         <SearchContainer
           ref="searchContainerRef"
           title="输入搜索关键词"
-          placeholder="请输入歌曲名或歌单名"
+          placeholder="请输入歌曲名或粘贴歌曲/歌单链接"
           :loading="loading"
           @parse="handleParse"
           @open-settings="showSettingsDialog = true"
@@ -19,13 +19,10 @@
         <SearchResult
           :key="searchSession"
           :songs="searchResults"
-          :playlists="playlistSearchResults"
           :loading="loading"
-          :tab-loading="tabLoading"
-          :search-type="currentSearchType"
-          :warnings="searchWarnings"
+          :searched="searched"
           @track-play="handlePlaySong"
-          @search-type-change="handleSearchTypeChange"
+          @track-unavailable="handleTrackUnavailable"
         />
       </a-layout-content>
 
@@ -34,7 +31,7 @@
           <div class="footer-content">
             <p class="footer-text">© 2026 Wan Music. All rights reserved.</p>
             <p class="footer-text">开源项目 | 仅供学习</p>
-            <p class="footer-text">Version 1.3.6 · 构建时间: 2026.5.24</p>
+            <p class="footer-text">Version 1.4.0 · 构建时间: 2026.6.28</p>
           </div>
         </footer>
       </a-layout-footer>
@@ -56,47 +53,31 @@ import SettingsDialog from './components/SettingsDialog.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
 import DownloadDrawer from './components/DownloadDrawer.vue'
 
-import musicApi from './services/musicApi.js'
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
-import { settings, loadSettings } from './utils/settingsManager.js'
-import { loading, tabLoading, parseMusic, searchByTab, searchResults, playlistSearchResults, searchWarnings } from './utils/parseManager.js'
+import { loadSettings } from './utils/settingsManager.js'
+import { loading, searchResults, parseMusic } from './utils/parseManager.js'
 import { downloadQueueStore as queueStore } from './stores/downloadQueue.js'
 
 const showSettingsDialog = ref(false)
 const searchContainerRef = ref(null)
-/** 'keyword' | 'music_link' | 'playlist_link' */
-const currentSearchType = ref('keyword')
 const currentSong = ref(null)
-const currentSources = ref([localStorage.getItem('wan-music-selected-data-source') || 'netease'])
-/** 当前输入（供 tab 切换时回传给后端） */
-const currentInput = ref('')
-/** 搜索会话计数器：每次点击搜索按钮自增，作为 :key 强制 SearchResult 重新挂载 */
+const currentSource = ref(localStorage.getItem('wan-music-selected-data-source') || 'netease')
+/** 是否已搜索过（用来控制空状态展示） */
+const searched = ref(false)
+/** 搜索会话计数器：每次搜索自增，作为 :key 强制 SearchResult 重新挂载 */
 const searchSession = ref(0)
 
 const themeToken = reactive({ colorPrimary: DEFAULT_THEME_COLOR })
 
-const handleParse = async ({ url, sources = ['netease'] }) => {
-  searchSession.value++  // 每次搜索自增，驱动 SearchResult 重新挂载
-  currentSources.value = sources
-  currentInput.value = url
-  // URL 解析交由后端，前端先按关键词的双 tab 占位；后端返回后再收窄为单 tab
-  currentSearchType.value = 'keyword'
-  await parseMusic(url, sources, musicApi.isHttpUrl(url) ? 0 : 1)
-
-  if (musicApi.isHttpUrl(url)) {
-    // URL 后端只会返回歌曲或歌单之一，按结果收窄为对应单 tab
-    if (searchResults.value.length > 0) currentSearchType.value = 'music_link'
-    else if (playlistSearchResults.value.length > 0) currentSearchType.value = 'playlist_link'
-  }
-
+const handleParse = async ({ url, sources = [currentSource.value] }) => {
+  searchSession.value++
+  const source = sources[0] || currentSource.value
+  currentSource.value = source
+  await parseMusic(url, source)
+  searched.value = true
   if (searchContainerRef.value && url.trim()) {
     searchContainerRef.value.addHistoryRecord(url.trim())
   }
-}
-
-const handleSearchTypeChange = async (searchType) => {
-  const backendType = searchType === 'playlist' ? 2 : 1
-  await searchByTab(currentInput.value, currentSources.value, backendType)
 }
 
 const handlePlaySong = (track) => {
@@ -114,17 +95,17 @@ const handlePlaySong = (track) => {
   }
 }
 
-/**
- * 播放失败：标记源列表里的 track（而非 currentSong），避免重复提示
- *  - currentSong 是 App.vue 内部的引用，列表里的 track 是另一个引用
- *  - 必须两边都同步，否则 SongList 里的按钮无法正确禁用
- */
+/** 同步搜索结果列表里的 unavailable 标记 */
+const handleTrackUnavailable = (track) => {
+  const idx = searchResults.value.findIndex(s => s.id === track.id)
+  if (idx !== -1) searchResults.value[idx].unavailable = true
+}
+
 const handlePlayError = (track) => {
   if (!track) return
-  track.unavailable = true  // currentSong 引用
-  // 同步标记源列表：搜索结果里的同一首歌
-  const songIndex = searchResults.value.findIndex(s => s.id === track.id)
-  if (songIndex !== -1) searchResults.value[songIndex].unavailable = true
+  track.unavailable = true
+  const idx = searchResults.value.findIndex(s => s.id === track.id)
+  if (idx !== -1) searchResults.value[idx].unavailable = true
   message.warning(`《${track.name}》因版权问题暂时无法播放`)
 }
 

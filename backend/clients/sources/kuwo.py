@@ -264,10 +264,14 @@ KUWO_PARSE_INFO_SOURCES = [
         description='酷我官方 m.kuwo.cn newh5 singles (musicdl 列表)',
         can_parse_info=True,
         parse_info_url='https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={rid}',
-        extract_info=lambda d: (
-            (d.get('data', {}) if isinstance(d, dict) else {}).get('songinfo', {})
-            if isinstance(d, dict) else {}
-        ),
+        # 酷我官方响应：{"data": {"songinfo": {"id", "songName", "artist", "album", "pic"}}}
+        extract_info=lambda d: {
+            'id': (d.get('data', {}).get('songinfo', {}) or {}).get('id', 0),
+            'name': (d.get('data', {}).get('songinfo', {}) or {}).get('songName', ''),
+            'artists': (d.get('data', {}).get('songinfo', {}) or {}).get('artist', ''),
+            'album': (d.get('data', {}).get('songinfo', {}) or {}).get('album', ''),
+            'picUrl': (d.get('data', {}).get('songinfo', {}) or {}).get('pic', ''),
+        } if isinstance(d, dict) else {},
         headers={
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
             'Referer': 'https://m.kuwo.cn/yinyue/{rid}',

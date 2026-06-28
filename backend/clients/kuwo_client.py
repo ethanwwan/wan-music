@@ -1,14 +1,15 @@
 """酷我音乐客户端（重写版 - 使用 FallbackChain 框架）
 
-所有数据源参考 musicdl kuwo.py（13 个 parsewith + 1 个官方）。
+所有数据源参考 musicdl kuwo.py。
 """
 import logging
-from typing import Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
 from .fallback.chain import FallbackChain
 from .fallback.extractors import normalize_kuwo_song
-from .quality_config import QualityLevel, is_valid_quality, get_default_quality
+from .quality_config import QualityLevel
 from .sources.kuwo import (
     KUWO_SEARCH_SOURCES,
     KUWO_PARSE_URL_SOURCES,
@@ -31,71 +32,65 @@ class KuwoClient(BaseMusicClient):
         self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='serial')
         self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='serial')
 
-    def search(self, keyword: str, limit: int = 50, offset: int = 0,
-               quality: str = 'lossless', type_: int = 1) -> Dict[str, Any]:
+    def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """搜索歌曲"""
         results, source = self.search_chain.try_fetch('search', keyword=keyword, limit=limit)
         normalized = []
         for r in results or []:
             n = normalize_kuwo_song(r)
             if n.get('name') and n.get('id'):
-                n['source'] = 'kuwo'
+                n['source'] = self.platform_id
                 n['api_source'] = r.get('_source', source or 'unknown')
                 normalized.append(n)
         return {
             'data': normalized[:limit],
-            'type': type_,
-            'source': 'kuwo',
-            'total': len(normalized),
             'search_source': source,
             'warnings': [],
         }
 
-    def get_song_info(self, song_id) -> Dict[str, Any]:
-        """获取歌曲元信息（酷我用 rid）"""
-        info, source = self.parse_info_chain.try_fetch('parse_info', rid=str(song_id))
-        if info and isinstance(info, dict) and info.get('name'):
-            n = normalize_kuwo_song(info)
-            n['source'] = 'kuwo'
-            n['api_source'] = source or 'unknown'
-            return n
-        # Fallback: 至少返回 id，让 /song 可以拿 URL
-        return {
-            'id': str(song_id),
-            'name': '',
-            'artists': '',
-            'album': '',
-            'picUrl': '',
-            'duration': 0,
-            'source': 'kuwo',
-            'api_source': 'unknown',
-        }
+    def get_song(self, song_id, quality: str = QualityLevel.LOSSLESS.value,
+                 with_lyric: bool = True) -> Optional[Dict[str, Any]]:
+        """一次性获取歌曲完整信息（酷我用 rid）"""
+        quality = self._normalize_quality(quality)
+        song_id_str = str(song_id)
 
-    def get_song_url(self, song_id, quality: str = QualityLevel.LOSSLESS.value) -> Dict[str, Any]:
-        """获取下载 URL（酷我用 rid）"""
-        if not is_valid_quality(quality):
-            quality = get_default_quality()
-        url, source = self.parse_url_chain.try_fetch('parse_url', rid=str(song_id), quality=quality)
-        if url and url.startswith('http'):
-            return {
-                'url': url,
-                'quality': quality,
-                'api_source': source,
-                'song_id': str(song_id),
-                'source': 'kuwo',
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url',
+                                rid=song_id_str, quality=quality)
+            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
+                                 rid=song_id_str)
+            f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
+                                   rid=song_id_str) if with_lyric else None)
+
+        url, url_src = f_url.result()
+        info, info_src = f_info.result()
+        lyric = f_lyric.result()[0] if f_lyric else ''
+
+        if not url or not url.startswith('http'):
+            return None
+
+        if info and info.get('name'):
+            base = normalize_kuwo_song(info)
+            info_src_name = info_src
+        else:
+            base = {
+                'id': song_id_str,
+                'name': '',
+                'artists': '',
+                'album': '',
+                'picUrl': '',
+                'duration': 0,
             }
-        return {}
+            info_src_name = 'unknown'
 
-    def get_lyric(self, song_id) -> str:
-        """获取歌词"""
-        lyric, _ = self.parse_lyric_chain.try_fetch('parse_lyric', rid=str(song_id))
-        return lyric or ''
-
-    def search_playlist(self, keyword: str, limit: int = 20) -> List[Dict[str, Any]]:
-        return []
-
-    def get_playlist(self, playlist_id) -> Dict[str, Any]:
-        return {'id': str(playlist_id), 'name': '', 'cover': '', 'songs': []}
+        return {
+            **base,
+            'url': url,
+            'quality': quality,
+            'lyric': lyric or '',
+            'source': self.platform_id,
+            'api_source': f'{url_src}|{info_src_name}',
+        }
 
     def get_health(self) -> dict:
         return {
