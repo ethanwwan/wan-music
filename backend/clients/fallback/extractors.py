@@ -548,7 +548,11 @@ def normalize_kuwo_song(raw: dict) -> dict:
     musicdl 酷我搜索结果字段：
       - MUSICRID: 'MUSIC_123456'  → 取数字部分作为 rid
       - SONGNAME / ARTIST / ALBUM / DURATION / hts_MVPIC
-      - minfo (mp3/minfo/...) quality 描述
+      - N_MINFO / MINFO: 音质描述，格式 "level:ff,bitrate:2000,format:flac,size:51.58Mb;..."
+        level 编码：zply(臻品母带) / zp(臻品HiRes) / ff(flac lossless) / p(320k ogg/mp3)
+                    / h(128k) / s(aac) / l(low)
+      - PAY: 16515324 二进制位标记付费
+      - payInfo: 详细付费结构
     """
     if not isinstance(raw, dict):
         return {}
@@ -567,25 +571,109 @@ def normalize_kuwo_song(raw: dict) -> dict:
     if 0 < dur < 100000:
         dur = dur * 1000
 
-    # picUrl: hts_MVPIC 是模板 URL {size} 替换
-    pic = raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or ''
+    # picUrl: hts_MVPIC 是完整 URL 优先
+    pic = raw.get('hts_MVPIC') or raw.get('web_albumpic_short') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or ''
     if isinstance(pic, str) and '{size}' in pic:
         pic = pic.replace('{size}', '300')
+    # 短路径补全：web_albumpic_short 是 '120/s4s48/22/2558779422.jpg'，需要补全
+    elif isinstance(pic, str) and pic and not pic.startswith('http'):
+        pic = f'https://img4.kuwo.cn/wmvpic/{pic}'
 
-    # 音质：酷我官方搜索响应在 minfo 字段有 mp3/minfo128/...
-    # 简化处理：没有标准 qualityMap，bestQuality 留空
-    quality_map = {}
+    # 音质：N_MINFO（包含 zply/ff/zp 高码率）优先，否则用 MINFO
+    minfo_str = raw.get('N_MINFO') or raw.get('MINFO') or ''
+    quality_map = _parse_kuwo_minfo(minfo_str)
+
+    # 付费：PAY 是 32 位二进制标志 (1=online, 2=download, 4=ring, ...)
+    # 简化：fpay/tpay/opay 任一非 0 表示需要付费
+    fpay = int(raw.get('fpay') or 0)
+    tpay = int(raw.get('tpay') or 0)
+    opay = int(raw.get('opay') or 0)
+    payInfo = raw.get('payInfo') if isinstance(raw.get('payInfo'), dict) else {}
+    fee_song = int(payInfo.get('feeType', {}).get('song', 0)) if isinstance(payInfo.get('feeType'), dict) else 0
+    pay = bool(fpay or tpay or opay or fee_song)
+    fee = 1 if pay else 0
 
     return {
         'id': str(rid),
-        'name': raw.get('SONGNAME') or raw.get('name') or raw.get('songName') or raw.get('title') or '',
-        # 优先用已标准化的 artists 字段（extract_info 路径），再回退到原始字段
-        'artists': raw.get('artists') or raw.get('ARTIST') or raw.get('artist') or raw.get('singer') or '',
+        'name': raw.get('SONGNAME') or raw.get('NAME') or raw.get('name') or raw.get('songName') or raw.get('title') or '',
+        'artists': raw.get('ARTIST') or raw.get('artists') or raw.get('AARTIST') or raw.get('artist') or raw.get('singer') or '',
         'album': raw.get('ALBUM') or raw.get('album') or '',
         'picUrl': pic,
         'duration': dur,
-        'pay': bool(raw.get('pay') or raw.get('isPay') or raw.get('fee')),
-        'fee': raw.get('fee') or 0,
+        'pay': pay,
+        'fee': fee,
         'qualityMap': quality_map,
         'bestQuality': _best_quality(quality_map),
     }
+
+
+# 酷我 level 编码 → 前端 quality + 是否更高优先级
+_KUWO_LEVEL_QUALITY = {
+    'zply':  ('jymaster', 50),   # 臻品母带 - 最高
+    'zp':    ('hires',    40),   # 臻品音质 24bit
+    'ff':    ('lossless', 30),   # FLAC 无损
+    'p':     ('exhigh',   20),   # 320kbps
+    'h':     ('standard', 10),   # 128kbps
+    's':     ('standard', 5),    # aac 48k
+    'l':     ('standard', 1),    # low
+}
+
+
+def _parse_size_to_bytes(size_str: str) -> int:
+    """解析 '51.58Mb' / '5.23Mb' / '1024kb' 字符串为字节数"""
+    if not size_str:
+        return 0
+    s = size_str.strip().lower()
+    try:
+        if s.endswith('mb'):
+            return int(float(s[:-2]) * 1024 * 1024)
+        if s.endswith('kb'):
+            return int(float(s[:-2]) * 1024)
+        if s.endswith('gb'):
+            return int(float(s[:-2]) * 1024 * 1024 * 1024)
+        return int(float(s))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_kuwo_minfo(minfo_str: str) -> dict:
+    """解析酷我 N_MINFO/MINFO 字符串为 qualityMap
+
+    格式："level:ff,bitrate:2000,format:flac,size:51.58Mb;
+            level:p,bitrate:320,format:mp3,size:10.03Mb;..."
+
+    同一 quality 可能有多个（不同 format），保留 bitrate 最高的。
+    """
+    if not minfo_str or not isinstance(minfo_str, str):
+        return {}
+    qmap = {}
+    for item in minfo_str.split(';'):
+        item = item.strip()
+        if not item or item.endswith('Mb') is False and 'bitrate' not in item:
+            continue
+        parts = {}
+        for kv in item.split(','):
+            if ':' in kv:
+                k, v = kv.split(':', 1)
+                parts[k.strip()] = v.strip()
+        level = parts.get('level', '').lower()
+        if not level:
+            continue
+        quality_key, _priority = _KUWO_LEVEL_QUALITY.get(level, ('', 0))
+        if not quality_key:
+            continue
+        try:
+            bitrate = int(parts.get('bitrate') or 0)
+        except (TypeError, ValueError):
+            bitrate = 0
+        size = _parse_size_to_bytes(parts.get('size') or '')
+        # 同 quality 保留 bitrate 最高的
+        existing = qmap.get(quality_key)
+        if existing and existing.get('br', 0) >= bitrate * 1000:
+            continue
+        qmap[quality_key] = {
+            'br': bitrate * 1000,  # kbps → bps
+            'size': size,
+            'format': parts.get('format', ''),
+        }
+    return qmap
