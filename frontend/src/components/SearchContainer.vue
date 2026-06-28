@@ -181,17 +181,24 @@ const loadHistoryRecords = () => {
   historyRecords.value = loadHistoryFromStorage()
 }
 
-const addHistoryRecord = (songName) => {
-  const exists = historyRecords.value.some(item => item.name === songName)
+const addHistoryRecord = (record) => {
+  // 兼容旧的字符串入参（仅 name）以及新的 {name, url, type} 对象
+  const item = typeof record === 'string'
+    ? { name: record, url: record, type: 'search' }
+    : { name: record.name, url: record.url || record.name, type: record.type || 'search' }
+  // 同 URL 去重（避免刷新/重复点击出现多条同名记录）
+  const exists = historyRecords.value.some(r => r.url === item.url)
   if (!exists) {
-    historyRecords.value.unshift({ name: songName, url: songName, type: 'search' })
+    historyRecords.value.unshift(item)
     if (historyRecords.value.length > 50) historyRecords.value.pop()
     saveHistoryToStorage(historyRecords.value)
   }
 }
 
 const handleTagClick = (item) => {
-  inputValue.value = item.name
+  // 点击历史标签：填入原始 URL 后自动触发搜索（确保歌曲/歌单能精准还原）
+  inputValue.value = item.url || item.name
+  handleParse()
 }
 
 const handleDataSourceChange = (value) => {

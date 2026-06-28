@@ -4,8 +4,17 @@
 
 酷狗 file_hash 模式，第三方解析 API 较少。
 """
+import hashlib
+import time
 from ..fallback.api_source import ApiSource
-from ..fallback.extractors import extract_first_url, extract_text_url
+from ..fallback.extractors import (
+    extract_first_url,
+    extract_text_url,
+)
+from ._playlist_extractors import (
+    extract_kugou_playlist as _extract_kugou_playlist,
+    extract_netease_playlist as _extract_netease_playlist,
+)
 
 
 KUGOU_COMMON_HEADERS = {
@@ -290,5 +299,70 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+    ),
+]
+
+
+# ==================== 歌单解析 ====================
+
+def _kugou_playlist_prepare(url: str, method: str, headers: dict, post_data, is_json, kwargs: dict):
+    """酷狗歌单 API 需要 MD5 签名（参考 musicdl kugou.py）
+
+    signature = MD5("OIlwieks28dk2k092lksi2UIkp" + sorted_query + "OIlwieks28dk2k092lksi2UIkp")
+    """
+    # 替换 {clienttime} 占位
+    if headers.get('clienttime') == '{clienttime}':
+        headers['clienttime'] = str(int(time.time()))
+    # 取 query 部分
+    if '?' in url:
+        q = url.split('?', 1)[1]
+    else:
+        q = ''
+    # 排序拼接
+    sorted_q = ''.join(sorted(q.split('&')))
+    sig = hashlib.md5(
+        ('OIlwieks28dk2k092lksi2UIkp' + sorted_q + 'OIlwieks28dk2k092lksi2UIkp').encode('utf-8')
+    ).hexdigest()
+    new_url = url + '&signature=' + sig
+    return {'url': new_url, 'method': method, 'headers': headers,
+            'post_data': post_data, 'is_json': is_json}
+
+
+KUGOU_PARSE_PLAYLIST_SOURCES = [
+    # 1. 酷狗官方 gatewayretry.kugou.com（带签名 + 特殊 headers）
+    ApiSource(
+        name='kugou_official_playlist',
+        platform='kugou',
+        priority=0,
+        description='酷狗官方 gatewayretry.kugou.com（带签名，特殊 headers）',
+        can_parse_playlist=True,
+        parse_playlist_url=(
+            'http://gatewayretry.kugou.com/v2/get_other_list_file'
+            '?specialid={playlist_id}&need_sort=1&module=CloudMusic'
+            '&clientver=11239&pagesize=300&specalidpgc={playlist_id}'
+            '&userid=0&page={page}&type=0&area_code=1&appid=1005'
+        ),
+        extract_playlist=_extract_kugou_playlist,
+        headers={
+            'User-Agent': 'Android9-AndroidPhone-11239-18-0-playlist-wifi',
+            'Host': 'gatewayretry.kugou.com',
+            'x-router': 'pubsongscdn.kugou.com',
+            'mid': '239526275778893399526700786998289824956',
+            'dfid': '-',
+            'clienttime': '{clienttime}',  # 运行时替换
+        },
+        prepare_request=_kugou_playlist_prepare,
+        timeout=15,
+    ),
+    ApiSource(
+        name='gdstudio_playlist',
+        platform='kugou',
+        priority=20,
+        description='gdstudio 跨平台歌单（兜底，只接受 source=netease/kuwo/joox，固定返回网易云格式）',
+        can_parse_playlist=True,
+        parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
+        extract_playlist=_extract_netease_playlist,
+        headers={'User-Agent': 'Mozilla/5.0'},
+        timeout=20,
     ),
 ]

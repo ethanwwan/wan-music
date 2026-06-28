@@ -1,11 +1,6 @@
 <template>
   <div v-if="hasContent" class="search-result-panel">
-    <div v-if="loading" class="loading-view">
-      <div class="loading-spinner"></div>
-      <span class="loading-text">正在加载中...</span>
-    </div>
-
-    <a-empty v-else-if="searched && songs.length === 0" description="未找到相关结果" />
+    <a-empty v-if="searched && songs.length === 0" description="未找到相关结果" />
 
     <div v-else-if="songs.length > 0" class="tracks-table-wrapper">
       <!-- 歌单详情头部：仅 playlist 模式展示 -->
@@ -17,8 +12,9 @@
               :src="proxyImg(detail.cover)"
               :alt="detail.name"
               class="detail-cover"
+              loading="lazy"
+              referrerpolicy="no-referrer"
             />
-            <div v-else class="cover-placeholder"></div>
           </div>
           <div class="detail-info">
             <h1 class="detail-name">{{ detail.name }}</h1>
@@ -70,7 +66,7 @@
         </thead>
         <tbody>
           <tr
-            v-for="(track, index) in songs"
+            v-for="(track, index) in paginatedSongs"
             :key="track.id"
             class="track-row"
             :class="{
@@ -84,19 +80,19 @@
                 @change="() => toggleSelect(track)"
               />
             </td>
-            <td class="col-index">{{ index + 1 }}</td>
+            <td class="col-index">{{ pageStartIndex + index + 1 }}</td>
             <td class="col-cover">
               <div class="track-cover-wrapper">
                 <img
-                  v-if="track.picUrl && !track.picError"
-                  :src="track.picUrl"
+                  v-if="getCover(track) && !failedCoverIds.has(track.id)"
+                  :src="proxyImg(getCover(track))"
                   :alt="track.name"
                   class="track-cover"
                   :class="{ 'grayscale': track.unavailable }"
                   loading="lazy"
-                  @error="track.picError = true"
+                  referrerpolicy="no-referrer"
+                  @error="handleCoverError(track)"
                 />
-                <div v-else class="track-cover-placeholder"></div>
               </div>
             </td>
             <td class="col-name">
@@ -116,7 +112,6 @@
             <td class="col-album" :class="{ 'unavailable-text': track.unavailable }">{{ track.album || '-' }}</td>
             <td class="col-pay">
               <span
-                v-if="track.pay || track.fee"
                 class="pay-tag"
                 :class="`pay-${getPayKey(track)}`"
                 :title="getPayTitle(track)"
@@ -153,12 +148,23 @@
           </tr>
         </tbody>
       </table>
+
+      <!-- 分页：超过 1 页时显示 -->
+      <a-pagination
+        v-if="totalPages > 1"
+        v-model:current="currentPage"
+        :total="songs.length"
+        :page-size="PAGE_SIZE"
+        :show-size-changer="false"
+        :show-quick-jumper="true"
+        class="tracks-pagination"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, ArrowDownOutlined } from '@ant-design/icons-vue'
 import { parseMusicInfo } from '../services/musicApi.js'
@@ -178,13 +184,30 @@ const props = defineProps({
 
 const emit = defineEmits(['track-play', 'track-unavailable'])
 
-const hasContent = computed(() => props.loading || props.searched || props.songs.length > 0)
+// ==================== 分页 ====================
+const PAGE_SIZE = 50
+const currentPage = ref(1)
+const totalPages = computed(() => Math.max(1, Math.ceil(props.songs.length / PAGE_SIZE)))
+const pageStartIndex = computed(() => (currentPage.value - 1) * PAGE_SIZE)
+const paginatedSongs = computed(() => {
+  const start = pageStartIndex.value
+  return props.songs.slice(start, start + PAGE_SIZE)
+})
+
+const hasContent = computed(() => props.searched || props.songs.length > 0)
 
 const parsingId = ref(null)
 const parsingType = ref(null)
 
 const isSelectMode = ref(false)
 const selectedIds = ref([])
+
+// 每次新搜索（songs 数组引用变化）时重置到第 1 页
+watch(() => props.songs, () => {
+  currentPage.value = 1
+  selectedIds.value = []
+  isSelectMode.value = false
+})
 
 const isAllSelected = computed(() =>
   selectedIds.value.length > 0 && selectedIds.value.length === props.songs.length
@@ -195,6 +218,24 @@ const isPartiallySelected = computed(() => {
 })
 
 const getPlatformName = (id) => getPlatformById(id)?.name || id
+
+// 封面图：兼容多平台字段名（picUrl/cover/al.picUrl/album.picUrl/detailInfo.coverImgUrl）
+const getCover = (track) =>
+  track?.picUrl || track?.cover || track?.al?.picUrl || track?.album?.picUrl || props.detail?.coverImgUrl || ''
+
+// 加载失败的封面 id 集合（避免在 props 上写 picError 导致不可见/不可重置）
+const failedCoverIds = ref(new Set())
+const handleCoverError = (track) => {
+  if (!track?.id) return
+  // Set 没有响应式，复制再设置以触发更新
+  const next = new Set(failedCoverIds.value)
+  next.add(track.id)
+  failedCoverIds.value = next
+}
+// 新搜索清空失败集合
+watch(() => props.songs, () => {
+  failedCoverIds.value = new Set()
+}, { immediate: false })
 const getPlatformColor = (id) => getPlatformById(id)?.color || '#999'
 
 const QUALITY_LABELS = {
@@ -212,26 +253,12 @@ const getQualitySize = (track) => {
   return key ? formatSize(track.qualityMap?.[key]?.size) : ''
 }
 
-// 付费标签：fee=1 VIP / fee=4 专辑 / fee=8 部分试听
-const getPayLabel = (track) => {
-  const fee = track.fee
-  if (fee === 1) return 'VIP'
-  if (fee === 4) return '专辑'
-  if (fee === 8 || fee === 16) return '试听'
-  return track.pay ? '付费' : ''
-}
+// 付费标签：仅 2 种 — 免费 / 付费（VIP、专辑、试听 全部归为付费）
+const isTrackPaid = (track) => Boolean(track.pay || track.fee)
+const getPayLabel = (track) => isTrackPaid(track) ? '付费' : '免费'
 // 付费类型 key：用于 CSS 样式分支
-const getPayKey = (track) => {
-  const fee = track.fee
-  if (fee === 1) return 'vip'
-  if (fee === 4) return 'album'
-  if (fee === 8 || fee === 16) return 'preview'
-  return track.pay ? 'paid' : ''
-}
-const getPayTitle = (track) => {
-  const label = getPayLabel(track)
-  return label ? `付费内容（${label}）` : ''
-}
+const getPayKey = (track) => isTrackPaid(track) ? 'paid' : 'free'
+const getPayTitle = (track) => isTrackPaid(track) ? '付费内容' : '免费内容'
 
 const toggleSelect = (track) => {
   const ids = selectedIds.value
@@ -399,35 +426,6 @@ const proxyImg = (url) => {
   overflow: hidden;
 }
 
-.loading-view {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  min-height: 300px;
-  padding: 2rem;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--color-surface-container);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-  font-size: 14px;
-  color: var(--color-text-muted);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .select-hint {
   font-size: 13px;
   color: var(--color-text-muted);
@@ -436,6 +434,12 @@ const proxyImg = (url) => {
 
 .tracks-table-wrapper {
   overflow-x: auto;
+}
+
+.tracks-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .tracks-table {
@@ -478,9 +482,19 @@ const proxyImg = (url) => {
 .col-cover { width: 56px; padding: 8px; }
 .col-name { width: 280px; overflow: hidden; }
 .col-album { font-size: 14px; color: var(--color-text-muted); width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-pay { width: 70px; text-align: center; }
-.col-quality { width: 90px; text-align: center; }
-.col-action { width: 130px; text-align: center; }
+.tracks-table th.col-pay,
+.tracks-table th.col-quality,
+.tracks-table th.col-action {
+  text-align: center;
+}
+.col-pay { width: 70px; }
+.col-quality { width: 90px; }
+.col-action { width: 130px; }
+.tracks-table th.col-action :deep(.ant-space) {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
 
 /* ==================== 歌单详情头部（toolbar）=================== */
 .detail-header {
@@ -497,11 +511,17 @@ const proxyImg = (url) => {
   width: 96px; height: 96px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--color-surface-container);
+  position: relative;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-container) 100%);
   flex-shrink: 0;
 }
-.detail-cover { width: 100%; height: 100%; object-fit: cover; }
-.cover-placeholder { width: 100%; height: 100%; background: var(--color-surface-container); }
+.detail-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .detail-info { min-width: 0; }
 .detail-name {
   font-size: 20px; font-weight: 600;
@@ -517,12 +537,16 @@ const proxyImg = (url) => {
   height: 40px;
   border-radius: 4px;
   overflow: hidden;
+  position: relative;
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-container) 100%);
 }
-.track-cover { width: 100%; height: 100%; object-fit: cover; }
-.track-cover-placeholder {
+.track-cover {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-surface-container) 100%);
+  object-fit: cover;
+  /* 加载中时 img 透明，显示底层 wrapper 渐变；加载完成自动覆盖 */
 }
 .track-cover.grayscale { filter: grayscale(100%); opacity: 0.5; }
 
@@ -563,18 +587,16 @@ const proxyImg = (url) => {
 
 .pay-tag {
   display: inline-block;
-  padding: 2px 8px;
-  font-size: 10px;
-  border-radius: 10px;
-  font-weight: 600;
+  padding: 1px 6px;
+  font-size: 11px;
+  border-radius: 3px;
+  font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* 各付费类型配色 */
-.pay-tag.pay-vip     { color: #d4380d; background: #fff1f0; border: 1px solid #ffa39e; }
-.pay-tag.pay-album   { color: #d48806; background: #fffbe6; border: 1px solid #ffe58f; }
-.pay-tag.pay-preview { color: #1d39c4; background: #f0f5ff; border: 1px solid #adc6ff; }
-.pay-tag.pay-paid    { color: #d4380d; background: #fff7e6; border: 1px solid #ffd591; }
+/* 付费类型配色（2 种：免费/付费） */
+.pay-tag.pay-free { color: #52c41a; background: #f6ffed; }
+.pay-tag.pay-paid { color: #faad14; background: #fffbe6; }
 
 .unavailable-reason {
   display: inline-block;
@@ -593,13 +615,17 @@ const proxyImg = (url) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
 }
 .quality-label { font-size: 12px; font-weight: 500; color: var(--color-on-surface); }
 .quality-size { font-size: 10px; color: var(--color-text-muted); }
 
+.tracks-table td.col-action {
+  text-align: center;
+  padding: 8px 4px;
+}
 .tracks-table td.col-action :deep(.ant-btn) {
-  margin: 0 4px;
+  margin: 0;
   border-radius: 50%;
   width: 36px;
   height: 36px;

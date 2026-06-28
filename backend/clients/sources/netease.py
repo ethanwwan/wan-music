@@ -24,6 +24,9 @@ from ..fallback.extractors import (
     extract_text_url,
     url_quote,
 )
+from ._playlist_extractors import (
+    extract_netease_playlist as _extract_netease_playlist,
+)
 
 
 # ==================== 通用 headers ====================
@@ -611,5 +614,37 @@ NETEASE_PARSE_LYRIC_SOURCES = [
         extract_lyric=extract_text_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
+    ),
+]
+
+
+# ==================== 歌单解析 ====================
+
+NETEASE_PARSE_PLAYLIST_SOURCES = [
+    ApiSource(
+        name='netease_official_playlist',
+        platform='netease',
+        priority=0,
+        description='网易云官方 /api/v6/playlist/detail（POST id 字段）',
+        can_parse_playlist=True,
+        parse_playlist_url='https://music.163.com/api/v6/playlist/detail',
+        extract_playlist=_extract_netease_playlist,
+        method='POST',
+        post_data={'id': '{playlist_id}'},
+        is_json=False,  # form-urlencoded
+        headers={**NETEASE_COMMON_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded'},
+        timeout=15,
+    ),
+    # gdstudio 兜底（注意：gdstudio 固定返回网易云格式）
+    ApiSource(
+        name='gdstudio_playlist',
+        platform='netease',
+        priority=20,
+        description='gdstudio 跨平台歌单（兜底，固定返回网易云格式）',
+        can_parse_playlist=True,
+        parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
+        extract_playlist=_extract_netease_playlist,  # 网易云格式
+        headers={'User-Agent': 'Mozilla/5.0'},
+        timeout=20,
     ),
 ]

@@ -11,6 +11,10 @@ from ..fallback.extractors import (
     extract_text_url,
     url_quote,
 )
+from ._playlist_extractors import (
+    extract_qq_playlist as _extract_qq_playlist,
+    extract_netease_playlist as _extract_netease_playlist,
+)
 
 
 QQ_COMMON_HEADERS = {
@@ -496,5 +500,39 @@ QQ_PARSE_LYRIC_SOURCES = [
         extract_lyric=lambda d: '',
         headers=QQ_LXMUSIC_HEADERS,
         timeout=15,
+    ),
+]
+
+
+# ==================== 歌单解析 ====================
+
+QQ_PARSE_PLAYLIST_SOURCES = [
+    ApiSource(
+        name='qq_official_playlist',
+        platform='qq',
+        priority=0,
+        description='QQ 官方 qzone fcg_ucc_getcdinfo_byids_cp（无需登录）',
+        can_parse_playlist=True,
+        parse_playlist_url=(
+            'https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg'
+            '?disstid={playlist_id}&type=1&json=1&utf8=1&onlysong=0&format=json'
+        ),
+        extract_playlist=_extract_qq_playlist,
+        headers={
+            **QQ_COMMON_HEADERS,
+            'Referer': 'https://y.qq.com/n/ryqq/playlist',
+        },
+        timeout=15,
+    ),
+    ApiSource(
+        name='gdstudio_playlist',
+        platform='qq',
+        priority=20,
+        description='gdstudio 跨平台歌单（兜底，只接受 source=netease/kuwo/joox，固定返回网易云格式）',
+        can_parse_playlist=True,
+        parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
+        extract_playlist=_extract_netease_playlist,
+        headers={'User-Agent': 'Mozilla/5.0'},
+        timeout=20,
     ),
 ]

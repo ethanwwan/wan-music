@@ -15,6 +15,7 @@ from .sources.qq import (
     QQ_PARSE_URL_SOURCES,
     QQ_PARSE_INFO_SOURCES,
     QQ_PARSE_LYRIC_SOURCES,
+    QQ_PARSE_PLAYLIST_SOURCES,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class QQClient(BaseMusicClient):
         self.parse_url_chain = FallbackChain(QQ_PARSE_URL_SOURCES, platform='qq', strategy='serial')
         self.parse_info_chain = FallbackChain(QQ_PARSE_INFO_SOURCES, platform='qq', strategy='serial')
         self.parse_lyric_chain = FallbackChain(QQ_PARSE_LYRIC_SOURCES, platform='qq', strategy='serial')
+        self.parse_playlist_chain = FallbackChain(QQ_PARSE_PLAYLIST_SOURCES, platform='qq', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """搜索歌曲"""
@@ -98,6 +100,25 @@ class QQClient(BaseMusicClient):
             'parse_url': self.parse_url_chain.get_health(),
             'parse_info': self.parse_info_chain.get_health(),
             'parse_lyric': self.parse_lyric_chain.get_health(),
+            'parse_playlist': self.parse_playlist_chain.get_health(),
+        }
+
+    def parse_playlist(self, playlist_id: str, page: int = 1,
+                       size: int = 100) -> Optional[Dict[str, Any]]:
+        """解析歌单：返回 {name, creator, cover, trackCount, tracks, ...}"""
+        data, source = self.parse_playlist_chain.try_fetch(
+            'parse_playlist', playlist_id=str(playlist_id), page=page, size=size,
+            target_platform=self.platform_id,
+        )
+        if not data or not isinstance(data, dict):
+            return None
+        for t in data.get('tracks', []) or []:
+            if not t.get('source'):
+                t['source'] = self.platform_id
+        return {
+            **data,
+            'platform': self.platform_id,
+            'api_source': source or 'unknown',
         }
 
 

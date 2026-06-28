@@ -269,7 +269,18 @@ class FallbackChain:
         if op == 'parse_lyric':
             return isinstance(data, str) and len(data.strip()) > 0
         if op == 'parse_playlist':
-            return isinstance(data, dict) and bool(data.get('tracks') or data.get('name'))
+            if not (isinstance(data, dict) and (data.get('tracks') or data.get('name'))):
+                return False
+            # 完整性检查：声明的 trackCount 必须 >= 实际返回的 tracks
+            # 否则视为被截断（部分平台官方 API 仅返回前 10 首），应回退到下一个源
+            try:
+                declared = int(data.get('trackCount') or 0)
+                actual = len(data.get('tracks') or [])
+                if declared > actual:
+                    return False
+            except (TypeError, ValueError):
+                pass
+            return True
         return bool(data)
 
     def _load_cookie(self, cookie_file: str) -> dict:

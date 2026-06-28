@@ -9,6 +9,8 @@ from ..fallback.api_source import ApiSource
 from ..fallback.extractors import (
     extract_first_url,
     extract_text_url,
+)
+from ._playlist_extractors import (
     extract_kuwo_playlist as _extract_kuwo_playlist,
     extract_gdstudio_playlist as _extract_gdstudio_playlist,
 )

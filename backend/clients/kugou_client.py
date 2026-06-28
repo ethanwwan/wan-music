@@ -15,6 +15,7 @@ from .sources.kugou import (
     KUGOU_SEARCH_SOURCES,
     KUGOU_PARSE_URL_SOURCES,
     KUGOU_PARSE_INFO_SOURCES,
+    KUGOU_PARSE_PLAYLIST_SOURCES,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class KugouClient(BaseMusicClient):
         self.search_chain = FallbackChain(KUGOU_SEARCH_SOURCES, platform='kugou', strategy='parallel')
         self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='serial')
         self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='serial')
+        self.parse_playlist_chain = FallbackChain(KUGOU_PARSE_PLAYLIST_SOURCES, platform='kugou', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         """搜索歌曲"""
@@ -93,6 +95,25 @@ class KugouClient(BaseMusicClient):
             'search': self.search_chain.get_health(),
             'parse_url': self.parse_url_chain.get_health(),
             'parse_info': self.parse_info_chain.get_health(),
+            'parse_playlist': self.parse_playlist_chain.get_health(),
+        }
+
+    def parse_playlist(self, playlist_id: str, page: int = 1,
+                       size: int = 100) -> Optional[Dict[str, Any]]:
+        """解析歌单：返回 {name, creator, cover, trackCount, tracks, ...}"""
+        data, source = self.parse_playlist_chain.try_fetch(
+            'parse_playlist', playlist_id=str(playlist_id), page=page, size=size,
+            target_platform=self.platform_id,
+        )
+        if not data or not isinstance(data, dict):
+            return None
+        for t in data.get('tracks', []) or []:
+            if not t.get('source'):
+                t['source'] = self.platform_id
+        return {
+            **data,
+            'platform': self.platform_id,
+            'api_source': source or 'unknown',
         }
 
 

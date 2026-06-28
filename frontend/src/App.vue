@@ -57,7 +57,7 @@ import DownloadDrawer from './components/DownloadDrawer.vue'
 
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { loadSettings } from './utils/settingsManager.js'
-import { loading, searchResults, parseMusic } from './utils/parseManager.js'
+import { loading, searchResults, searchType, searchDetail, parseMusic } from './utils/parseManager.js'
 import { downloadQueueStore as queueStore } from './stores/downloadQueue.js'
 
 const showSettingsDialog = ref(false)
@@ -72,13 +72,35 @@ const searchSession = ref(0)
 const themeToken = reactive({ colorPrimary: DEFAULT_THEME_COLOR })
 
 const handleParse = async ({ url, sources = [currentSource.value] }) => {
-  searchSession.value++
   const source = sources[0] || currentSource.value
   currentSource.value = source
-  await parseMusic(url, source)
+  // 注意：searchSession 必须在 parseMusic 成功之后再自增，
+  // 否则失败/空结果时 SearchResult 会被强制重新挂载、清空旧数据。
+  const result = await parseMusic(url, source)
+  if (!result?.success) {
+    // 搜索失败 → 保留旧数据，只在 toast 提示错误（parseMusic 内部已 message.error）
+    return
+  }
+  // 成功后才推进会话计数（强制 SearchResult 重新挂载以重置分页/选择）
+  searchSession.value++
   searched.value = true
+  // 记录到历史
   if (searchContainerRef.value && url.trim()) {
-    searchContainerRef.value.addHistoryRecord(url.trim())
+    const isUrl = /^https?:\/\//i.test(url.trim())
+    let displayName = url.trim()
+    let type = isUrl ? 'song' : 'search'
+    if (result.type === 'playlist' && result.detail?.name) {
+      displayName = result.detail.name
+      type = 'playlist'
+    } else if (isUrl && result.type === 'song' && result.data?.[0]?.name) {
+      // 歌曲 URL：取解析出的歌曲名
+      displayName = result.data[0].name
+    }
+    searchContainerRef.value.addHistoryRecord({
+      name: displayName,
+      url: url.trim(),
+      type,
+    })
   }
 }
 
