@@ -110,6 +110,16 @@ class ApiSource:
     needs_cookie: bool = False
     cookie_file: str = ''
 
+    # 该源实际能返的**最高**音质（声明式注解）
+    # 例：vkeys_url.max_quality='lossless'  // 实际能返 FLAC
+    #     xunhuisi_url.max_quality='exhigh'  // 只能返 M4A 256k
+    #     haitanw_url.max_quality='lossless'  // 能返 FLAC
+    # 为空表示不限制（默认）
+    # 用途：fallback chain 串行试数据源时，**跳过 max_quality < 用户请求 quality 的源**
+    #      避免对永远拿不到目标音质的源做无效请求
+    # 优先级：jymaster > hires > lossless > exhigh > standard
+    max_quality: str = ''
+
     # 高级：有状态请求准备器
     # 签名: (url, method, headers, post_data, kwargs) -> dict
     prepare_request: Optional[Callable[..., dict]] = None

@@ -101,7 +101,7 @@ class NeteaseClient(BaseMusicClient):
         return {
             **base,
             'url': url,
-            'quality': quality,
+            'level': quality,                  # 前端用 'level' 字段
             'lyric': lyric or '',
             'source': self.platform_id,
             'api_source': f'{url_src}|{info_src_name}',

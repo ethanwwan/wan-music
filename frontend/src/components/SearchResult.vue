@@ -171,6 +171,7 @@ import { parseMusicInfo } from '../services/musicApi.js'
 import { settings } from '../utils/settingsManager.js'
 import { downloadQueueStore as queueStore } from '../stores/downloadQueue.js'
 import { getPlatformById } from '../utils/platformsManager.js'
+import * as configManager from '../utils/configManager.js'
 
 const props = defineProps({
   songs: { type: Array, default: () => [] },
@@ -242,15 +243,61 @@ const QUALITY_LABELS = {
   standard: '标准', exhigh: '极高', lossless: '无损', hires: 'Hi-Res',
   dolby: '杜比', sky: '环绕声', jymaster: '母带', jyeffect: '臻音',
 }
-const getQualityLabel = (key) => (key ? (QUALITY_LABELS[key] || key) : '')
+// 优先用 configManager（来源：后端 /config），缺失时用本地兜底
+const getQualityLabel = (key) => {
+  if (!key) return ''
+  const cm = configManager
+  if (cm && typeof cm.getQualityLabel === 'function') {
+    return cm.getQualityLabel(key) || key
+  }
+  return QUALITY_LABELS[key] || key
+}
 const formatSize = (bytes) => {
   if (!bytes || bytes <= 0) return ''
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
+// 音质从高到低排序（与后端 quality_config._UNIFIED_QUALITY_PRIORITY 一致）
+const UNIFIED_QUALITY_PRIORITY = [
+  'jymaster', 'jyeffect', 'hires', 'lossless', 'dolby', 'sky', 'exhigh', 'standard'
+]
+
+/**
+ * 根据用户请求的音质 + 该歌曲 qualityMap，计算实际能拿到的最高音质
+ * 与后端 match_quality 函数保持一致
+ */
+const matchQuality = (qualityMap, requested = 'lossless') => {
+  if (!qualityMap) return ''
+  // 1. 精确匹配
+  if (qualityMap[requested]) return requested
+  // 2. 从 requested 往低找
+  const start = UNIFIED_QUALITY_PRIORITY.indexOf(requested)
+  const startIdx = start >= 0 ? start : UNIFIED_QUALITY_PRIORITY.length
+  for (const qk of UNIFIED_QUALITY_PRIORITY.slice(startIdx)) {
+    if (qualityMap[qk]) return qk
+  }
+  // 3. 兜底：qualityMap 中最高音质
+  for (const qk of UNIFIED_QUALITY_PRIORITY) {
+    if (qualityMap[qk]) return qk
+  }
+  return ''
+}
+
 const getQualitySize = (track) => {
-  const key = track.bestQuality
-  return key ? formatSize(track.qualityMap?.[key]?.size) : ''
+  // 关键：基于用户选中的音质 + qualityMap 算出实际能下的最高音质，再取 size
+  // 避免显示「Hi-Res 25MB」但实际只下到 standard 3.9MB
+  const requested = settings.value?.selectedQuality || 'lossless'
+  const effectiveQuality = matchQuality(track.qualityMap, requested)
+  return effectiveQuality ? formatSize(track.qualityMap?.[effectiveQuality]?.size) : ''
+}
+
+/**
+ * 实际能下到的最高音质（按用户请求）
+ * 用作显示标签
+ */
+const getEffectiveQuality = (track) => {
+  const requested = settings.value?.selectedQuality || 'lossless'
+  return matchQuality(track.qualityMap, requested)
 }
 
 // 付费标签：仅 2 种 — 免费 / 付费（VIP、专辑、试听 全部归为付费）
@@ -302,7 +349,8 @@ const playTrack = async (track) => {
 
   try {
     const quality = settings.selectedQuality || 'lossless'
-    const info = await parseMusicInfo(track.id, quality, track.source)
+    // 透传 qualityMap 给后端，让后端做智能降级（跳过不可用音质）
+    const info = await parseMusicInfo(track.id, quality, track.source, track.qualityMap)
     if (!info?.url || !info.available) {
       markUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法播放`)

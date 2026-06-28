@@ -55,11 +55,19 @@ class KugouClient(BaseMusicClient):
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
 
+        # 关键：酷狗的 lossless 用 SQ hash（FLAC），exhigh/standard 用 FileHash（MP3）
+        # song_id_str 是 normalize 后的 primary_hash（已优先用 SQFileHash）
+        # 但 exhigh/standard 时需要切到 mp3_hash（如果有的话）
+        # 调用方在调用 get_song 时通常传入的是搜索结果的 id
+        # 这里从传入的 id 中判断：
+        # 简化处理：直接用传入的 id（已在 normalize 时选择过）
+        parse_hash = song_id_str
+
         with ThreadPoolExecutor(max_workers=2) as pool:
             f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url',
-                                hash=song_id_str, quality=quality)
+                                hash=parse_hash, quality=quality)
             f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                                 hash=song_id_str)
+                                 hash=parse_hash)
 
         url, url_src = f_url.result()
         info, info_src = f_info.result()
@@ -84,7 +92,7 @@ class KugouClient(BaseMusicClient):
         return {
             **base,
             'url': url,
-            'quality': quality,
+            'level': quality,                  # 前端用 'level' 字段
             'lyric': '',  # 酷狗暂未实现歌词链
             'source': self.platform_id,
             'api_source': f'{url_src}|{info_src_name}',

@@ -5,7 +5,7 @@
 
 import { saveBlob } from '../utils/downloadHelper.js'
 import { settings } from '../utils/settingsManager.js'
-import { getQualityLabel } from '../config/qualityLevels.js'
+import { getQualityLabel } from '../utils/configManager.js'
 
 // ==================== 数据源 ====================
 
@@ -118,20 +118,34 @@ export const getPlatforms = async () => {
   return r?.data || []
 }
 
+// ==================== /config ====================
+
+export const getConfig = async () => {
+  const r = await get('/config')
+  return r?.data || null
+}
+
 // ==================== /song ====================
 
 /**
  * 调用后端 /song 接口获取歌曲完整信息：基本信息 + 播放 URL + 歌词
  * 播放、下载、歌词展示都基于此接口的返回数据
+ *
+ * @param {string} musicId
+ * @param {string} quality  - 用户请求的音质
+ * @param {string} source   - 平台（netease/qq/kugou/kuwo）
+ * @param {object} qualityMap - 该歌曲可用音质字典（来自 search 结果，可选）
+ *   传入后，后端降级时会跳过不可用音质
  */
-export const parseMusicInfo = async (musicId, quality = 'lossless', source = '') => {
+export const parseMusicInfo = async (musicId, quality = 'lossless', source = '', qualityMap = null) => {
   if (!musicId) throw new Error('歌曲ID缺失，请重新搜索')
 
   const platform = source || getCurrentDataSource()
   const result = await postJson('/song', {
     id: String(musicId),
     level: quality,
-    source: platform
+    source: platform,
+    qualityMap: qualityMap || undefined
   })
   if (!result?.success) throw new Error(result?.message || '获取歌曲信息失败')
   if (!result.data) throw new Error('未找到歌曲详情')
@@ -147,6 +161,8 @@ export const parseMusicInfo = async (musicId, quality = 'lossless', source = '')
     url: s.url || '',
     level: s.level || quality,
     levelName: getQualityLabel(s.level || quality),
+    requestedLevel: s.requested_level || quality,
+    levelFallback: !!s.level_fallback,
     fileType: s.fileType || 'mp3',
     fileExtension: `.${s.fileType || 'mp3'}`,
     source: s.source || platform,

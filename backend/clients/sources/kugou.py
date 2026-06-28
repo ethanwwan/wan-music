@@ -71,6 +71,7 @@ KUGOU_PARSE_URL_SOURCES = [
         ),
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',  # 支持 hires/lossless/exhigh/standard
     ),
     # 2. haitanw 备用域名
     ApiSource(
@@ -87,6 +88,7 @@ KUGOU_PARSE_URL_SOURCES = [
         ),
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',  # 支持 hires/lossless/exhigh/standard
     ),
     # 3. cocodownloader (musicdl 验证可用)
     ApiSource(
@@ -99,6 +101,7 @@ KUGOU_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 4. 317ak (musicdl 列表) - 需 ckey 复杂鉴权
     ApiSource(
@@ -112,6 +115,7 @@ KUGOU_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',  # br=hires 理论支持
     ),
     # 5. jbsou (musicdl 列表) - POST 复杂
     ApiSource(
@@ -137,6 +141,7 @@ KUGOU_PARSE_URL_SOURCES = [
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
         },
         timeout=15,
+        max_quality='lossless',
     ),
     # 6. 酷狗官方 playInfo (需先获取 hash key 才能用)
     ApiSource(
@@ -150,6 +155,7 @@ KUGOU_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUGOU_COMMON_HEADERS,
         timeout=10,
+        max_quality='exhigh',  # 官方 API 实际只返 mp3
     ),
     # 7. 酷狗官方 kgcloudv2 (md5+trackercdn 复杂) - musicdl 列表
     ApiSource(
@@ -163,6 +169,7 @@ KUGOU_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUGOU_COMMON_HEADERS,
         timeout=10,
+        max_quality='hires',  # 理论支持
     ),
     # 8. gdstudio 跨平台 URL
     ApiSource(
@@ -175,6 +182,7 @@ KUGOU_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',  # gdstudio __br__ 最高 lossless
     ),
 ]
 

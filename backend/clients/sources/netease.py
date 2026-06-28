@@ -90,6 +90,7 @@ NETEASE_SEARCH_SOURCES = [
 
 NETEASE_PARSE_URL_SOURCES = [
     # 1. 网易云官方 eapi - 有 cookie 可拿 HiRes
+    # max_quality='hires'：有 cookie 时能拿 HiRes (1820000bps)
     ApiSource(
         name='netease_official_url',
         platform='netease',
@@ -104,8 +105,10 @@ NETEASE_PARSE_URL_SOURCES = [
         timeout=10,
         needs_cookie=True,
         cookie_file='netease_cookie.txt',
+        max_quality='hires',
     ),
-    # 2. cenguigui (cgg)
+    # 2. cenguigui (cgg) - musicdl 验证可用
+    # max_quality='hires'：实测能拿 HiRes
     ApiSource(
         name='cenguigui',
         platform='netease',
@@ -116,6 +119,7 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
+        max_quality='hires',
     ),
     # 3. haitanw (海糖网) - musicdl 列表
     ApiSource(
@@ -131,6 +135,7 @@ NETEASE_PARSE_URL_SOURCES = [
         timeout=10,
     ),
     # 4. xuanluoge parse
+    # max_quality='lossless'：实测 lossless 可用
     ApiSource(
         name='xuanluoge_url',
         platform='netease',
@@ -141,8 +146,10 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=extract_xuanluoge_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
+        max_quality='lossless',
     ),
     # 5. bileizhen
+    # max_quality='lossless'：level={quality} 支持
     ApiSource(
         name='bileizhen',
         platform='netease',
@@ -153,8 +160,10 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
+        max_quality='lossless',
     ),
     # 6. gdstudio
+    # max_quality='lossless'：br 最高 lossless
     ApiSource(
         name='gdstudio_url',
         platform='netease',
@@ -165,8 +174,10 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 7. cunyu
+    # max_quality='lossless'：quality={quality} 支持
     ApiSource(
         name='cunyu',
         platform='netease',
@@ -177,8 +188,10 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=lambda d: d.get('song_file_url', '') if isinstance(d, dict) else '',
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 8. rxtool
+    # max_quality='hires'：level=hires 写死
     ApiSource(
         name='rxtool',
         platform='netease',
@@ -189,6 +202,7 @@ NETEASE_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',
     ),
     # 9. cocodownloader
     ApiSource(

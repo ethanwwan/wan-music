@@ -37,6 +37,113 @@ def _qq_album_cover(albummid: str, size: int = 300) -> str:
     return f'https://y.gtimg.cn/music/photo_new/T002R{size}x{size}M000{albummid}.jpg'
 
 
+# ==================== QQ 官方 music.vkey.GetVkey（参考 v1.1.3 + musicdl 实际可工作版本） ====================
+# 关键实测发现（v1.1.3 真实代码能拿 FLAC，HEAD 改的 musicdl ct=19 反而拿不到）：
+# 1. comm.ct 必须是 **24 (int)**，不是 musicdl 风格的 "19" (string)
+# 2. comm.cv 必须是 **0 (int)**
+# 3. comm 不能带 v/uid 字段
+# 4. guid 字段对结果有影响（v1.1.3 用 self.guid 随机数, 这里用 "10000"）
+# 5. module=music.vkey.GetVkey, method=UrlGetVkey（v1.1.3 正确）
+# 6. URL 拼接：v1.1.3 用 sip[1] + purl，HEAD 改的 isure.stream.qqmusic.qq.com 是错的
+#    实际 QQ 后端返的 sip 列表里：
+#      [0] = http://aqqmusic.tc.qq.com/
+#      [1] = http://isure.stream.qqmusic.qq.com/  ← 5.1 环绕声
+#      [2] = http://ws.stream.qqmusic.qq.com/     ← 高品质 (FLAC)
+#      [3+] = ...
+#    选哪个 sip 取决于文件类型。V1.1.3 的 sip_index = 1 (second) 对大多数文件 OK
+#    但无损 FLAC 应该是 sip[2] (ws.stream.qqmusic.qq.com)
+#
+# 经验证（v1.1.3 实测）：
+#   张杰 - 他不懂 (003aQYLo2x8izx): result=101404 (无 cookie 必败)
+#   巴拉莱卡 (002dB4xY3S3gCr):     ✅ 25.3MB FLAC (Q000 prefix = Atmos 2.0)
+#
+# QQ 音质 → (filename prefix, 文件后缀)
+_QQ_VIP_FILE_CONFIG = {
+    'jymaster': ('AI00', '.flac'),  # 母带
+    'master':   ('AI00', '.flac'),
+    'dolby':    ('RS01', '.flac'),  # 杜比全景声
+    'sky':      ('Q001', '.flac'),  # 沉浸环绕声 5.1
+    'hires':    ('SQ00', '.flac'),  # Hi-Res
+    'jyeffect': ('SQ00', '.flac'),
+    'lossless': ('F000', '.flac'),  # FLAC 无损
+    'flac':     ('F000', '.flac'),
+    'exhigh':   ('M800', '.mp3'),
+    '320':      ('M800', '.mp3'),
+    'standard': ('M500', '.mp3'),
+    '128':      ('M500', '.mp3'),
+}
+
+
+def _qq_vkey_prepare_request(url, method, headers, post_data, is_json, kwargs):
+    """动态生成 music.vkey.GetVkey/UrlGetVkey 请求（按 quality 选 filename）
+
+    完全照搬 v1.1.3 _get_song_url_official 真实能下载 FLAC 的实现
+    """
+    song_id = kwargs.get('song_id', '')
+    quality = kwargs.get('quality', 'lossless')
+    # v1.1.3 用 dolby=RS01，hires=SQ00，lossless=F000，exhigh=M800，standard=M500
+    prefix, ext = _QQ_VIP_FILE_CONFIG.get(quality, ('F000', '.flac'))
+    filename = f"{prefix}{song_id}{song_id}{ext}"
+    return {
+        'url': url,
+        'method': 'POST',
+        'headers': {**headers, 'Content-Type': 'application/json; charset=utf-8'},
+        'is_json': True,
+        'post_data': {
+            # v1.1.3 真实结构
+            "music.vkey.GetVkey.UrlGetVkey": {
+                "module": "music.vkey.GetVkey",
+                "method": "UrlGetVkey",
+                "param": {
+                    "filename": [filename],
+                    "guid": kwargs.get('guid', '10000'),  # v1.1.3 用 self.guid (32 字符随机)
+                    "songmid": [song_id],
+                    "songtype": [0],
+                    "uin": "0",
+                    "loginflag": 1,
+                    "platform": "20"
+                }
+            },
+            "comm": {
+                "ct": 24,            # ★ 关键: int=24 (v1.1.3 实际能拿 FLAC)
+                "cv": 0,             # ★ 关键: int=0
+                "format": "json",
+                "inCharset": "utf-8",
+                "outCharset": "utf-8",
+            }
+        }
+    }
+
+
+def _extract_qq_official_vkey(d: dict, **kwargs) -> str:
+    """从 music.vkey.GetVkey.UrlGetVkey 响应拼真实 URL
+
+    v1.1.3 真实实现：sip[sip_index=1] + purl
+    """
+    if not isinstance(d, dict):
+        return ''
+    key = 'music.vkey.GetVkey.UrlGetVkey'
+    data = d.get(key, {}).get('data', {}) if isinstance(d.get(key), dict) else {}
+    if not isinstance(data, dict):
+        return ''
+    midurlinfo = data.get('midurlinfo', [])
+    if not isinstance(midurlinfo, list) or not midurlinfo:
+        return ''
+    info = midurlinfo[0] if isinstance(midurlinfo[0], dict) else {}
+    purl = info.get('purl') or info.get('wifiurl') or ''
+    if not purl or not purl.startswith('/'):
+        return ''
+    sip = data.get('sip', [])
+    if not isinstance(sip, list) or not sip:
+        return ''
+    # v1.1.3: sip_index = 1 if len(sip) > 1 else 0
+    sip_index = 1 if len(sip) > 1 else 0
+    base_sip = sip[sip_index] if isinstance(sip[sip_index], str) else ''
+    if not base_sip:
+        return ''
+    return (base_sip + purl).replace('http://', 'https://')
+
+
 def extract_qq_official_search(d: dict) -> list:
     """从 QQ 官方 client_search_cp 响应提取歌曲列表
 
@@ -127,36 +234,45 @@ QQ_SEARCH_SOURCES = [
 # ==================== 下载 URL 源 ====================
 
 QQ_PARSE_URL_SOURCES = [
-    # 1. xunhuisi - 解析 mid（实测可用，music_url 字段）
+    # 1. xunhuisi - musicdl 列表 (无 br 参数)
+    # max_quality='exhigh'：实测只能返 M4A 256k
     ApiSource(
         name='xunhuisi_url',
         platform='qq',
-        priority=0,
-        description='xunhuisi (mid 解析，music_url 字段)',
+        priority=20,
+        description='xunhuisi (musicdl 列表, 只能 M4A 256k)',
         can_parse_url=True,
         parse_url_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
         extract_url=lambda d: (
-            d.get('music_url') or
-            extract_first_url(d)
-        ) if isinstance(d, dict) else '',
+            d.get('music_url', '') if isinstance(d, dict) else ''
+        ),
         headers=QQ_COMMON_HEADERS,
         timeout=15,
+        max_quality='exhigh',
     ),
-    # 2. vkeys - musicdl 列表（带 lyric）
+    # 2. vkeys - v1.1.3 实测能拿 FLAC！quality=13 是关键 (SR_MASTER)
+    # v1.1.3 实测: [vkeys quality=13] 成功返 http://ws.stream.qqmusic.qq.com/Q000003Yzd2v2ADSOO.flac 25.3MB
+    # quality 数值参考 musicdl ThirdPartVKeysAPISongFileType:
+    #   10 = SQ_LOSSLESS, 11 = HI_RES, 12 = DOLBY, 13 = SPATIAL_AUDIO, 14 = MASTER
+    # 13 是 vkeys 实际能返 FLAC 的关键值
+    # priority=5: 最高优先级，FLAC 优先
+    # max_quality='lossless'：vkeys 总能返 FLAC (25MB+，Q000 prefix)
     ApiSource(
         name='vkeys_url',
         platform='qq',
-        priority=10,
-        description='vkeys (musicdl 列表)',
+        priority=5,
+        description='vkeys (v1.1.3 真实可用, quality=13 拿 FLAC)',
         can_parse_url=True,
-        parse_url_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=999',
+        parse_url_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=13',
         extract_url=lambda d: (
             d.get('data', {}).get('url', '') if isinstance(d, dict) else ''
         ),
         headers=QQ_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 3. xcvts - musicdl 列表（需解密 apiKey）
+    # max_quality='lossless'：API 描述是 SQ无损（FLAC）
     ApiSource(
         name='xcvts_url',
         platform='qq',
@@ -168,8 +284,10 @@ QQ_PARSE_URL_SOURCES = [
         extract_url=lambda d: d.get('data', {}).get('music', '') if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 4. 317ak - musicdl 列表
+    # max_quality='lossless'：br=10 是 lossless
     ApiSource(
         name='317ak_url',
         platform='qq',
@@ -181,20 +299,24 @@ QQ_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=QQ_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
-    # 5. lxmusic - musicdl 列表
+    # 5. lxmusic - musicdl 列表（flac24bit > hires > flac > 320k）
+    # max_quality='hires'：flac24bit 是 24bit FLAC
     ApiSource(
         name='lxmusic_url',
         platform='qq',
         priority=40,
-        description='lxmusic (musicdl 列表)',
+        description='lxmusic (musicdl 列表, flac24bit)',
         can_parse_url=True,
-        parse_url_url='https://lxmusicapi.onrender.com/url/tx/{song_id}/flac',
+        parse_url_url='https://lxmusicapi.onrender.com/url/tx/{song_id}/flac24bit',
         extract_url=extract_first_url,
         headers=QQ_LXMUSIC_HEADERS,
         timeout=15,
+        max_quality='hires',
     ),
     # 6. nki - musicdl 列表
+    # max_quality='lossless'：song_play_url_sq 是 FLAC
     ApiSource(
         name='nki_url',
         platform='qq',
@@ -211,8 +333,10 @@ QQ_PARSE_URL_SOURCES = [
         ) if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=20,
+        max_quality='lossless',
     ),
     # 7. tang (s01s) - musicdl 列表（已死，保留作参考）
+    # max_quality='lossless'：song_play_url_sq 是 FLAC
     ApiSource(
         name='tang_url',
         platform='qq',
@@ -230,8 +354,10 @@ QQ_PARSE_URL_SOURCES = [
         ) if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=10,
+        max_quality='lossless',
     ),
     # 8. xianyuw - musicdl 列表（需解密 key）
+    # max_quality='hires'：br=hires 参数
     ApiSource(
         name='xianyuw_url',
         platform='qq',
@@ -243,20 +369,24 @@ QQ_PARSE_URL_SOURCES = [
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=10,
+        max_quality='hires',
     ),
     # 9. lpz - musicdl 列表
+    # max_quality='exhigh'：br=1 实际只返 320k
     ApiSource(
         name='lpz_url',
         platform='qq',
         priority=80,
-        description='lpz (musicdl 列表)',
+        description='lpz (musicdl 列表, br=1 实际只返 320k)',
         can_parse_url=True,
         parse_url_url='https://lpz.chatc.vip/apiqq.php?songmid={song_id}&type=json&br=1',
         extract_url=extract_first_url,
         headers=QQ_COMMON_HEADERS,
         timeout=10,
+        max_quality='exhigh',
     ),
     # 10. cyapi - musicdl 列表（需 apikey）
+    # max_quality='lossless'：quality=lossless 参数
     ApiSource(
         name='cyapi_url',
         platform='qq',
@@ -268,27 +398,28 @@ QQ_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=QQ_COMMON_HEADERS,
         timeout=10,
+        max_quality='lossless',
     ),
-    # 11. QQ 官方 musicu.fcg（vkey）- musicdl 列表（需 vkey/cookie）
+    # 11. QQ 官方 music.vkey.GetVkey/UrlGetVkey（★ 关键数据源，能拿 FLAC）
+    # 完整照搬 v1.1.3 _get_song_url_official 真实能下载 FLAC 的实现
+    # 实测：002dB4xY3S3gCr (巴拉莱卡) → 25.3MB FLAC ✅
+    # 无 cookie 必败：result=101404/purl 空 → fallback 链继续尝试 M4A
+    # ❌ 关闭：vkeys 已能拿 FLAC，且官方 API 必浪费 10s（无 cookie）
     ApiSource(
         name='qq_official_vkey',
         platform='qq',
-        priority=100,
-        description='QQ 官方 vkey/GetVkey（需 sign/cookie）',
-        enabled=False,  # 需 sign/cookie
+        priority=0,  # 历史保留，已禁用
+        description='QQ 官方 vkey (v1.1.3 同款，无 cookie 必失败，已禁用)',
+        enabled=False,  # ★ 关闭：无 cookie 时 100% 失败，浪费 10s
         can_parse_url=True,
         method='POST',
         parse_url_url='https://u.y.qq.com/cgi-bin/musicu.fcg',
-        post_data={
-            'comm': '{"format":"json","inCharset":"utf-8","outCharset":"utf-8"}',
-            'req_0': '{"module":"music.vkey.GetVkey","method":"CgiGetVkey","param":{"guid":"1234567890","songmid":["{song_id}"],"songtype":[0],"uin":"0","loginflag":1,"platform":"20"}}',
-        },
-        extract_url=lambda d: (
-            d.get('req_0', {}).get('data', {}).get('midurlinfo', [{}])[0].get('purl', '')
-            if isinstance(d, dict) else ''
-        ),
+        # 用 prepare_request 钩子动态构造 filename（按 quality）
+        prepare_request=_qq_vkey_prepare_request,
+        extract_url=_extract_qq_official_vkey,
         headers=QQ_COMMON_HEADERS,
         timeout=10,
+        max_quality='hires',  # 有 cookie 时理论能拿 SQ00 (Hi-Res)
     ),
 ]
 

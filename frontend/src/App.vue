@@ -57,6 +57,7 @@ import DownloadDrawer from './components/DownloadDrawer.vue'
 
 import { initThemeFromLocalStorage, DEFAULT_THEME_COLOR } from './utils/themeManager.js'
 import { loadSettings } from './utils/settingsManager.js'
+import { loadConfig } from './utils/configManager.js'
 import { loading, searchResults, searchType, searchDetail, parseMusic } from './utils/parseManager.js'
 import { downloadQueueStore as queueStore } from './stores/downloadQueue.js'
 
@@ -135,6 +136,7 @@ const handlePlayError = (track) => {
 
 onMounted(() => {
   loadSettings()
+  loadConfig()                  // 异步拉取后端 /config，24h 缓存
   initThemeFromLocalStorage()
   themeToken.colorPrimary = DEFAULT_THEME_COLOR
   queueStore.init()

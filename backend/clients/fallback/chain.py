@@ -84,8 +84,25 @@ class FallbackChain:
         return self._try_serial(candidates, op, **kwargs)
 
     def _try_serial(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
-        """串行：找到第一个成功的源就返回"""
+        """串行：找到第一个成功的源就返回
+
+        关键优化：按 quality 过滤源
+        - 如果 source.max_quality 不为空，且 source.max_quality < 用户请求的 quality
+        - 则跳过这个源（它永远拿不到目标音质）
+        - 例：用户请求 lossless，xunhuisi_url (max_quality=exhigh) 应该跳过
+        """
+        user_quality = kwargs.get('quality', '')
+
         for source in sources:
+            # 关键：按 max_quality 过滤
+            if source.max_quality and user_quality:
+                if _quality_rank(source.max_quality) < _quality_rank(user_quality):
+                    logger.debug(
+                        f'[{self.platform}.{op}] 跳过 {source.name} '
+                        f'(max_quality={source.max_quality} < user_quality={user_quality})'
+                    )
+                    continue
+
             t0 = time.time()
             try:
                 data = self._fetch_one(source, op, **kwargs)
@@ -320,3 +337,22 @@ def _default_for_op(op: str):
     if op == 'parse_lyric':
         return ''
     return None
+
+
+# 音质等级从高到低排序（数字越大等级越高）
+# 用于 max_quality 过滤：source.max_quality < user_quality 时跳过源
+_QUALITY_RANK = {
+    'standard': 0,
+    'exhigh': 1,
+    'lossless': 2,
+    'hires': 3,
+    'sky': 4,
+    'jyeffect': 4,
+    'jymaster': 5,
+    'dolby': 6,
+}
+
+
+def _quality_rank(quality: str) -> int:
+    """获取音质的等级（数字越大音质越高），未知名为 -1"""
+    return _QUALITY_RANK.get(quality, -1)

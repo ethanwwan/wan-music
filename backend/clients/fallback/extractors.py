@@ -528,8 +528,22 @@ def normalize_kugou_song(raw: dict) -> dict:
     pay_type = raw.get('PayType') or 0
     pay = (privilege >= 4) or (pay_type >= 1)
 
+    # 关键：优先用 SQFileHash（FLAC 的 hash），让请求 lossless 时用 FLAC 的 hash
+    # 不这样处理的话，haitanw 等三方源会拿 MP3 的 hash 去请求，找不到 FLAC 资源
+    # 兜底：FileHash / hash / id
+    primary_hash = (
+        raw.get('SQFileHash')  # FLAC 资源
+        or raw.get('sqhash')   # 别名（移动端 API 返回的字段）
+        or raw.get('FileHash')
+        or raw.get('hash')
+        or raw.get('id')
+        or ''
+    )
+
     return {
-        'id': str(raw.get('FileHash') or raw.get('hash') or raw.get('id') or ''),
+        'id': str(primary_hash),
+        # 保留 MP3 hash 作为 fallback（exhigh/standard 用）
+        'mp3_hash': str(raw.get('FileHash') or raw.get('hash') or ''),
         'name': raw.get('SongName') or raw.get('name') or raw.get('songname') or '',
         'artists': artists,
         'album': album,

@@ -7,6 +7,7 @@ import os
 import time
 
 from service import music_service, batch_download_service
+from app_config import get_full_config
 from utils.url_parser import parse_url
 from utils.filename import sanitize_filename as _sanitize_filename
 
@@ -93,20 +94,34 @@ def get_song_info():
         - id 或 ids: 歌曲 ID（需配合 source 使用）
         - source: 平台（netease/qq/kugou/kuwo），不传则从 URL 推断
         - level: 音质，默认 lossless
+        - qualityMap: 该歌曲可用音质字典（可选，传入后降级更精准）
     """
     payload = request.get_json(silent=True) or request.form.to_dict()
     music_id, source, url = _resolve_song_ref(payload)
     level = (payload.get('level') or 'lossless').strip() or 'lossless'
+
+    # 解析 qualityMap：允许 dict 或 JSON 字符串
+    quality_map = payload.get('qualityMap')
+    if isinstance(quality_map, str) and quality_map:
+        try:
+            quality_map = json.loads(quality_map)
+        except (ValueError, TypeError):
+            quality_map = None
+    if not isinstance(quality_map, dict):
+        quality_map = None
 
     if not music_id:
         if url:
             return jsonify(APIResponse.error("无法识别此歌曲链接，请检查格式", 400))
         return jsonify(APIResponse.error("请提供歌曲链接或 ID", 400))
 
-    logger.info(f"/song 请求: music_id={music_id}, source={source}, level={level}")
+    logger.info(
+        f"/song 请求: music_id={music_id}, source={source}, level={level}, "
+        f"qualityMap={'yes' if quality_map else 'no'}"
+    )
 
     try:
-        song_info = music_service.get_song_info(music_id, level, source)
+        song_info = music_service.get_song_info(music_id, level, source, quality_map=quality_map)
     except Exception as e:
         logger.error(f"/song 获取歌曲信息失败: {e}")
         return jsonify(APIResponse.error(f"获取歌曲信息失败: {str(e)}", 500))
@@ -114,6 +129,7 @@ def get_song_info():
     if not song_info or not song_info.get('id') or not song_info.get('url'):
         return jsonify(APIResponse.error("未找到歌曲信息", 404))
 
+    actual_level = song_info.get('level', level)
     return jsonify(APIResponse.success({
         'id': music_id,
         'name': song_info.get('name', ''),
@@ -122,7 +138,9 @@ def get_song_info():
         'cover': song_info.get('picUrl', ''),
         'duration': song_info.get('duration', 0),
         'url': song_info.get('url', ''),
-        'level': level,
+        'level': actual_level,                                 # 实际获取的音质
+        'requested_level': level,                              # 用户请求的音质
+        'level_fallback': bool(song_info.get('level_fallback', False)),  # 是否降级
         'fileType': song_info.get('fileType', 'mp3'),
         'source': song_info.get('source', source or 'netease'),
         'api_source': song_info.get('api_source', ''),
@@ -133,8 +151,17 @@ def get_song_info():
 
 @music_bp.route('/platforms', methods=['GET'])
 def get_platforms():
-    """获取支持的音乐平台列表"""
+    """获取支持的音乐平台列表（向后兼容，推荐使用 /config）"""
     return jsonify(APIResponse.success(music_service.get_platforms(), "获取平台列表成功"))
+
+
+@music_bp.route('/config', methods=['GET'])
+def get_config():
+    """获取前端所需的全部配置（平台 / 音质 / 命名格式 / 平台-音质映射）
+
+    前端应在启动时拉取并缓存 24 小时。配置统一在后端维护。
+    """
+    return jsonify(APIResponse.success(get_full_config(), "获取配置成功"))
 
 
 # ==================== 图片代理 ====================

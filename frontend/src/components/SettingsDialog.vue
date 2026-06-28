@@ -17,10 +17,10 @@
             <a-select
               v-model:value="settings.selectedQuality"
               @change="handleSave"
-              :style="{ width: '160px' }"
+              :style="{ width: '200px' }"
             >
               <a-select-option
-                v-for="option in getQualityOptions()"
+                v-for="option in qualityOptions"
                 :key="option.value"
                 :value="option.value"
               >
@@ -28,7 +28,7 @@
               </a-select-option>
             </a-select>
             <div class="form-item-hint">
-              <a-tag color="blue" bordered>解析和下载时使用的默认音质</a-tag>
+              <a-tag color="blue" bordered>解析和下载时使用的默认音质（按平台支持自动降级）</a-tag>
             </div>
           </a-form-item>
         </a-form>
@@ -42,15 +42,19 @@
             <a-select
               v-model:value="settings.filenameFormat"
               @change="handleSave"
-              :style="{ width: '160px' }"
+              :style="{ width: '200px' }"
             >
-              <a-select-option value="song-artist">歌曲名 - 歌手名</a-select-option>
-              <a-select-option value="artist-song">歌手名 - 歌曲名</a-select-option>
-              <a-select-option value="song-only">仅歌曲名</a-select-option>
+              <a-select-option
+                v-for="option in filenameOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </a-select-option>
             </a-select>
             <div class="form-item-hint">
               <a-tag color="blue" bordered>
-                示例：{{ settings.filenameFormat === 'artist-song' ? '歌手 - 歌曲' : (settings.filenameFormat === 'song-only' ? '歌曲' : '歌曲 - 歌手') }}
+                示例：{{ currentFilenameExample }}
               </a-tag>
             </div>
           </a-form-item>
@@ -118,9 +122,32 @@ import { message, Modal } from 'ant-design-vue'
 import { DeleteOutlined } from '@ant-design/icons-vue'
 
 import { settings, saveSettings } from '../utils/settingsManager.js'
-import { getQualityOptions } from '../config/qualityLevels.js'
+import {
+  getQualities,
+  getFilenameFormats,
+  getFilenameFormatExample,
+} from '../utils/configManager.js'
 
 const emit = defineEmits(['update:open'])
+
+// 音质下拉选项（来源：后端 /config，24h 缓存）
+const qualityOptions = computed(() => {
+  const list = getQualities() || []
+  return list.map(q => ({
+    value: q.value,
+    label: `${q.label} (${q.description})`,
+  }))
+})
+
+// 文件命名格式下拉选项
+const filenameOptions = computed(() => {
+  return getFilenameFormats() || []
+})
+
+// 当前命名格式的示例
+const currentFilenameExample = computed(() => {
+  return getFilenameFormatExample(settings.filenameFormat) || settings.filenameFormat
+})
 
 const cacheSize = ref('0 KB')
 const clearingCache = ref(false)

@@ -8,8 +8,31 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>音乐解析工具</title>
 
-    <link rel="stylesheet" href="https://unpkg.com/aplayer@1.10.1/dist/APlayer.min.css">
+    <link rel="stylesheet" id="aplayer-css" href="https://unpkg.com/aplayer@1.10.1/dist/APlayer.min.css">
     <!-- 本地打包模式，无需CDN链接 -->
+    <script>
+      // 多CDN兜底：unpkg → jsdelivr → bootcdn → cdnjs
+      // 任意一个能加载成功即可
+      window.__loadAPlayerCSS = function() {
+        const cssUrls = [
+          'https://unpkg.com/aplayer@1.10.1/dist/APlayer.min.css',
+          'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.css',
+          'https://cdnjs.cloudflare.com/ajax/libs/aplayer/1.10.1/APlayer.min.css',
+        ];
+        const link = document.getElementById('aplayer-css');
+        // 监听当前 link 的加载失败事件，自动切换到下一个 CDN
+        let index = 0;
+        const tryNext = () => {
+          if (index >= cssUrls.length) {
+            console.warn('[aplayer] 所有CSS CDN都不可用，播放器样式可能异常');
+            return;
+          }
+          link.href = cssUrls[index++];
+        };
+        link.addEventListener('error', tryNext);
+      };
+      window.__loadAPlayerCSS();
+    </script>
   </head>
   <body>
     <div id="app">
@@ -58,12 +81,28 @@
 
     <!-- 性能优化：延迟加载非关键JS -->
     <script>
-      // 延迟加载APlayer
+      // 多CDN兜底：unpkg → jsdelivr → bootcdn → cdnjs
+      // 任意一个能加载成功即可
       window.addEventListener('load', function() {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/aplayer@1.10.1/dist/APlayer.min.js';
-        script.async = true;
-        document.head.appendChild(script);
+        const jsUrls = [
+          'https://unpkg.com/aplayer@1.10.1/dist/APlayer.min.js',
+          'https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/aplayer/1.10.1/APlayer.min.js',
+        ];
+        let jsIndex = 0;
+        const tryLoadJS = () => {
+          if (jsIndex >= jsUrls.length) {
+            console.error('[aplayer] 所有JS CDN都不可用，播放器功能不可用');
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = jsUrls[jsIndex++];
+          script.async = true;
+          script.onerror = tryLoadJS;  // 一个失败自动试下一个
+          script.onload = () => console.log(`[aplayer] JS加载成功: ${script.src}`);
+          document.head.appendChild(script);
+        };
+        tryLoadJS();
 
         // 移除初始加载动画
         setTimeout(() => {

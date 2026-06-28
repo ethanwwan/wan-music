@@ -81,6 +81,7 @@ KUWO_SEARCH_SOURCES = [
 
 KUWO_PARSE_URL_SOURCES = [
     # 1. cgg (cenguigui) - musicdl 验证可用
+    # max_quality='lossless'：实测能返 FLAC lossless
     ApiSource(
         name='cgg_url',
         platform='kuwo',
@@ -94,8 +95,10 @@ KUWO_PARSE_URL_SOURCES = [
         ),
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 2. ccwu (musicdl 列表) - 高码率 jymaster
+    # max_quality='jymaster'：level=jymaster
     ApiSource(
         name='ccwu_url',
         platform='kuwo',
@@ -106,8 +109,10 @@ KUWO_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='jymaster',
     ),
     # 3. liuyunidc (musicdl 列表) - 需 RC4 加密
+    # max_quality='hires'：musicdl 备注支持
     ApiSource(
         name='liuyunidc_url',
         platform='kuwo',
@@ -124,8 +129,10 @@ KUWO_PARSE_URL_SOURCES = [
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
         },
         timeout=15,
+        max_quality='hires',
     ),
     # 4. yyy001 (musicdl 列表) - 需 ckey
+    # max_quality='hires'：quality 参数支持
     ApiSource(
         name='yyy001_url',
         platform='kuwo',
@@ -140,8 +147,10 @@ KUWO_PARSE_URL_SOURCES = [
         ),
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',
     ),
     # 5. lxmusic (musicdl 列表)
+    # max_quality='lossless'：/flac
     ApiSource(
         name='lxmusic_url',
         platform='kuwo',
@@ -152,8 +161,10 @@ KUWO_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUWO_LXMUSIC_HEADERS,
         timeout=20,  # onrender.com 冷启动慢
+        max_quality='lossless',
     ),
     # 6. nxinxz (musicdl 列表) - 西柚
+    # max_quality='hires'：level 参数支持
     ApiSource(
         name='nxinxz_url',
         platform='kuwo',
@@ -167,8 +178,10 @@ KUWO_PARSE_URL_SOURCES = [
         ),
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='hires',
     ),
     # 7. haitanw (musicdl 列表) - 海糖网
+    # max_quality='lossless'：level=lossless/exhigh/standard
     ApiSource(
         name='haitanw_url',
         platform='kuwo',
@@ -182,8 +195,10 @@ KUWO_PARSE_URL_SOURCES = [
         ),
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
     # 8. guyuei (musicdl 列表) - 需解密 final URL
+    # max_quality='hires'：yinzhi=hns 是高品质
     ApiSource(
         name='guyuei_url',
         platform='kuwo',
@@ -197,8 +212,10 @@ KUWO_PARSE_URL_SOURCES = [
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
         },
         timeout=15,
+        max_quality='hires',
     ),
     # 9. ceseet (musicdl 列表) - lx-music
+    # max_quality='lossless'：/flac
     ApiSource(
         name='ceseet_url',
         platform='kuwo',
@@ -213,8 +230,10 @@ KUWO_PARSE_URL_SOURCES = [
             'X-Request-Key': '',
         },
         timeout=15,
+        max_quality='lossless',
     ),
     # 10. 酷我官方 mobi.kuwo.cn convert_url2 (musicdl 列表) - 需 encryptquery
+    # max_quality='hires'：官方 API
     ApiSource(
         name='kuwo_official_mobi',
         platform='kuwo',
@@ -228,8 +247,10 @@ KUWO_PARSE_URL_SOURCES = [
             'user-agent': 'okhttp/3.10.0',
         },
         timeout=10,
+        max_quality='hires',
     ),
     # 11. 酷我官方 convert_url_with_sign (musicdl 列表) - 不需要 user 参数
+    # max_quality='hires'：br=2000kflac 是 FLAC
     ApiSource(
         name='kuwo_official_convert_url_with_sign',
         platform='kuwo',
@@ -244,8 +265,10 @@ KUWO_PARSE_URL_SOURCES = [
             'channel': 'aliopen',
         },
         timeout=15,
+        max_quality='hires',
     ),
     # 12. gdstudio 跨平台 URL
+    # max_quality='lossless'：gdstudio br 最高 lossless
     ApiSource(
         name='gdstudio_url',
         platform='kuwo',
@@ -256,6 +279,7 @@ KUWO_PARSE_URL_SOURCES = [
         extract_url=extract_first_url,
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
     ),
 ]
 

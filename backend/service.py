@@ -56,10 +56,15 @@ class MusicService:
             return self._resolve_from_url(parsed)
         return self._search_by_keyword(keyword, platform, limit)
 
-    def get_song_info(self, song_id: str, quality: str = 'lossless',
-                      platform: str = None) -> Optional[Dict[str, Any]]:
-        """获取歌曲完整信息（基本信息 + 播放 URL + 歌词）"""
-        return get_song(song_id, quality, platform)
+    def get_song_info(self, song_id, quality: str = 'lossless',
+                      platform: str = None,
+                      quality_map: dict = None) -> Optional[Dict[str, Any]]:
+        """获取歌曲完整信息（基本信息 + 播放 URL + 歌词）
+
+        song_id 可以是 str 或 dict（含 id + mp3_hash 等）
+        quality_map（可选）：该歌曲的可用品质字典，让降级更精准
+        """
+        return get_song(song_id, quality, platform, quality_map=quality_map)
 
     def get_platforms(self) -> List[Dict[str, str]]:
         """获取可用平台列表（前端从 /platforms 接口读取，避免硬编码）"""
@@ -349,10 +354,24 @@ class BatchDownloadService:
         artist = item.get('artist', '')
         album = item.get('album', '')
 
+        # ★ 关键：从 search 透传 qualityMap，让 music_client.get_song 做智能降级
+        # 场景：用户请求 lossless，但该歌曲 qualityMap 只有 exhigh/standard
+        #   → 跳过 lossless，直接从 exhigh 开始，节省 5-10 秒
+        item_quality_map = item.get('qualityMap') or {}
+
+        # 酷狗特殊：mp3_hash 单独携带（用于 exhigh/standard 备用）
+        # kugou 的 normalize 已将 SQFileHash 设为 id（FLAC hash），
+        # 这里把 mp3_hash 一并传入供 music_client.get_song 在降级时使用
+        mp3_hash = item.get('mp3_hash', '')
+        if source == 'kugou' and mp3_hash:
+            song_id_arg = {'id': song_id, 'mp3_hash': mp3_hash, 'qualityMap': item_quality_map}
+        else:
+            song_id_arg = song_id
+
         last_error = None
         for attempt in range(3):
             try:
-                song_info = music_service.get_song_info(song_id, quality, source)
+                song_info = music_service.get_song_info(song_id_arg, quality, source, quality_map=item_quality_map)
                 url = song_info.get('url') if song_info else None
                 if not url:
                     return None

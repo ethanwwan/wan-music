@@ -70,14 +70,99 @@ class MusicClient:
         return result.get('data', []) if isinstance(result, dict) else []
 
     def get_song(self, song_id: Any, quality: str = 'lossless',
-                 platform: str = None, with_lyric: bool = True) -> Optional[Dict[str, Any]]:
+                 platform: str = None, with_lyric: bool = True,
+                 quality_map: dict = None) -> Optional[Dict[str, Any]]:
         """一次性获取歌曲完整信息（信息 + URL + 可选歌词）
+
+        支持基于 qualityMap 的智能降级（按用户请求的音质）：
+        1. 先按平台能力（PLATFORM_QUALITY_SUPPORT.fallback_chain）过滤
+        2. 再按歌曲实际可用的 qualityMap 过滤
+        3. 从用户请求的音质开始，依次尝试链中更低的音质
+        4. 用户请求超清母带但该歌曲只有 exhigh → 直接从 exhigh 开始，
+           跳过 hires/lossless，节省 5-10 秒
+
+        song_id 可以是字符串（直接是 hash/id），也可以是 dict
+        （包含 id 和 mp3_hash 字段，用于酷狗的 FLAC/MP3 双 hash 场景）
+
+        quality_map（可选）：该歌曲的可用音质字典 {quality: {br, size}}
+        - 来自 search 结果，可让降级更精准
+        - 优先级：search 时的 qualityMap > 平台 fallback_chain 默认行为
 
         Returns:
             None 表示完全失败
         """
+        try:
+            from ..app_config import get_platform_quality_chain
+        except (ImportError, ValueError):
+            # 兼容直接以脚本形式运行时（相对导入失败时走绝对路径）
+            import os, sys
+            _backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if _backend_root not in sys.path:
+                sys.path.insert(0, _backend_root)
+            from app_config import get_platform_quality_chain
+
         client = self._get_client(platform)
-        return client.get_song(str(song_id), quality, with_lyric=with_lyric)
+
+        # song_id 可能是 dict（包含多 hash 信息）
+        mp3_hash = ''
+        if isinstance(song_id, dict):
+            mp3_hash = str(song_id.get('mp3_hash') or '')
+            song_id_str = str(song_id.get('id') or song_id.get('hash') or '')
+            # 兼容：dict 中也带 qualityMap
+            if not quality_map:
+                quality_map = song_id.get('qualityMap')
+        else:
+            song_id_str = str(song_id)
+
+        # 关键：基于 qualityMap + 平台能力，获取该歌曲实际可用的降级链
+        # 例：用户请求 jymaster，qualityMap 只有 exhigh → 链是 [exhigh, standard]
+        #     用户请求 lossless，qualityMap 有 lossless/exhigh → 链是 [lossless, exhigh]
+        chain = get_platform_quality_chain(platform, quality, quality_map)
+
+        if chain and chain[0] != quality:
+            logger.info(
+                f"音质降级预过滤: {platform}/{song_id_str} "
+                f"请求={quality} → 实际起始={chain[0]}（qualityMap 或平台能力限制）"
+            )
+
+        last_result = None
+        for try_quality in chain:
+            # 酷狗特殊：lossless/hires 用 FLAC hash（id = SQFileHash），
+            # exhigh/standard 用 MP3 hash（mp3_hash = FileHash）
+            if platform == 'kugou' and mp3_hash and try_quality in ('exhigh', 'standard'):
+                parse_id = mp3_hash
+            else:
+                parse_id = song_id_str
+
+            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric)
+            if result and result.get('url'):
+                # 标记实际使用的音质（前端可基于此判断是否降级）
+                if try_quality != quality:
+                    result['requested_quality'] = quality
+                    # 区分升级/降级（用音质 rank 比较）
+                    from .fallback.chain import _quality_rank
+                    actual_rank = _quality_rank(try_quality)
+                    requested_rank = _quality_rank(quality)
+                    if actual_rank < requested_rank:
+                        # 实际音质低于请求音质 → 真降级
+                        result['level_fallback'] = True
+                        result['level_upgrade'] = False
+                        logger.info(
+                            f"音质降级: {platform}/{song_id_str} "
+                            f"{quality} → {try_quality}"
+                        )
+                    else:
+                        # 实际音质高于请求音质 → 升级（数据源给得比请求更好）
+                        result['level_fallback'] = False
+                        result['level_upgrade'] = True
+                        logger.info(
+                            f"音质升级: {platform}/{song_id_str} "
+                            f"{quality} → {try_quality} (数据源给得更好)"
+                        )
+                return result
+            last_result = result
+
+        return last_result
 
     def parse_playlist(self, playlist_id: str, platform: str = None,
                        page: int = 1, size: int = 100) -> Optional[Dict[str, Any]]:
