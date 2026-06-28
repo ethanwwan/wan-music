@@ -131,9 +131,22 @@ class FallbackChain:
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, dict):
-                            item_id = str(item.get('id') or item.get('rid') or item.get('mid') or item.get('FileHash') or '')
+                            item_id = str(
+                                item.get('id')
+                                or item.get('rid')
+                                or item.get('mid')
+                                or item.get('FileHash')
+                                or item.get('hash')
+                                or item.get('MUSICRID')
+                                or item.get('musicrid')
+                                or ''
+                            ).removeprefix('MUSIC_')
                             if item_id and item_id not in seen_ids:
                                 seen_ids.add(item_id)
+                                item['_source'] = source.name
+                                all_results.append(item)
+                            elif not item_id:
+                                # 没有 ID 字段也保留（如搜索结果只有 hash）
                                 item['_source'] = source.name
                                 all_results.append(item)
                 else:

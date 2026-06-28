@@ -63,6 +63,17 @@ URL_PATTERNS = {
             r'https?://www\.bodianmusic\.com/playlist/([a-zA-Z0-9]+)',
         ],
     },
+    'kuwo': {
+        'music': [
+            r'https?://www\.kuwo\.cn/play_detail/(\d+)',
+            r'https?://m\.kuwo\.cn/yinyue/(\d+)',
+            r'https?://y\.kuwo\.cn/song/([a-zA-Z0-9]+)',
+        ],
+        'playlist': [
+            r'https?://www\.kuwo\.cn/playlist/detail/(\d+)',
+            r'https?://m\.kuwo\.cn/playlist/(\d+)',
+        ],
+    },
 }
 
 
@@ -83,7 +94,7 @@ def parse_url(text: str) -> Optional[Dict[str, str]]:
 
     Returns:
         {
-            'platform': 'netease' | 'qq' | 'kugou' | 'bodian',
+            'platform': 'netease' | 'qq' | 'kugou' | 'bodian' | 'kuwo',
             'type': 'music' | 'playlist' | 'album',
             'id': '资源 ID'
         } 或 None（如果无法识别）

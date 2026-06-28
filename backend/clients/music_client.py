@@ -5,6 +5,7 @@
 - QQ音乐（qq_client）
 - 波点音乐（bodian_client）
 - 酷狗音乐（kugou_client）
+- 酷我音乐（kuwo_client）
 
 提供统一的API接口，前端可指定数据源和平台。
 
@@ -20,82 +21,91 @@ from .netease_client import NeteaseClient, netease_client
 from .qq_client import QQClient, qq_client
 from .bodian_client import BodianClient, bodian_client
 from .kugou_client import KugouClient, kugou_client
+from .kuwo_client import KuwoClient, kuwo_client
 
 logger = logging.getLogger(__name__)
 
 
 class MusicClient:
     """统一的音乐客户端总控类
-    
+
     支持多种初始化方式：
     1. 默认方式 - 使用全局单例客户端
     2. 自定义方式 - 传入具体的客户端实例
     """
-    
+
     def __init__(
         self,
         netease_client: Optional[NeteaseClient] = None,
         qq_client: Optional[QQClient] = None,
         bodian_client: Optional[BodianClient] = None,
-        kugou_client: Optional[KugouClient] = None
+        kugou_client: Optional[KugouClient] = None,
+        kuwo_client: Optional[KuwoClient] = None
     ):
         """初始化客户端总控
-        
+
         Args:
             netease_client: 自定义网易云客户端实例，默认为全局单例
             qq_client: 自定义QQ音乐客户端实例，默认为全局单例
             bodian_client: 自定义波点音乐客户端实例，默认为全局单例
             kugou_client: 自定义酷狗音乐客户端实例，默认为全局单例
+            kuwo_client: 自定义酷我音乐客户端实例，默认为全局单例
         """
         self.platform_clients: Dict[str, BaseMusicClient] = {}
-        
+
         if netease_client:
             self.register_client('netease', netease_client)
         else:
             self.register_client('netease', globals()['netease_client'])
-        
+
         if qq_client:
             self.register_client('qq', qq_client)
         else:
             self.register_client('qq', globals()['qq_client'])
-        
+
         if bodian_client:
             self.register_client('bodian', bodian_client)
         else:
             self.register_client('bodian', globals()['bodian_client'])
-        
+
         if kugou_client:
             self.register_client('kugou', kugou_client)
         else:
             self.register_client('kugou', globals()['kugou_client'])
-        
+
+        if kuwo_client:
+            self.register_client('kuwo', kuwo_client)
+        else:
+            self.register_client('kuwo', globals()['kuwo_client'])
+
         self.default_platform = 'netease'
-    
+
     def register_client(self, platform: str, client: BaseMusicClient) -> None:
         """注册平台客户端
-        
+
         Args:
-            platform: 平台标识（netease/qq/bodian/kugou）
+            platform: 平台标识（netease/qq/bodian/kugou/kuwo）
             client: 客户端实例，需继承自BaseMusicClient
         """
         if not isinstance(client, BaseMusicClient):
             raise ValueError(f"客户端必须继承自 BaseMusicClient")
         self.platform_clients[platform] = client
         logger.info(f"已注册平台: {platform}")
-    
+
     def unregister_client(self, platform: str) -> None:
         """取消注册平台"""
         if platform in self.platform_clients:
             del self.platform_clients[platform]
             logger.info(f"已取消注册平台: {platform}")
-    
+
     def get_platforms(self) -> List[Dict[str, str]]:
         """获取可用平台列表（id / name / color / description）"""
         return [
             {'id': 'netease', 'name': '网易云音乐', 'color': '#e72d2c', 'description': '网易云音乐平台'},
             {'id': 'qq',      'name': 'QQ音乐', 'color': '#31c27c', 'description': 'QQ音乐平台'},
             {'id': 'bodian',  'name': '波点音乐', 'color': '#ff7e29', 'description': '波点音乐平台'},
-            {'id': 'kugou',   'name': '酷狗音乐', 'color': '#2a8eff', 'description': '酷狗音乐平台'}
+            {'id': 'kugou',   'name': '酷狗音乐', 'color': '#2a8eff', 'description': '酷狗音乐平台'},
+            {'id': 'kuwo',    'name': '酷我音乐', 'color': '#ff6600', 'description': '酷我音乐平台'}
         ]
     
     def _get_client(self, platform: str) -> BaseMusicClient:

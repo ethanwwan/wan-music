@@ -335,14 +335,68 @@ def normalize_kugou_song(raw: dict) -> dict:
 
 
 def normalize_bodian_song(raw: dict) -> dict:
-    """波点歌曲标准化"""
+    """波点歌曲标准化（兼容 musicdl 酷我字段：MUSICRID/SONGNAME/ARTIST/ALBUM/DURATION）"""
     if not isinstance(raw, dict):
         return {}
+    # 处理 MUSICRID（酷我官方搜索结果的格式）
+    musicrid = raw.get('MUSICRID') or raw.get('musicrid') or ''
+    rid = musicrid.removeprefix('MUSIC_') if isinstance(musicrid, str) else ''
+    if not rid:
+        rid = str(raw.get('id') or raw.get('rid') or raw.get('musicRid') or '')
+
     return {
-        'id': str(raw.get('id') or raw.get('rid') or raw.get('musicRid') or ''),
-        'name': raw.get('name') or raw.get('songName') or raw.get('FSONGNAME') or '',
-        'artists': raw.get('artist') or raw.get('artists') or '',
-        'album': raw.get('album') or raw.get('albumName') or '',
-        'picUrl': '',
-        'duration': raw.get('duration') or raw.get('Duration') or 0,
+        'id': str(rid),
+        'name': (
+            raw.get('SONGNAME')
+            or raw.get('name')
+            or raw.get('songName')
+            or raw.get('FSONGNAME')
+            or raw.get('title')
+            or ''
+        ),
+        'artists': (
+            raw.get('ARTIST')
+            or raw.get('artist')
+            or raw.get('artists')
+            or raw.get('singer')
+            or ''
+        ),
+        'album': (
+            raw.get('ALBUM')
+            or raw.get('album')
+            or raw.get('albumName')
+            or ''
+        ),
+        'picUrl': (
+            raw.get('hts_MVPIC')
+            or raw.get('albumpic')
+            or raw.get('pic')
+            or ''
+        ),
+        'duration': raw.get('DURATION') or raw.get('duration') or 0,
+    }
+
+
+def normalize_kuwo_song(raw: dict) -> dict:
+    """酷我歌曲标准化（兼容 musicdl 的 abslist 项和 cenguigui data 项）
+
+    musicdl 酷我搜索结果字段：
+      - MUSICRID: 'MUSIC_123456'  → 取数字部分作为 rid
+      - SONGNAME / ARTIST / ALBUM / DURATION / hts_MVPIC
+    """
+    if not isinstance(raw, dict):
+        return {}
+    # 处理 MUSICRID
+    musicrid = raw.get('MUSICRID') or raw.get('musicrid') or ''
+    rid = musicrid.removeprefix('MUSIC_') if isinstance(musicrid, str) else ''
+    if not rid:
+        rid = str(raw.get('id') or raw.get('rid') or '')
+
+    return {
+        'id': str(rid),
+        'name': raw.get('SONGNAME') or raw.get('name') or raw.get('songName') or raw.get('title') or '',
+        'artists': raw.get('ARTIST') or raw.get('artist') or raw.get('singer') or '',
+        'album': raw.get('ALBUM') or raw.get('album') or '',
+        'picUrl': raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or '',
+        'duration': raw.get('DURATION') or raw.get('duration') or 0,
     }

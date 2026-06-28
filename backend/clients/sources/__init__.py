@@ -1,5 +1,7 @@
 """各平台的 ApiSource 定义（数据驱动）
 
+所有数据来源：musicdl master + 实测
+
 新增 API 只需在此目录下加一个文件 + 几个 ApiSource 实例。
 """
 from .netease import (
@@ -18,12 +20,19 @@ from .kugou import (
     KUGOU_SEARCH_SOURCES,
     KUGOU_PARSE_URL_SOURCES,
     KUGOU_PARSE_INFO_SOURCES,
+    KUGOU_PARSE_LYRIC_SOURCES,
 )
 from .bodian import (
     BODIAN_SEARCH_SOURCES,
     BODIAN_PARSE_URL_SOURCES,
     BODIAN_PARSE_INFO_SOURCES,
     BODIAN_PARSE_LYRIC_SOURCES,
+)
+from .kuwo import (
+    KUWO_SEARCH_SOURCES,
+    KUWO_PARSE_URL_SOURCES,
+    KUWO_PARSE_INFO_SOURCES,
+    KUWO_PARSE_LYRIC_SOURCES,
 )
 from .common import COMMON_SOURCES
 
@@ -39,9 +48,14 @@ __all__ = [
     'KUGOU_SEARCH_SOURCES',
     'KUGOU_PARSE_URL_SOURCES',
     'KUGOU_PARSE_INFO_SOURCES',
+    'KUGOU_PARSE_LYRIC_SOURCES',
     'BODIAN_SEARCH_SOURCES',
     'BODIAN_PARSE_URL_SOURCES',
     'BODIAN_PARSE_INFO_SOURCES',
     'BODIAN_PARSE_LYRIC_SOURCES',
+    'KUWO_SEARCH_SOURCES',
+    'KUWO_PARSE_URL_SOURCES',
+    'KUWO_PARSE_INFO_SOURCES',
+    'KUWO_PARSE_LYRIC_SOURCES',
     'COMMON_SOURCES',
 ]
