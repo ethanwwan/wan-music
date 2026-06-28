@@ -157,6 +157,17 @@ export const parseMusicInfo = async (musicId, quality = 'lossless', source = '')
 
 // ==================== /search ====================
 
+/**
+ * 把外部图片 URL 包装成后端代理 URL（避免 Chrome ORB 阻断跨域图）
+ * 已经是同源（/image 或 base64）则原样返回
+ */
+const proxyImage = (url) => {
+  if (!url || typeof url !== 'string') return url
+  if (url.startsWith('/image') || url.startsWith('data:') || url.startsWith('blob:')) return url
+  if (!/^https?:\/\//.test(url)) return url
+  return `/image?url=${encodeURIComponent(url)}`
+}
+
 /** 把后端搜索结果标准化为前端使用的 track 列表 */
 const mapSearchSong = (song) => ({
   id: song.id,
@@ -164,7 +175,7 @@ const mapSearchSong = (song) => ({
   artists: song.artists || song.artist_string || '',
   album: song.album || '',
   duration: song.duration || 0,
-  picUrl: song.picUrl || song.cover || '',
+  picUrl: proxyImage(song.picUrl || song.cover || ''),
   source: song.source,
   url: song.url || '',
   lrc: song.lyric || '',

@@ -137,6 +137,64 @@ def get_platforms():
     return jsonify(APIResponse.success(music_service.get_platforms(), "获取平台列表成功"))
 
 
+# ==================== 图片代理 ====================
+
+# 白名单：仅代理已知音乐平台的图片域名
+_ALLOWED_IMAGE_HOSTS = (
+    'img4.kuwo.cn', 'img3.kuwo.cn', 'img2.kuwo.cn', 'img1.kuwo.cn',
+    'y.gtimg.cn',
+    'imge.kugou.com',
+    'p1.music.126.net', 'p2.music.126.net', 'p3.music.126.net', 'p4.music.126.net',
+    'music.126.net',
+)
+# 1×1 透明 PNG（fallback）
+_FALLBACK_PNG = (
+    b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+    b'\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01'
+    b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+)
+
+
+@music_bp.route('/image', methods=['GET'])
+def proxy_image():
+    """代理外部音乐平台图片，避免跨域 ORB 阻断（Chrome 108+）"""
+    from urllib.parse import urlparse
+    import requests as _requests
+
+    url = request.args.get('url', '').strip()
+    if not url:
+        return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
+
+    if parsed.scheme not in ('http', 'https') or parsed.netloc not in _ALLOWED_IMAGE_HOSTS:
+        logger.warning(f'proxy_image: blocked host {parsed.netloc}')
+        return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
+
+    try:
+        r = _requests.get(
+            url, timeout=10, stream=True,
+            headers={
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://www.kuwo.cn/' if 'kuwo' in parsed.netloc else
+                           'https://y.qq.com/' if 'qq' in parsed.netloc else
+                           'https://www.kugou.com/' if 'kugou' in parsed.netloc else
+                           'https://music.163.com/',
+            },
+        )
+        content_type = r.headers.get('Content-Type', '').lower()
+        # 仅放行图片
+        if not content_type.startswith('image/') or r.status_code != 200:
+            return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
+        return Response(r.content, mimetype=content_type, status=200)
+    except Exception as e:
+        logger.debug(f'proxy_image: {url} failed: {e}')
+        return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
+
+
 # ==================== 批量下载接口 ====================
 
 @music_bp.route('/download/batch/start', methods=['POST'])

@@ -60,12 +60,13 @@
             <td class="col-cover">
               <div class="track-cover-wrapper">
                 <img
-                  v-if="track.picUrl"
+                  v-if="track.picUrl && !track.picError"
                   :src="track.picUrl"
                   :alt="track.name"
                   class="track-cover"
                   :class="{ 'grayscale': track.unavailable }"
                   loading="lazy"
+                  @error="track.picError = true"
                 />
                 <div v-else class="track-cover-placeholder"></div>
               </div>
