@@ -29,7 +29,7 @@ class ApiSource:
 
     Attributes:
         name: 源的简短标识（如 'xuanluoge'、'gdstudio'），用于日志和 api_source 字段
-        platform: 所属平台（'netease' | 'qq' | 'kugou' | 'bodian' | 'common'）
+        platform: 所属平台（'netease' | 'qq' | 'kugou' | 'kuwo' | 'common'）
         enabled: 是否启用（动态开关）
         priority: 数字越小优先级越高（0 最高）。用于同能力源排序
         description: 备注（如「musicdl 验证可用」「需要 ckey」）

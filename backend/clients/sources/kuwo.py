@@ -370,12 +370,12 @@ KUWO_PARSE_LYRIC_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=10,
     ),
-    # 2. 酷我 mobi 歌词 (musicdl bodian 列表)
+    # 2. 酷我 mobi 歌词 (musicdl 列表，f=bodian 为 API 原生参数)
     ApiSource(
         name='kuwo_mobi_lyric',
         platform='kuwo',
         priority=10,
-        description='酷我 mobi 歌词 (musicdl bodian 列表)',
+        description='酷我 mobi 歌词 (musicdl 列表)',
         can_parse_lyric=True,
         parse_lyric_url='http://mlyric.kuwo.cn/mobi.s?f=bodian&q={__base64_q__}',
         extract_lyric=lambda d: d.get('data', {}).get('lrclist', '') if isinstance(d, dict) else '',

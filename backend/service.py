@@ -171,7 +171,7 @@ class MusicService:
                 platform_errors.append({'platform': platform, 'type': 'playlist', 'message': str(e)})
 
             # 标记歌单搜索不支持的平台（用于前端 UI 提示）
-            if platform in ('kugou', 'bodian', 'kuwo'):
+            if platform in ('kugou', 'kuwo'):
                 warnings.append('playlist_search_unsupported')
 
         # 把平台错误透传给前端

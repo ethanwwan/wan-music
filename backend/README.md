@@ -60,7 +60,7 @@ MIT
 | `netease` | 网易云（支持搜索歌曲/歌单、下载，需 cookie 解锁 VIP 音质） |
 | `qq` | QQ音乐（支持搜索歌曲/歌单、下载） |
 | `kugou` | 酷狗（支持搜索歌曲、下载） |
-| `bodian` | 波点（支持搜索歌曲、下载） |
+| `kuwo` | 酷我（支持搜索歌曲、下载） |
 
 ### 音质等级
 
@@ -104,8 +104,8 @@ curl http://localhost:5002/platforms
   "data": [
     {"id": "netease", "name": "网易云音乐",   "color": "#e72d2c", "description": "网易云音乐平台"},
     {"id": "qq",      "name": "QQ音乐",  "color": "#31c27c", "description": "QQ音乐平台"},
-    {"id": "bodian",  "name": "波点音乐", "color": "#ff7e29", "description": "波点音乐平台"},
-    {"id": "kugou",   "name": "酷狗音乐", "color": "#2a8eff", "description": "酷狗音乐平台"}
+    {"id": "kugou",   "name": "酷狗音乐", "color": "#2a8eff", "description": "酷狗音乐平台"},
+    {"id": "kuwo",    "name": "酷我音乐", "color": "#ff6600", "description": "酷我音乐平台"}
   ]
 }
 ```

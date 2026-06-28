@@ -3,7 +3,6 @@
 作为多平台音乐客户端的总控中心，支持：
 - 网易云音乐（netease_client）
 - QQ音乐（qq_client）
-- 波点音乐（bodian_client）
 - 酷狗音乐（kugou_client）
 - 酷我音乐（kuwo_client）
 
@@ -19,7 +18,6 @@ from typing import Dict, List, Optional, Any, Type
 from .base_client import BaseMusicClient
 from .netease_client import NeteaseClient, netease_client
 from .qq_client import QQClient, qq_client
-from .bodian_client import BodianClient, bodian_client
 from .kugou_client import KugouClient, kugou_client
 from .kuwo_client import KuwoClient, kuwo_client
 
@@ -38,7 +36,6 @@ class MusicClient:
         self,
         netease_client: Optional[NeteaseClient] = None,
         qq_client: Optional[QQClient] = None,
-        bodian_client: Optional[BodianClient] = None,
         kugou_client: Optional[KugouClient] = None,
         kuwo_client: Optional[KuwoClient] = None
     ):
@@ -47,7 +44,6 @@ class MusicClient:
         Args:
             netease_client: 自定义网易云客户端实例，默认为全局单例
             qq_client: 自定义QQ音乐客户端实例，默认为全局单例
-            bodian_client: 自定义波点音乐客户端实例，默认为全局单例
             kugou_client: 自定义酷狗音乐客户端实例，默认为全局单例
             kuwo_client: 自定义酷我音乐客户端实例，默认为全局单例
         """
@@ -62,11 +58,6 @@ class MusicClient:
             self.register_client('qq', qq_client)
         else:
             self.register_client('qq', globals()['qq_client'])
-
-        if bodian_client:
-            self.register_client('bodian', bodian_client)
-        else:
-            self.register_client('bodian', globals()['bodian_client'])
 
         if kugou_client:
             self.register_client('kugou', kugou_client)
@@ -84,7 +75,7 @@ class MusicClient:
         """注册平台客户端
 
         Args:
-            platform: 平台标识（netease/qq/bodian/kugou/kuwo）
+            platform: 平台标识（netease/qq/kugou/kuwo）
             client: 客户端实例，需继承自BaseMusicClient
         """
         if not isinstance(client, BaseMusicClient):
@@ -103,7 +94,6 @@ class MusicClient:
         return [
             {'id': 'netease', 'name': '网易云音乐', 'color': '#e72d2c', 'description': '网易云音乐平台'},
             {'id': 'qq',      'name': 'QQ音乐', 'color': '#31c27c', 'description': 'QQ音乐平台'},
-            {'id': 'bodian',  'name': '波点音乐', 'color': '#ff7e29', 'description': '波点音乐平台'},
             {'id': 'kugou',   'name': '酷狗音乐', 'color': '#2a8eff', 'description': '酷狗音乐平台'},
             {'id': 'kuwo',    'name': '酷我音乐', 'color': '#ff6600', 'description': '酷我音乐平台'}
         ]

@@ -66,7 +66,7 @@ def search():
     接受参数：
       - keyword: 搜索内容（可以是关键词或 URL）
       - type: 搜索类型（0=全部 / 1=歌曲 / 2=歌单），仅在 keyword 不是 URL 时生效
-      - source: 数据源（netease/qq/kugou/bodian/kuwo）
+      - source: 数据源（netease/qq/kugou/kuwo）
       - quality: 用户选择的音质
       - limit: 返回数量（默认 50）
     """
@@ -100,7 +100,7 @@ def get_song_info():
     请求体（JSON 或 form）：
         - url: 完整的歌曲链接（由后端解析出 id 和 source）
         - id 或 ids: 歌曲 ID（需配合 source 使用）
-        - source: 平台（netease/qq/kugou/bodian/kuwo），不传则从 URL 推断
+        - source: 平台（netease/qq/kugou/kuwo），不传则从 URL 推断
         - level: 音质，默认 lossless
     """
     payload = request.get_json(silent=True) or request.form.to_dict()
@@ -159,7 +159,7 @@ def get_playlist():
     支持以下参数（任选其一）：
         - url: 完整的歌单链接（推荐，由后端解析）
         - id: 歌单 ID（需配合 source 使用）
-        - source: 平台（netease/qq/kugou/bodian），不传则从 URL 推断
+        - source: 平台（netease/qq/kugou/kuwo），不传则从 URL 推断
     """
     try:
         url = request.form.get('url', '').strip()

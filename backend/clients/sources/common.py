@@ -14,11 +14,11 @@ COMMON_HEADERS = {
 
 
 # gdstudio 跨平台源：支持 netease/qq/kugou/kuwo/bilibili/migu
-_GDSTUDIO_PLATFORMS = ['netease', 'qq', 'kugou', 'kuwo', 'bodian']
+_GDSTUDIO_PLATFORMS = ['netease', 'qq', 'kugou', 'kuwo']
 
 
 COMMON_SOURCES = {
-    # 通用 gdstudio（支持 netease/qq/kugou/kuwo/bodian）
+    # 通用 gdstudio（支持 netease/qq/kugou/kuwo）
     'gdstudio': [
         # URL 源
         *[
@@ -198,31 +198,6 @@ COMMON_SOURCES = {
             platform='kuwo',
             priority=20,
             description='jbsou POST (musicdl 列表，kuwo)',
-            enabled=False,  # 需验证 POST
-            can_parse_url=True,
-            method='POST',
-            parse_url_url='https://www.jbsou.cn/',
-            post_data={'input': '{song_id}', 'filter': 'id', 'type': 'kuwo', 'page': '1'},
-            extract_url=lambda d: (
-                (d.get('data', [{}])[0] if isinstance(d.get('data'), list) and d.get('data') else {}).get('url', '')
-                if isinstance(d, dict) else ''
-            ),
-            headers={
-                'accept': 'application/json, text/javascript, */*; q=0.01',
-                'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                'origin': 'https://www.jbsou.cn',
-                'referer': 'https://www.jbsou.cn/',
-                'x-requested-with': 'XMLHttpRequest',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-            },
-            timeout=15,
-        ),
-        # bodian（kuwo 别名）
-        ApiSource(
-            name='jbsou_url_bodian',
-            platform='bodian',
-            priority=20,
-            description='jbsou POST (musicdl 列表，bodian)',
             enabled=False,  # 需验证 POST
             can_parse_url=True,
             method='POST',
