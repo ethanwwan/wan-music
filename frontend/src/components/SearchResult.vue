@@ -81,10 +81,17 @@
                 >
                   {{ getPlatformName(track.source) }}
                 </span>
+                <span
+                  v-if="track.pay || track.fee === 1"
+                  class="pay-tag"
+                  :title="getPayTitle(track)"
+                >
+                  {{ getPayLabel(track) }}
+                </span>
               </div>
               <div class="track-artist" :class="{ 'unavailable-text': track.unavailable }">{{ track.artists }}</div>
             </td>
-            <td class="col-album" :class="{ 'unavailable-text': track.unavailable }">{{ track.album }}</td>
+            <td class="col-album" :class="{ 'unavailable-text': track.unavailable }">{{ track.album || '-' }}</td>
             <td class="col-quality">
               <div v-if="track.bestQuality" class="quality-info">
                 <span class="quality-label">{{ getQualityLabel(track.bestQuality) }}</span>
@@ -167,6 +174,19 @@ const formatSize = (bytes) => {
 const getQualitySize = (track) => {
   const key = track.bestQuality
   return key ? formatSize(track.qualityMap?.[key]?.size) : ''
+}
+
+// 付费标签：fee=1 VIP / fee=4 专辑 / fee=8 部分试听
+const getPayLabel = (track) => {
+  const fee = track.fee
+  if (fee === 1) return 'VIP'
+  if (fee === 4) return '专辑'
+  if (fee === 8 || fee === 16) return '试听'
+  return track.pay ? '付费' : ''
+}
+const getPayTitle = (track) => {
+  const label = getPayLabel(track)
+  return label ? `付费内容（${label}）` : ''
 }
 
 const toggleSelect = (track) => {
@@ -455,6 +475,19 @@ const handleBatchDownloadSelected = async () => {
   font-size: 10px;
   border-radius: 4px;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pay-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: #d4380d;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
   white-space: nowrap;
   flex-shrink: 0;
 }

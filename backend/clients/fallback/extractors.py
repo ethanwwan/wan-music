@@ -245,7 +245,7 @@ def normalize_netease_song(raw: dict) -> dict:
     """将任意来源的歌曲 dict 标准化为前端期望的格式
 
     输入可能是官方（ar/al 字段）、gdstudio（artist 列表）、xuanluoge（artists 字符串）
-    输出统一为 {id, name, artists, album, picUrl, duration, source, api_source}
+    输出统一为 {id, name, artists, album, picUrl, duration, qualityMap, ...}
     """
     if not isinstance(raw, dict):
         return {}
@@ -259,13 +259,18 @@ def normalize_netease_song(raw: dict) -> dict:
     else:
         artists_str = str(artists or '')
 
-    # album 字段
+    # album 字段（可能是 dict 也可能是 str）
     album = raw.get('album') or raw.get('al') or ''
+    album_name = ''
+    album_cover = ''
     if isinstance(album, dict):
-        album = album.get('name', '')
+        album_name = album.get('name', '')
+        album_cover = album.get('picUrl', '') or album.get('pic', '') or ''
+    else:
+        album_name = str(album or '')
 
-    # picUrl 字段
-    pic = raw.get('picUrl') or raw.get('pic') or ''
+    # picUrl 字段：可能在顶层 picUrl / pic，也可能在 al.picUrl
+    pic = raw.get('picUrl') or raw.get('pic') or album_cover or ''
     if isinstance(pic, dict):
         pic = pic.get('url', '')
 
@@ -276,16 +281,64 @@ def normalize_netease_song(raw: dict) -> dict:
     except (TypeError, ValueError):
         dur = 0
 
+    # 音质信息：网易云官方搜索响应中包含 h/m/l/sq/hr（每个都是 {bitrate, size}）
+    # 转成 {quality_key: {br, size}}，缺失字段表示该音质不可用
+    quality_map = _extract_netease_quality_map(raw)
+
+    # pay：fee=1 (VIP 单曲) / 4 (专辑) / 8 (试听/版权) 都视为付费内容
+    fee = raw.get('fee', 0)
+    st = raw.get('st', 0)
+    pay = fee in (1, 4, 8) or (st < 0) or bool(raw.get('noCopyrightRcmd'))
+
     return {
         'id': str(raw.get('id') or raw.get('rid') or ''),
         'name': raw.get('name') or raw.get('title') or '',
         'artists': artists_str,
-        'album': album,
+        'album': album_name,
         'picUrl': pic,
         'duration': dur,
-        'pay': bool(raw.get('pay') or raw.get('fee') == 1),
-        'fee': raw.get('fee', 0),
+        'pay': pay,
+        'fee': fee,
+        'qualityMap': quality_map,
+        'bestQuality': _best_quality(quality_map),
     }
+
+
+# 网易云音质码 → 前端 quality 标识
+_NETEASE_QUALITY_FIELDS = {
+    'standard': 'l',   # 128k
+    'exhigh':   'm',   # 192k
+    'lossless': 'sq',  # 999k flac
+    'hires':    'hr',  # 1750k+ flac
+}
+
+
+def _extract_netease_quality_map(raw: dict) -> dict:
+    """从网易云搜索响应提取 qualityMap
+
+    返回: {'standard': {br, size}, 'exhigh': ..., 'lossless': ..., 'hires': ...}
+    """
+    qmap = {}
+    for quality_key, field in _NETEASE_QUALITY_FIELDS.items():
+        v = raw.get(field)
+        if v and isinstance(v, dict):
+            qmap[quality_key] = {
+                'br': v.get('br') or v.get('bitrate') or 0,
+                'size': v.get('size') or 0,
+            }
+    return qmap
+
+
+# 音质从高到低排序
+_QUALITY_ORDER = ['hires', 'jymaster', 'lossless', 'exhigh', 'standard']
+
+
+def _best_quality(quality_map: dict) -> str:
+    """从 qualityMap 推断可用的最高音质"""
+    for q in _QUALITY_ORDER:
+        if quality_map.get(q):
+            return q
+    return ''
 
 
 def normalize_qq_song(raw: dict) -> dict:
@@ -312,6 +365,7 @@ def normalize_qq_song(raw: dict) -> dict:
         'album': album_name,
         'picUrl': raw.get('picUrl') or '',
         'duration': raw.get('duration') or raw.get('interval') or 0,
+        'bestQuality': '',
     }
 
 
@@ -332,6 +386,7 @@ def normalize_kugou_song(raw: dict) -> dict:
         'album': raw.get('AlbumName') or raw.get('album') or '',
         'picUrl': '',
         'duration': raw.get('Duration') or raw.get('duration') or 0,
+        'bestQuality': '',
     }
 
 
@@ -358,4 +413,5 @@ def normalize_kuwo_song(raw: dict) -> dict:
         'album': raw.get('ALBUM') or raw.get('album') or '',
         'picUrl': raw.get('hts_MVPIC') or raw.get('albumpic') or raw.get('pic') or raw.get('picUrl') or '',
         'duration': raw.get('DURATION') or raw.get('duration') or 0,
+        'bestQuality': '',
     }

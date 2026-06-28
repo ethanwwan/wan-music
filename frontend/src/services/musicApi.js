@@ -148,7 +148,10 @@ const mapSearchSong = (song) => ({
   url: song.url || '',
   lrc: song.lyric || '',
   fileExtension: song.fileType ? `.${song.fileType}` : '.mp3',
-  payInfo: song.payInfo || null,
+  // 付费信息：后端字段是 pay (bool) + fee (int 0/1/4/8)
+  pay: song.pay || false,
+  fee: song.fee || 0,
+  payInfo: song.pay ? { payed: false, fee: song.fee || 0, listenUrl: null } : null,
   qualityMap: song.qualityMap || null,
   bestQuality: song.bestQuality || '',
   api_source: song.api_source || '',
