@@ -8,20 +8,6 @@
     <a-empty v-else-if="searched && songs.length === 0" description="未找到相关结果" />
 
     <div v-else-if="songs.length > 0" class="tracks-table-wrapper">
-      <!-- 工具栏：批量下载 + 退出选择 -->
-      <div class="toolbar">
-        <div class="toolbar-left">
-          <template v-if="!isSelectMode">
-            <a-button type="primary" @click="enterSelectMode">批量下载</a-button>
-          </template>
-          <template v-else>
-            <span class="select-hint">已选 {{ selectedIds.length }}/{{ songs.length }}</span>
-            <a-button size="small" type="primary" :disabled="selectedIds.length === 0" @click="handleBatchDownloadSelected">下载</a-button>
-            <a-button size="small" @click="exitSelectMode">取消</a-button>
-          </template>
-        </div>
-      </div>
-
       <table class="tracks-table">
         <thead>
           <tr>
@@ -32,12 +18,26 @@
                 @change="handleSelectAll"
               />
             </th>
-            <th class="col-index">序号</th>
+            <th class="col-index">
+              <template v-if="isSelectMode">已选 {{ selectedIds.length }}/{{ songs.length }}</template>
+              <template v-else>序号</template>
+            </th>
             <th class="col-cover"></th>
             <th class="col-name">歌名</th>
             <th class="col-album">专辑名</th>
+            <th class="col-pay">付费</th>
             <th class="col-quality">音质</th>
-            <th class="col-action">操作</th>
+            <th class="col-action">
+              <template v-if="!isSelectMode">
+                <a-button size="small" @click="enterSelectMode">批量操作</a-button>
+              </template>
+              <template v-else>
+                <a-space :size="8">
+                  <a-button size="small" type="primary" :disabled="selectedIds.length === 0" @click="handleBatchDownloadSelected">下载</a-button>
+                  <a-button size="small" @click="exitSelectMode">取消</a-button>
+                </a-space>
+              </template>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -82,17 +82,20 @@
                 >
                   {{ getPlatformName(track.source) }}
                 </span>
-                <span
-                  v-if="track.pay || track.fee === 1"
-                  class="pay-tag"
-                  :title="getPayTitle(track)"
-                >
-                  {{ getPayLabel(track) }}
-                </span>
               </div>
               <div class="track-artist" :class="{ 'unavailable-text': track.unavailable }">{{ track.artists }}</div>
             </td>
             <td class="col-album" :class="{ 'unavailable-text': track.unavailable }">{{ track.album || '-' }}</td>
+            <td class="col-pay">
+              <span
+                v-if="track.pay || track.fee"
+                class="pay-tag"
+                :class="`pay-${getPayKey(track)}`"
+                :title="getPayTitle(track)"
+              >
+                {{ getPayLabel(track) }}
+              </span>
+            </td>
             <td class="col-quality">
               <div v-if="track.bestQuality" class="quality-info">
                 <span class="quality-label">{{ getQualityLabel(track.bestQuality) }}</span>
@@ -184,6 +187,14 @@ const getPayLabel = (track) => {
   if (fee === 4) return '专辑'
   if (fee === 8 || fee === 16) return '试听'
   return track.pay ? '付费' : ''
+}
+// 付费类型 key：用于 CSS 样式分支
+const getPayKey = (track) => {
+  const fee = track.fee
+  if (fee === 1) return 'vip'
+  if (fee === 4) return 'album'
+  if (fee === 8 || fee === 16) return 'preview'
+  return track.pay ? 'paid' : ''
 }
 const getPayTitle = (track) => {
   const label = getPayLabel(track)
@@ -364,20 +375,6 @@ const handleBatchDownloadSelected = async () => {
   to { transform: rotate(360deg); }
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-container-low);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .select-hint {
   font-size: 13px;
   color: var(--color-text-muted);
@@ -428,8 +425,9 @@ const handleBatchDownloadSelected = async () => {
 .col-cover { width: 56px; padding: 8px; }
 .col-name { width: 280px; overflow: hidden; }
 .col-album { font-size: 14px; color: var(--color-text-muted); width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-quality { width: 80px; text-align: center; }
-.col-action { width: 100px; text-align: center; }
+.col-pay { width: 70px; text-align: center; }
+.col-quality { width: 90px; text-align: center; }
+.col-action { width: 130px; text-align: center; }
 
 .track-cover-wrapper {
   width: 40px;
@@ -482,16 +480,18 @@ const handleBatchDownloadSelected = async () => {
 
 .pay-tag {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 2px 8px;
   font-size: 10px;
-  border-radius: 3px;
+  border-radius: 10px;
   font-weight: 600;
-  color: #d4380d;
-  background: #fff7e6;
-  border: 1px solid #ffd591;
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* 各付费类型配色 */
+.pay-tag.pay-vip     { color: #d4380d; background: #fff1f0; border: 1px solid #ffa39e; }
+.pay-tag.pay-album   { color: #d48806; background: #fffbe6; border: 1px solid #ffe58f; }
+.pay-tag.pay-preview { color: #1d39c4; background: #f0f5ff; border: 1px solid #adc6ff; }
+.pay-tag.pay-paid    { color: #d4380d; background: #fff7e6; border: 1px solid #ffd591; }
 
 .unavailable-reason {
   display: inline-block;
