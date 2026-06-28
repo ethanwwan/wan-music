@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
     || `http://localhost:${backendPort || 5005}`
 
   // 代理路径列表（server 和 preview 复用）
-  const proxyPaths = ['/search', '/song', '/playlist', '/download', '/api', '/health', '/platforms']
+  const proxyPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms']
   const buildProxy = () => Object.fromEntries(
     proxyPaths.map(p => [p, { target: proxyTarget, changeOrigin: true }])
   )
