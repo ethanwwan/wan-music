@@ -123,10 +123,10 @@
                     <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
                   </div>
                   <div class="song-meta">
-                    <a-tag v-if="song.platform" :color="getPlatformColor(song.platform)" size="small">
+                    <a-tag v-if="song.platform" :color="getPlatformColor(song.platform, song.status)" size="small">
                       {{ song.platform }}
                     </a-tag>
-                    <a-tag v-if="song.level" color="default" size="small">
+                    <a-tag v-if="song.level" :color="getStatusColor(song.status)" size="small">
                       {{ song.level }}
                     </a-tag>
                     <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
@@ -326,16 +326,39 @@ const getSongStatusIcon = (status) => {
 }
 
 /**
- * 平台 → 标签颜色
+ * 平台 → 标签颜色（按状态覆盖：done 绿色 / failed 红色 / processing 蓝色 / pending 灰色）
+ * 颜色优先级：状态色 > 平台色
+ * - done: 绿色（成功）
+ * - failed: 红色（失败）
+ * - processing: 蓝色（进行中）
+ * - pending: 平台色（默认色，仅 pending 时显示）
  */
-const getPlatformColor = (platform) => {
-  const colors = {
-    netease: 'red',
-    qq: 'green',
-    kugou: 'orange',
-    kuwo: 'blue',
+const getPlatformColor = (platform, status) => {
+  // 状态色优先
+  if (status === 'done') return 'green'
+  if (status === 'failed') return 'red'
+  if (status === 'processing') return 'blue'
+  // pending 用平台色
+  const platformColors = {
+    netease: 'default',
+    qq: 'default',
+    kugou: 'default',
+    kuwo: 'default',
   }
-  return colors[platform] || 'default'
+  return platformColors[platform] || 'default'
+}
+
+/**
+ * 状态 → 标签颜色（用于音质 level tag）
+ */
+const getStatusColor = (status) => {
+  const colors = {
+    pending: 'default',
+    processing: 'blue',
+    done: 'green',
+    failed: 'red',
+  }
+  return colors[status] || 'default'
 }
 
 /**
