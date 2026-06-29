@@ -744,7 +744,7 @@ const handleClearCompleted = async () => {
   margin-bottom: 12px;
   background: #fef2f2;
   border-radius: 8px;
-  padding: 0 0 8px 0;   /* 左右 0：让 song-item 紧贴容器边缘 */
+  padding: 0;   /* 完全归零：padding 移到内容区，收起时无多余空白 */
 }
 
 /* 只有纯错误列表（无 songs 详情）时，header 才是红色 */
@@ -767,7 +767,7 @@ const handleClearCompleted = async () => {
 }
 
 .task-errors :deep(.ant-collapse-content) {
-  padding: 0 !important;   /* 完全归零：避免与 .task-errors 自身的 8px 重复 */
+  padding: 0 0 8px 0 !important;   /* 仅保留 8px 底部 padding：仅展开时占空间 */
 }
 
 /* per-song 列表容器：中性背景，per-song 内部已按状态用绿/红/蓝标识 */
@@ -775,7 +775,12 @@ const handleClearCompleted = async () => {
   margin-bottom: 12px;
   background: var(--color-surface-light, #f9fafb);
   border-radius: 8px;
-  padding: 0 0 8px 0;   /* 左右 0：让 song-item 紧贴容器边缘 */
+  padding: 0;   /* 完全归零：padding 移到内容区，收起时无多余空白 */
+}
+
+/* 展开时给内容区 8px 底部 padding，收起时（display:none）无空白 */
+.task-songs-section :deep(.ant-collapse-content) {
+  padding: 0 0 8px 0 !important;
 }
 
 .task-songs-section :deep(.ant-collapse-header) {
