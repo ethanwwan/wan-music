@@ -126,13 +126,15 @@ class MusicService:
 
     def get_song_info(self, song_id, quality: str = 'lossless',
                       platform: str = None,
-                      quality_map: dict = None) -> Optional[Dict[str, Any]]:
-        """获取歌曲完整信息（基本信息 + 播放 URL + 歌词）
+                      quality_map: dict = None,
+                      with_lyric: bool = True) -> Optional[Dict[str, Any]]:
+        """获取歌曲完整信息（基本信息 + 播放 URL + 可选歌词）
 
         song_id 可以是 str 或 dict（含 id + mp3_hash 等）
         quality_map（可选）：该歌曲的可用品质字典，让降级更精准
+        with_lyric（可选，默认 True）：是否获取歌词（重试时可设 False 节省请求）
         """
-        return get_song(song_id, quality, platform, quality_map=quality_map)
+        return get_song(song_id, quality, platform, quality_map=quality_map, with_lyric=with_lyric)
 
     def get_platforms(self) -> List[Dict[str, str]]:
         """获取可用平台列表（前端从 /platforms 接口读取，避免硬编码）"""
