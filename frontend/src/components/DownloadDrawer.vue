@@ -375,10 +375,15 @@ const getCollapseHeader = (task) => {
     const done = task.songs.filter(s => s.status === 'done').length
     const failed = task.songs.filter(s => s.status === 'failed').length
     const parts = []
-    if (task.status === 'done' || task.status === 'error') {
-      parts.push(`${task.songs.length} 首歌曲 (成功 ${done}, 失败 ${failed})`)
+    // 数量标题：默认只有 "N 首歌曲"
+    const total = task.songs.length
+    const subs = []
+    if (done > 0) subs.push(`成功 ${done}`)
+    if (failed > 0) subs.push(`失败 ${failed}`)
+    if (subs.length > 0) {
+      parts.push(`${total} 首歌曲 (${subs.join(', ')})`)
     } else {
-      parts.push(`${task.songs.length} 首歌曲 (${done} 完成)`)
+      parts.push(`${total} 首歌曲`)
     }
     // 进行中：附加当前正在下载的歌曲名（仅 1 首歌时显示，多首避免过长）
     if (task.status === 'running' && task.current && task.songs.length <= 1) {
