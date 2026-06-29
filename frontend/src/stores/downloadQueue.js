@@ -115,13 +115,19 @@ const subscribeTask = (taskId) => {
 
   const unsubscribe = subscribeBatchTask(taskId, {
     onProgress: (data) => {
+      // 前端累计 file_size：所有 done 歌曲的 file_size 之和
+      // 这样用户能实时看到累计大小（不用等任务完成才更新）
+      const songs = data.songs || []
+      const totalSize = songs
+        .filter(s => s.status === 'done' && s.file_size > 0)
+        .reduce((sum, s) => sum + s.file_size, 0)
       updateTask(taskId, {
         status: data.status,
         completed: data.completed,
         failed: data.failed,
         current: data.current,
-        file_size: data.file_size || 0,
-        songs: data.songs || undefined,   // 后端推送 per-song 状态（undefined 时保留本地）
+        file_size: totalSize,              // 前端累加（覆盖后端估算）
+        songs: data.songs || undefined,    // 后端推送 per-song 状态（undefined 时保留本地）
       })
     },
     onComplete: (data) => {
