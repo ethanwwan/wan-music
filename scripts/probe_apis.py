@@ -14,12 +14,15 @@
   - 完全对齐后端 ApiSource 的真实能力声明
   - 失败时根据后端代码生成调试建议（哪些字段 / headers 可能漏了）
 """
+import argparse
 import json
 import re
 import sys
 import time
+import traceback
 import urllib.parse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -341,13 +344,14 @@ def probe_url(method, url, headers=None, post_data=None, is_json=False, timeout=
 
 
 def safe_call_extractor(extractor, data):
-    """安全调用提取器，捕获异常"""
+    """安全调用提取器，捕获异常（带 traceback 便于调试）"""
     if not extractor or not callable(extractor):
         return None
     try:
         return extractor(data)
     except Exception as e:
-        return f'EXTRACTOR_ERROR: {type(e).__name__}: {str(e)[:80]}'
+        tb = traceback.format_exc(limit=2)
+        return f'EXTRACTOR_ERROR: {type(e).__name__}: {str(e)[:60]} | {tb.splitlines()[-1] if tb else ""}'
 
 
 # ==================== 5 类能力测试 ====================
@@ -500,34 +504,18 @@ def test_playlist(source: ApiSource, platform: str, playlist_id: str):
     return 'alive', f'返回 {type(result).__name__}'
 
 
-# ==================== 单 platform 探测 ====================
+# ==================== 单 platform 探测（并发）====================
 
-def probe_platform(platform: str, sources_map: dict, test_ids: dict):
-    """探测一个平台所有 source"""
-    print(f'\n{"=" * 70}')
-    print(f'【{platform}】  {sources_map["name"]}')
-    print(f'{"=" * 70}')
+def _probe_one_source(args):
+    """并发 worker：探测单个 source 的某个能力"""
+    cap, src, platform, song_id, playlist_id = args
+    name = src.name
+    if not src.enabled:
+        return (cap, name), {'status': 'disabled', 'detail': f'已禁用: {src.description[:40]}'}
+    if src.needs_cookie:
+        return (cap, name), {'status': 'need_cookie', 'detail': f'需 cookie ({src.cookie_file})'}
 
-    song_id = test_ids.get(platform, '')
-    # 平台默认测试歌单 ID
-    playlist_id = {'netease': '3778678', 'qq': '7429867227', 'kugou': '888888', 'kuwo': '2787413870'}.get(platform, '')
-
-    # 收集所有 (capability, source) 对
-    all_sources = []
-    for cap in ('search', 'url', 'info', 'lyric', 'playlist'):
-        all_sources.extend([(cap, s) for s in sources_map[cap]])
-
-    # 探测
-    results = {}  # {(cap, source_name): {status, detail, ...}}
-    for cap, src in all_sources:
-        name = src.name
-        if not src.enabled:
-            results[(cap, name)] = {'status': 'disabled', 'detail': f'已禁用: {src.description[:40]}'}
-            continue
-        if src.needs_cookie:
-            results[(cap, name)] = {'status': 'need_cookie', 'detail': f'需 cookie ({src.cookie_file})'}
-            continue
-
+    try:
         if cap == 'search':
             status, detail = test_search(src, platform)
         elif cap == 'url':
@@ -539,7 +527,6 @@ def probe_platform(platform: str, sources_map: dict, test_ids: dict):
                 else:
                     s, d = test_url(src, platform, song_id, q)
                     url_results[q] = (s, d)
-            # 汇总：任一 alive 就算 alive
             alive_q = [q for q, (s, _) in url_results.items() if s == 'alive']
             dead_q = [q for q, (s, _) in url_results.items() if s == 'dead']
             err_q = [q for q, (s, _) in url_results.items() if s not in ('alive', 'dead', 'skipped')]
@@ -549,20 +536,49 @@ def probe_platform(platform: str, sources_map: dict, test_ids: dict):
                 status, detail = 'dead', f'全部失败: {",".join(dead_q)}'
             else:
                 status, detail = 'no_url', f'无 url, ❌{",".join(dead_q)} ⚠{",".join(err_q)}'
-            # 把每个音质结果保存到 details
-            results[(cap, name)] = {
-                'status': status, 'detail': detail,
-                'quality_results': url_results,
-            }
-            continue
+            return (cap, name), {'status': status, 'detail': detail, 'quality_results': url_results}
         elif cap == 'info':
             status, detail = test_info(src, platform, song_id)
         elif cap == 'lyric':
             status, detail = test_lyric(src, platform, song_id)
         elif cap == 'playlist':
             status, detail = test_playlist(src, platform, playlist_id)
+        else:
+            status, detail = 'skipped', f'未知能力: {cap}'
 
-        results[(cap, name)] = {'status': status, 'detail': detail}
+        return (cap, name), {'status': status, 'detail': detail}
+    except Exception as e:
+        return (cap, name), {'status': 'exception', 'detail': f'探测异常: {type(e).__name__}: {str(e)[:80]}'}
+
+
+def probe_platform(platform: str, sources_map: dict, test_ids: dict, concurrency: int = 8):
+    """探测一个平台所有 source（并发）"""
+    print(f'\n{"=" * 70}')
+    print(f'【{platform}】  {sources_map["name"]}')
+    print(f'{"=" * 70}')
+
+    song_id = test_ids.get(platform, '')
+    playlist_id = {'netease': '3778678', 'qq': '7429867227', 'kugou': '888888', 'kuwo': '2787413870'}.get(platform, '')
+
+    # 收集所有 (capability, source) 对
+    tasks = []
+    for cap in ('search', 'url', 'info', 'lyric', 'playlist'):
+        for src in sources_map[cap]:
+            tasks.append((cap, src, platform, song_id, playlist_id))
+
+    # 并发探测
+    results = {}
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        futures = [ex.submit(_probe_one_source, t) for t in tasks]
+        for f in as_completed(futures):
+            try:
+                key, r = f.result()
+                results[key] = r
+            except Exception as e:
+                pass
+    elapsed = time.time() - t0
+    print(f'  ⏱ 探测完成 {len(results)} 项，耗时 {elapsed:.1f}s (并发={concurrency})')
 
     return results
 
@@ -635,11 +651,17 @@ def main():
     # 1. 拿真实测试 ID
     test_ids = collect_test_ids()
 
-    # 2. 逐平台探测
+    # 平台过滤（CLI）
+    platforms = getattr(main, '_platforms_filter', list(PLATFORM_SOURCES.keys()))
+    concurrency = getattr(main, 'concurrency', 8)
+
+    # 2. 逐平台探测（并发）
     all_stats = defaultdict(lambda: defaultdict(int))
     all_results = {}
     for platform, sources_map in PLATFORM_SOURCES.items():
-        results = probe_platform(platform, sources_map, test_ids)
+        if platform not in platforms:
+            continue
+        results = probe_platform(platform, sources_map, test_ids, concurrency=concurrency)
         all_results[platform] = results
 
         # 分能力打印
@@ -690,6 +712,33 @@ def main():
     print('\n' + '=' * 70)
     print('【故障排查建议（基于后端 sources/ 代码分析）】')
     print('=' * 70)
+
+    # 5.1 域名级聚合：同一域名多个 source 死 → 端点级死链
+    domain_issues = defaultdict(list)
+    for platform, results in all_results.items():
+        for src in [s for cap_list in PLATFORM_SOURCES[platform].values() if isinstance(cap_list, list) for s in cap_list]:
+            # 取 source 真实 URL 的 host
+            url = src.search_url or src.parse_url_url or src.parse_info_url or src.parse_lyric_url or src.parse_playlist_url
+            if not url:
+                continue
+            try:
+                host = re.match(r'https?://([^/]+)', url).group(1)
+            except Exception:
+                continue
+            for cap in ('search', 'url', 'info', 'lyric', 'playlist'):
+                r = results.get((cap, src.name), {})
+                if r.get('status') in ('dead', 'no_data', 'no_url', 'extractor_error', 'extractor_wrong_type'):
+                    domain_issues[host].append((platform, cap, src.name, r.get('status', '')))
+
+    # 域名死链：>= 2 个 source 失败的认为是端点级问题
+    domain_dead = {h: items for h, items in domain_issues.items() if len(items) >= 2}
+    if domain_dead:
+        print('\n  🔴 域名级死链（多 source 失败的端点）：')
+        for host, items in sorted(domain_dead.items(), key=lambda x: -len(x[1])):
+            caps = sorted({c for _, c, _, _ in items})
+            print(f'    - {host} ({len(items)} 处失败, 涉及 {",".join(caps)})')
+
+    # 5.2 单源建议
     suggestions = []
     for platform, results in all_results.items():
         for (cap, name), r in results.items():
@@ -703,12 +752,72 @@ def main():
                 suggestions.append(f'  - {platform}/{cap}/{name}: 提取器异常 → 检查后端 extractors.py 对应函数')
             elif status == 'no_data' and cap == 'search':
                 suggestions.append(f'  - {platform}/{cap}/{name}: 搜索返回空列表 → 关键词或编码问题')
+
     if suggestions:
+        print('\n  📋 单源建议：')
         for s in suggestions[:15]:
             print(s)
-    else:
+
+    if not domain_dead and not suggestions:
         print('  🎉 所有 source 正常工作！')
+
+    # 6. JSON 输出（可选）
+    if getattr(main, 'json_output', None):
+        json_data = {
+            'test_keyword': TEST_KEYWORD,
+            'platforms': {},
+        }
+        for platform, results in all_results.items():
+            json_data['platforms'][platform] = {}
+            for (cap, name), r in results.items():
+                entry = {'status': r.get('status'), 'detail': r.get('detail', '')[:200]}
+                if 'quality_results' in r:
+                    entry['quality_results'] = {q: {'status': s, 'detail': d[:200]} for q, (s, d) in r['quality_results'].items()}
+                json_data['platforms'][platform].setdefault(cap, {})[name] = entry
+        json_data['domain_dead'] = {h: items for h, items in domain_dead.items()}
+        with open(main.json_output, 'w', encoding='utf-8') as f:
+            json.dump(json_data, f, ensure_ascii=False, indent=2)
+        print(f'\n  💾 JSON 报告已保存: {main.json_output}')
+
+
+def cli():
+    """CLI 入口"""
+    global TEST_KEYWORD
+    parser = argparse.ArgumentParser(description='探测 4 平台所有 ApiSource 可用性')
+    parser.add_argument('--platform', '-p', choices=list(PLATFORM_SOURCES.keys()) + ['all'], default='all',
+                        help='仅探测指定平台（默认 all）')
+    parser.add_argument('--cap', '-c', choices=['search', 'url', 'info', 'lyric', 'playlist', 'all'], default='all',
+                        help='仅探测指定能力（默认 all）')
+    parser.add_argument('--concurrency', '-j', type=int, default=8,
+                        help='并发数（默认 8）')
+    parser.add_argument('--json-out', '-o', type=str, default=None,
+                        help='输出 JSON 报告到文件')
+    parser.add_argument('--keyword', '-k', type=str, default='陈楚生',
+                        help='测试关键词（默认 陈楚生）')
+    args = parser.parse_args()
+
+    # 全局变量覆盖
+    TEST_KEYWORD = args.keyword
+
+    # 选择平台
+    if args.platform == 'all':
+        platforms = list(PLATFORM_SOURCES.keys())
+    else:
+        platforms = [args.platform]
+
+    # 临时剔除不选的能力
+    if args.cap != 'all':
+        for p, sources_map in PLATFORM_SOURCES.items():
+            for cap_key in ('search', 'url', 'info', 'lyric', 'playlist'):
+                if cap_key != args.cap:
+                    sources_map[cap_key] = []
+
+    main.json_output = args.json_out
+    main.concurrency = args.concurrency
+    main._platforms_filter = platforms
+
+    main()
 
 
 if __name__ == '__main__':
-    main()
+    cli()
