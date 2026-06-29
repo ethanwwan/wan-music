@@ -465,6 +465,11 @@ class BatchDownloadService:
         else:
             song_id_arg = song_id
 
+        # ★ 重置失败名单：每首歌曲的第一次重试从干净状态开始
+        # （之前累积的坏源在清空后重新评估，避免一个 task 内永久受影响）
+        if source and source in ('netease', 'qq', 'kugou', 'kuwo'):
+            music_client.reset_failed_sources(source)
+
         # 标记 per-song 状态：开始处理
         if task_id:
             self._update_song_status(task_id, song_id,
@@ -490,6 +495,16 @@ class BatchDownloadService:
                 )
                 url = song_info.get('url') if song_info else None
                 if not url:
+                    # 拿不到 URL：mark 当前 api_source 为坏源，让下次重试自动换源
+                    api_source = song_info.get('api_source', {}) if song_info else {}
+                    if isinstance(api_source, dict):
+                        url_source = api_source.get('url')
+                        if url_source and source:
+                            music_client.mark_source_failed(
+                                source, url_source,
+                                reason='返回数据无效（URL 为空）',
+                                expire_seconds=300,
+                            )
                     if attempt < max_attempts - 1:
                         logger.debug(f'[{song_id}] 拿不到 URL（attempt {attempt+1}/{max_attempts}），重试')
                         continue   # 重试让 chain 换源
@@ -585,6 +600,20 @@ class BatchDownloadService:
                 }
             except Exception as e:
                 last_error = e
+                # ★ 4xx 永久错误：标记 api_source 为坏源，让重试自动换源
+                # 场景：vkeys_url 返的 URL → 403 → mark vkeys_url → 下次重试跳过
+                if isinstance(e, requests.exceptions.HTTPError):
+                    status_code = e.response.status_code if e.response is not None else 0
+                    if 400 <= status_code < 500 and status_code not in (408, 425, 429):
+                        api_source = song_info.get('api_source', {}) if song_info else {}
+                        if isinstance(api_source, dict):
+                            url_source = api_source.get('url')
+                            if url_source and source:
+                                music_client.mark_source_failed(
+                                    source, url_source,
+                                    reason=f'HTTP {status_code}: {str(e)[:100]}',
+                                    expire_seconds=300,  # 5 分钟过期，QQ 风控通常临时
+                                )
                 # 异常分类：只重试可重试错误（网络/临时），确定性错误立即放弃
                 retryable, reason = _classify_error(e, attempt, max_attempts)
                 if retryable:

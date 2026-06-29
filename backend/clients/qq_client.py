@@ -66,7 +66,8 @@ class QQClient(BaseMusicClient):
 
         url, url_src = f_url.result()
         info, info_src = f_info.result()
-        lyric = f_lyric.result()[0] if f_lyric else ''
+        lyric_result = f_lyric.result() if f_lyric else ('', None)
+        lyric, lyric_src = lyric_result
 
         if not url or not url.startswith('http'):
             return None
@@ -91,7 +92,7 @@ class QQClient(BaseMusicClient):
             'level': quality,                  # 前端用 'level' 字段
             'lyric': lyric or '',
             'source': self.platform_id,
-            'api_source': f'{url_src}|{info_src_name}',
+            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},
         }
 
     def get_health(self) -> dict:

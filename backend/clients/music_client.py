@@ -43,12 +43,61 @@ class MusicClient:
         self.platform_clients[platform] = client
         logger.info(f"已注册平台: {platform}")
 
-    def get_platforms(self) -> List[Dict[str, str]]:
+    def get_platforms(self) -> List[Dict[str, Any]]:
         """获取可用平台列表（id / name / color / description）"""
         return [
             {'id': p, 'name': name, 'color': color, 'description': desc}
             for p, _, name, color, desc in self.PLATFORM_REGISTRY
         ]
+
+    # ==================== 坏源管理（service 层调用） ====================
+
+    def mark_source_failed(self, platform: str, source_name: str,
+                           reason: str = '', expire_seconds: int = 300) -> None:
+        """标记某平台的某个源为临时失败（让下次重试自动跳过）
+
+        场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
+        通知 chain 这个源不可用，避免下次重试仍用同源。
+
+        Args:
+            platform: 平台名（'netease'/'qq'/'kugou'/'kuwo'）
+            source_name: 失败的源名（如 'vkeys_url'）
+            reason: 失败原因（仅用于日志）
+            expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
+        """
+        try:
+            client = self._get_client(platform)
+        except ValueError:
+            return
+        for chain in (client.parse_url_chain, client.parse_info_chain,
+                      client.parse_lyric_chain, client.parse_playlist_chain,
+                      client.search_chain):
+            if chain:
+                chain.mark_source_failed(source_name, expire_seconds, reason)
+
+    def reset_failed_sources(self, platform: str = None) -> None:
+        """清空失败名单（task 启动时调用）
+
+        Args:
+            platform: 指定平台名（None=清空所有平台）
+        """
+        if platform:
+            try:
+                client = self._get_client(platform)
+                for chain in (client.parse_url_chain, client.parse_info_chain,
+                              client.parse_lyric_chain, client.parse_playlist_chain,
+                              client.search_chain):
+                    if chain:
+                        chain.reset_failed_sources()
+            except ValueError:
+                pass
+        else:
+            for client in self.platform_clients.values():
+                for chain in (client.parse_url_chain, client.parse_info_chain,
+                              client.parse_lyric_chain, client.parse_playlist_chain,
+                              client.search_chain):
+                    if chain:
+                        chain.reset_failed_sources()
 
     def _get_client(self, platform: str) -> BaseMusicClient:
         platform = platform or self.default_platform

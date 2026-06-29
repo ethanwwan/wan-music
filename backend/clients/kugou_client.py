@@ -95,7 +95,7 @@ class KugouClient(BaseMusicClient):
             'level': quality,                  # 前端用 'level' 字段
             'lyric': '',  # 酷狗暂未实现歌词链
             'source': self.platform_id,
-            'api_source': f'{url_src}|{info_src_name}',
+            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': None},
         }
 
     def get_health(self) -> dict:

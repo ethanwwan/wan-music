@@ -49,6 +49,9 @@ class FallbackChain:
         self._session = requests.Session()
         # 统计
         self._stats = defaultdict(lambda: {'ok': 0, 'fail': 0, 'last_error': '', 'last_used': 0, 'total_ms': 0})
+        # 临时失败名单：mark_source_failed() 加入，过期自动恢复
+        # 场景：下载 4xx 时通知 chain 跳过该源，避免重试仍用同源失败
+        self._failed_sources: dict = {}  # {name: expire_timestamp}
 
     def set_source_enabled(self, name: str, enabled: bool) -> bool:
         """动态启用/禁用某个源"""
@@ -57,6 +60,41 @@ class FallbackChain:
                 s.enabled = enabled
                 return True
         return False
+
+    def mark_source_failed(self, name: str, expire_seconds: int = 300,
+                           reason: str = '') -> None:
+        """标记源临时失败（默认 5 分钟内 try_fetch 自动跳过）
+
+        场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
+        通知 chain 这个源不可用，避免下次重试仍用同源。
+
+        Args:
+            name: 失败的源名称
+            expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
+            reason: 失败原因（仅用于日志）
+        """
+        self._failed_sources[name] = time.time() + expire_seconds
+        logger.warning(
+            f'[{self.platform}] 临时禁用源 {name}（{expire_seconds}s 内 try_fetch 跳过）'
+            f' 原因: {reason[:80]}'
+        )
+
+    def reset_failed_sources(self) -> None:
+        """清空失败名单（通常在 task 启动时调用）"""
+        if self._failed_sources:
+            logger.info(f'[{self.platform}] 重置失败名单: {list(self._failed_sources.keys())}')
+            self._failed_sources.clear()
+
+    def _is_source_failed(self, name: str) -> bool:
+        """检查源是否在失败名单（自动清理过期项）"""
+        expire_at = self._failed_sources.get(name)
+        if expire_at is None:
+            return False
+        if time.time() > expire_at:
+            del self._failed_sources[name]
+            logger.info(f'[{self.platform}] 源 {name} 失败名单已过期，自动恢复')
+            return False
+        return True
 
     def get_health(self) -> dict:
         """获取所有源的健康状态"""
@@ -94,6 +132,12 @@ class FallbackChain:
         user_quality = kwargs.get('quality', '')
 
         for source in sources:
+            # ★ 跳过失败名单（mark_source_failed 标记的源）
+            if self._is_source_failed(source.name):
+                logger.info(
+                    f'[{self.platform}.{op}] 跳过 {source.name}（失败名单中，临时禁用）'
+                )
+                continue
             # 关键：按 max_quality 过滤
             if source.max_quality and user_quality:
                 if _quality_rank(source.max_quality) < _quality_rank(user_quality):
