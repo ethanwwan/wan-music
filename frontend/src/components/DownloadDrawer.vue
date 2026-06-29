@@ -822,32 +822,27 @@ const handleClearCompleted = async () => {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--color-surface-light, #f9fafb);
-  border-left: 3px solid transparent;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #e5e7eb;
   transition: all 0.2s ease;
 }
 
 .song-item.song-status-pending {
-  border-left-color: #9ca3af;
   opacity: 0.6;
 }
 
 .song-item.song-status-processing {
-  border-left-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.04);
+  background: rgba(59, 130, 246, 0.18);
 }
 
 .song-item.song-status-done {
-  border-left-color: #10b981;
-  background: rgba(16, 185, 129, 0.04);
+  background: rgba(16, 185, 129, 0.16);
 }
 
 .song-item.song-status-failed {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.04);
+  background: rgba(239, 68, 68, 0.18);
 }
 
 /* per-song 内嵌状态 icon（与 platform tag / size 并排） */
