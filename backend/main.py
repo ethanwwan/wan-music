@@ -86,7 +86,7 @@ def _start_timer():
 
 @app.after_request
 def _log_request(response):
-    """统一 API 请求日志：跳过噪声路径 + 提取关键参数 + 单行格式"""
+    """统一 API 请求日志：跳过噪声路径 + 提取关键参数 + 单行格式 + 错误时附带 message"""
     try:
         # 静默噪声路径
         if request.path in _QUIET_PATHS or request.path.startswith('/assets/'):
@@ -95,12 +95,56 @@ def _log_request(response):
             return response
         duration_ms = (time.time() - request._start_time) * 1000
         context = _extract_request_context(request.path)
-        logger.info(
-            f'{request.method} {context} {response.status_code} {duration_ms:.0f}ms'
-        )
+        status = response.status_code
+
+        # 错误响应（4xx/5xx 或 success=False）：WARNING 级别 + 附带 message
+        error_msg = None
+        if status >= 400:
+            error_msg = _extract_error_message(response)
+        else:
+            # 200 但业务 success=False（如 APIResponse.error）
+            error_msg = _extract_business_error(response)
+
+        if error_msg:
+            logger.warning(
+                f'{request.method} {context} {status} {duration_ms:.0f}ms ✗ {error_msg}'
+            )
+        else:
+            logger.info(
+                f'{request.method} {context} {status} {duration_ms:.0f}ms'
+            )
     except Exception:
         pass
     return response
+
+
+def _extract_error_message(response) -> str:
+    """从 JSON 响应中提取错误信息（避免直接打印完整 body）"""
+    try:
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return ''
+        # 优先 message 字段
+        msg = data.get('message') or data.get('msg') or data.get('error') or ''
+        code = data.get('code')
+        if code and msg:
+            return f'[{code}] {msg[:150]}'
+        if msg:
+            return msg[:150]
+        return ''
+    except Exception:
+        return ''
+
+
+def _extract_business_error(response) -> str:
+    """从 200 响应里检测业务失败（success=False）"""
+    try:
+        data = response.get_json(silent=True)
+        if isinstance(data, dict) and data.get('success') is False:
+            return _extract_error_message(response)
+    except Exception:
+        pass
+    return ''
 
 
 @app.route('/')
