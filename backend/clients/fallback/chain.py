@@ -97,12 +97,13 @@ class FallbackChain:
             # 关键：按 max_quality 过滤
             if source.max_quality and user_quality:
                 if _quality_rank(source.max_quality) < _quality_rank(user_quality):
-                    logger.debug(
+                    logger.info(
                         f'[{self.platform}.{op}] 跳过 {source.name} '
                         f'(max_quality={source.max_quality} < user_quality={user_quality})'
                     )
                     continue
 
+            logger.info(f'[{self.platform}.{op}] 尝试 {source.name} (P={source.priority})...')
             t0 = time.time()
             try:
                 data = self._fetch_one(source, op, **kwargs)
@@ -111,15 +112,24 @@ class FallbackChain:
                     source._stats['ok'] += 1
                     source._stats['last_used'] = time.time()
                     source._stats['total_ms'] += elapsed_ms
+                    url_preview = ''
+                    if op == 'parse_url' and isinstance(data, str):
+                        url_preview = f' → {data[:80]}'
+                    logger.info(
+                        f'[{self.platform}.{op}] ✅ {source.name} 成功 ({elapsed_ms}ms){url_preview}'
+                    )
                     return data, source.name
                 # 拿到数据但无效（如 url 为空）算 fail
                 source._stats['fail'] += 1
                 source._stats['last_error'] = '数据无效'
                 source._stats['total_ms'] += elapsed_ms
+                logger.info(
+                    f'[{self.platform}.{op}] ⚠️ {source.name} 返空数据 ({elapsed_ms}ms)'
+                )
             except Exception as e:
                 source._stats['fail'] += 1
                 source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
-                logger.debug(f'[{source.name}.{op}] 失败: {e}')
+                logger.info(f'[{self.platform}.{op}] ❌ {source.name} 失败 ({type(e).__name__}): {str(e)[:80]}')
         return _default_for_op(op), None
 
     def _try_parallel(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
