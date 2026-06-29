@@ -99,8 +99,8 @@
               >
                 <!-- 第一行：歌名（标题） -->
                 <div class="song-name" :title="songNameWithExt(song)">
-                  {{ song.name }}<span v-if="song.file_ext" class="song-ext">.{{ song.file_ext }}</span>
-                  <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
+                  {{ song.name }}
+                  <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span><span v-if="song.file_ext" class="song-ext">.{{ song.file_ext }}</span>
                 </div>
                 <!-- 第二行：状态 icon + 平台 tag + 音质 tag + 大小（与标题对齐） -->
                 <div class="song-meta">
@@ -283,6 +283,7 @@ const getTaskNameWithExt = (task) => {
 const songNameWithExt = (song) => {
   if (!song) return ''
   let s = song.name || ''
+  if (song.artist) s += ' - ' + song.artist
   if (song.file_ext) s += '.' + song.file_ext
   return s
 }
@@ -888,6 +889,11 @@ const handleClearCompleted = async () => {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* 覆盖 ant-tag 自带的 margin-right: 8px，避免与 .song-meta 的 gap: 6px 重复 */
+.song-meta :deep(.ant-tag) {
+  margin: 0 !important;
 }
 
 .song-size {
