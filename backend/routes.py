@@ -312,10 +312,36 @@ def download_batch_progress(task_id):
                     last_data = data_str
                 time.sleep(0.3)
 
-    response = Response(generate(), mimetype='text/event-stream')
-    response.headers['Cache-Control'] = 'no-cache'
-    response.headers['X-Accel-Buffering'] = 'no'
-    return response
+    # 根据 Accept header 决定返回 SSE 还是 JSON：
+    # - EventSource 发送 Accept: text/event-stream → 返 SSE 流（用于浏览器原生 EventSource）
+    # - fetch 发送 Accept: */* 或 application/json → 返 JSON（轮询场景）
+    # 这样同一路由同时支持 SSE 和轮询两种客户端
+    accept = request.headers.get('Accept', '')
+    if 'text/event-stream' in accept:
+        # SSE 模式
+        response = Response(generate(), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        return response
+    else:
+        # JSON 模式（轮询）：返回单次快照
+        state = batch_download_service.get_state(task_id)
+        if state is None:
+            return jsonify(APIResponse.error("任务不存在或已过期", 404))
+        data = {
+            'status': state['status'],
+            'total': state['total'],
+            'completed': state['completed'],
+            'failed': state['failed'],
+            'current': state['current'],
+            'file_size': state['file_size'],
+            'songs': state.get('songs', []),
+        }
+        if state['status'] == 'done':
+            data['errors'] = state['errors']
+        elif state['status'] == 'error':
+            data['error'] = state.get('error', '未知错误')
+        return jsonify(APIResponse.success(data))
 
 
 @music_bp.route('/download/batch/file/<task_id>', methods=['GET'])

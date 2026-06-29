@@ -315,13 +315,28 @@ export const cancelBatchTask = async (taskId) => {
 /**
  * 订阅批量下载进度（SSE），返回 unsubscribe 函数
  */
+/**
+ * 订阅批量任务进度
+ * 改用轮询（setInterval）替代 SSE，原因：
+ *   - Flask dev server 配 threaded=True 时，Response generator 第一次 yield 后
+ *     立即设 Connection: close，导致浏览器报 ERR_INCOMPLETE_CHUNKED_ENCODING
+ *   - SSE 在生产环境（gunicorn/eventlet）下才好用
+ *   - 轮询方案：1s 一次，每次 ~10KB 数据，简单可靠
+ * 优点：
+ *   - 不受 Flask dev server Connection: close 影响
+ *   - vite proxy 不需要特殊配置（普通 fetch）
+ *   - 后端 /download/batch/list 接口已存在，无需新写 SSE 端点
+ */
 export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } = {}) => {
-  const es = new EventSource(`/download/batch/progress/${taskId}`)
   let closed = false
+  let timer = null
+  let consecutiveErrors = 0
 
-  es.onmessage = (e) => {
+  const poll = async () => {
+    if (closed) return
     try {
-      const data = JSON.parse(e.data)
+      const data = await fetchWithTimeout(`/download/batch/progress/${taskId}`, {}, 5000)
+      consecutiveErrors = 0   // 成功后重置错误计数
       if (data.error) { onError?.(new Error(data.error)); return close() }
       if (['done', 'error', 'cancelled'].includes(data.status)) {
         onComplete?.(data)
@@ -329,22 +344,27 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
       }
       onProgress?.(data)
     } catch (err) {
-      onError?.(err)
-      close()
+      consecutiveErrors++
+      // 连续 3 次失败才报错（容忍短暂网络抖动）
+      if (consecutiveErrors >= 3) {
+        onError?.(err)
+        return close()
+      }
+      // 否则静默重试
     }
   }
 
-  es.onerror = () => {
-    if (es.readyState === EventSource.CLOSED) {
-      onError?.(new Error('SSE 连接已断开'))
-      close()
-    }
-  }
+  // 立即跑一次，然后每 1 秒轮询
+  poll()
+  timer = setInterval(poll, 1000)
 
   function close() {
     if (closed) return
     closed = true
-    es.close()
+    if (timer) {
+      clearInterval(timer)
+      timer = null
+    }
   }
 
   return close

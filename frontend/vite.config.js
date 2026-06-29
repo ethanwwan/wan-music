@@ -51,9 +51,12 @@ export default defineConfig(({ mode }) => {
     || `http://localhost:${backendPort || 5005}`
 
   // 代理路径列表（server 和 preview 复用）
-  const proxyPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms']
+  // SSE 长连接路径（/download/batch/progress）单独配：proxyTimeout=0 不过期
+  const ssePaths = ['/download/batch/progress']   // SSE 长连接
+  const normalPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms']
+
   const buildProxy = () => {
-    const opts = {
+    const buildOpts = (isSSE) => ({
       target: proxyTarget,
       changeOrigin: true,
       // 关键：后端没启动时 ECONNREFUSED 静默处理
@@ -61,8 +64,10 @@ export default defineConfig(({ mode }) => {
       // 显示 ERR_EMPTY_RESPONSE（Chrome DevTools 网络层错误，JS 无法拦截）
       // 让前端 silentFetch 自己做 retry（应用层），vite 不再 retry
       retry: 0,                  // 关键：不重试，避免重复 ERR_EMPTY_RESPONSE
-      timeout: 3000,
-      proxyTimeout: 3000,
+      timeout: isSSE ? 0 : 3000,
+      // SSE 长连接：proxyTimeout 必须 = 0（不过期），否则 vite 3 秒切断连接
+      // → 浏览器报 ERR_INCOMPLETE_CHUNKED_ENCODING（chunked transfer 被打断）
+      proxyTimeout: isSSE ? 0 : 3000,
       // ECONNREFUSED 是后端未启动导致，频繁刷屏会干扰开发
       // 用 configure 钩子自定义错误处理
       configure: (proxy) => {
@@ -85,8 +90,16 @@ export default defineConfig(({ mode }) => {
           }
         })
       },
+    })
+
+    const proxies = {}
+    for (const p of normalPaths) {
+      proxies[p] = buildOpts(false)
     }
-    return Object.fromEntries(proxyPaths.map(p => [p, opts]))
+    for (const p of ssePaths) {
+      proxies[p] = buildOpts(true)
+    }
+    return proxies
   }
 
   // 静默 vite 5 的 http proxy error 日志（v1.1.3 configure hook 之后 vite 还会打）
