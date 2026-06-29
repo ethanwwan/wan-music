@@ -135,7 +135,7 @@ const qualityOptions = computed(() => {
   const list = getQualities() || []
   return list.map(q => ({
     value: q.value,
-    label: `${q.label} (${q.description})`,
+    label: q.label,
   }))
 })
 
