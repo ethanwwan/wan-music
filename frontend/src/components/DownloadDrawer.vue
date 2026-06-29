@@ -744,7 +744,7 @@ const handleClearCompleted = async () => {
   margin-bottom: 12px;
   background: #fef2f2;
   border-radius: 8px;
-  padding: 8px;
+  padding: 0 0 8px 0;   /* 左右 0：让 song-item 紧贴容器边缘 */
 }
 
 /* 只有纯错误列表（无 songs 详情）时，header 才是红色 */
@@ -775,7 +775,7 @@ const handleClearCompleted = async () => {
   margin-bottom: 12px;
   background: var(--color-surface-light, #f9fafb);
   border-radius: 8px;
-  padding: 8px;
+  padding: 0 0 8px 0;   /* 左右 0：让 song-item 紧贴容器边缘 */
 }
 
 .task-songs-section :deep(.ant-collapse-header) {
