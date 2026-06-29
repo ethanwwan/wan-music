@@ -218,21 +218,27 @@ class BatchDownloadService:
 
         # 初始化每首歌曲的状态：pending
         # 前端 DownloadDrawer 用 songs 数组渲染 per-song 进度
-        initial_songs = [
-            {
+        # 立即填充 level_name / file_ext / file_format（基于用户请求的 quality 推测），
+        # 这样前端一开始就能看到显示名（"无损"等），不用等拿到 url
+        initial_songs = []
+        for item in items:
+            item_quality = item.get('quality', 'lossless')
+            display = _get_level_display(item_quality, '')
+            initial_songs.append({
                 'id': item.get('id', ''),
                 'name': item.get('name', '未知歌曲'),
                 'artist': item.get('artist', item.get('artists', '')),
                 'platform': item.get('platform') or item.get('source', ''),
-                'level': item.get('quality', ''),
+                'level': item_quality,
+                'level_name': display['name'],     # 立即显示（无需等拿到 url）
+                'file_ext': '',                    # 拿到 url 后填充
+                'file_format': display['format'],  # 立即显示音质描述
                 'status': 'pending',     # pending/processing/done/failed
                 'file_size': 0,
                 'error': '',
                 'started_at': 0,
                 'completed_at': 0,
-            }
-            for item in items
-        ]
+            })
 
         with self._lock:
             self._tasks[task_id] = {
