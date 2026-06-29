@@ -460,9 +460,20 @@ class BatchDownloadService:
                         )
                     return None
 
+                # 拿到 url 后立刻推音质/格式/扩展名信息（与 file_size 独立，
+                # 这样用户能立即看到当前歌曲的目标音质，不需要等下载完成）
                 extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
                 if not extension.startswith('.'):
                     extension = '.' + extension
+                actual_level = song_info.get('level') or quality
+                display = _get_level_display(actual_level, extension)
+                if task_id:
+                    self._update_song_status(task_id, song_id,
+                        level=actual_level,
+                        level_name=display['name'],
+                        file_ext=display['file_ext'],
+                        file_format=display['format'],
+                    )
 
                 fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-batch-')
                 os.close(fd)
@@ -510,19 +521,14 @@ class BatchDownloadService:
                                     settings.get('filenameFormat', 'song-artist'))
                 )
 
-                # 标记 per-song 状态：完成 + 实际文件大小 + 实际拿到的音质（fallback 后）
+                # 标记 per-song 状态：完成 + 实际文件大小
+                # （level / level_name / file_ext / file_format 已在拿到 url 时推送，
+                #  这里只追加 file_size + completed_at）
                 actual_size = os.path.getsize(tmp_path)
                 if task_id:
-                    # 把 level key + 真实文件扩展名 转成前端展示字段
-                    actual_level = song_info.get('level') or quality
-                    display = _get_level_display(actual_level, extension)
                     self._update_song_status(task_id, song_id,
                         status='done',
                         file_size=actual_size,
-                        level=actual_level,             # 音质 key（后端用）
-                        level_name=display['name'],     # 音质显示名（如"无损"）
-                        file_ext=display['file_ext'],   # 文件扩展名（如"flac"/"mp3"）
-                        file_format=display['format'],  # 格式描述（如"FLAC"/"320kbps"）
                         completed_at=time.time(),
                     )
 
