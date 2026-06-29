@@ -102,6 +102,7 @@
         <!-- 错误信息 -->
         <a-collapse
           v-if="(task.errors && task.errors.length > 0) || (task.songs && task.songs.length > 0)"
+          :class="getCollapseContainerClass(task)"
           :default-active-key="['errors-' + task.task_id]"
           :bordered="false"
           class="task-errors"
@@ -376,6 +377,19 @@ const getCollapseHeader = (task) => {
     return `${task.songs.length} 首歌曲 (${done} 完成)`
   }
   return `${task.errors.length} 首失败`
+}
+
+/**
+ * Collapse 容器 class：
+ * - 有 songs 详情：task-songs-section（中性背景，per-song 内部已用状态色）
+ * - 仅 errors 列表：task-errors only-errors（红色主题，标识错误）
+ * 避免全成功任务被误显示为红色
+ */
+const getCollapseContainerClass = (task) => {
+  if (task.songs && task.songs.length > 0) {
+    return 'task-songs-section'
+  }
+  return 'task-errors only-errors'
 }
 
 const handleCancel = async (task) => {
@@ -733,7 +747,8 @@ const handleClearCompleted = async () => {
   padding: 8px;
 }
 
-.task-errors :deep(.ant-collapse-header) {
+/* 只有纯错误列表（无 songs 详情）时，header 才是红色 */
+.task-errors.only-errors :deep(.ant-collapse-header) {
   padding: 4px 0 !important;
   font-size: 12px;
   color: #ef4444;
@@ -741,6 +756,20 @@ const handleClearCompleted = async () => {
 
 .task-errors :deep(.ant-collapse-content) {
   padding: 8px 0 !important;
+}
+
+/* per-song 列表容器：中性背景，per-song 内部已按状态用绿/红/蓝标识 */
+.task-songs-section {
+  margin-bottom: 12px;
+  background: var(--color-surface-light, #f9fafb);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.task-songs-section :deep(.ant-collapse-header) {
+  padding: 4px 0 !important;
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
 }
 
 .error-list :deep(.ant-list-item) {
