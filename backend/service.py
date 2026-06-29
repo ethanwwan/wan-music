@@ -192,6 +192,24 @@ class BatchDownloadService:
         estimated_file_size = self._estimate_size(items)
         task_id = f"task_{uuid.uuid4().hex[:16]}"
 
+        # 初始化每首歌曲的状态：pending
+        # 前端 DownloadDrawer 用 songs 数组渲染 per-song 进度
+        initial_songs = [
+            {
+                'id': item.get('id', ''),
+                'name': item.get('name', '未知歌曲'),
+                'artist': item.get('artist', item.get('artists', '')),
+                'platform': item.get('platform') or item.get('source', ''),
+                'level': item.get('quality', ''),
+                'status': 'pending',     # pending/processing/done/failed
+                'file_size': 0,
+                'error': '',
+                'started_at': 0,
+                'completed_at': 0,
+            }
+            for item in items
+        ]
+
         with self._lock:
             self._tasks[task_id] = {
                 'status': 'running',
@@ -206,6 +224,7 @@ class BatchDownloadService:
                 'created_at': time.time(),
                 'completed_at': 0,
                 'file_size': estimated_file_size,
+                'songs': initial_songs,        # per-song 状态数组
             }
 
         thread = threading.Thread(
@@ -272,6 +291,7 @@ class BatchDownloadService:
             'file_size': task.get('file_size', 0),
             'errors': task.get('errors', []),
             'error': task.get('error', ''),
+            'songs': task.get('songs', []),     # per-song 状态（SSE 推送用）
         }
 
     def get_file_info(self, task_id: str):
@@ -350,12 +370,25 @@ class BatchDownloadService:
             'completed_at': task.get('completed_at', 0),
             'single_file': task.get('single_file', False),
             'file_size': task.get('file_size', 0),
+            'songs': task.get('songs', []),   # per-song 状态数组
         }
 
-    def _process_song(self, item: dict, settings: dict):
+    def _update_song_status(self, task_id: str, song_id: str, **updates):
+        """更新 task.songs 数组中某首歌的状态字段（线程安全）"""
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return
+            for s in task.get('songs', []):
+                if s.get('id') == song_id:
+                    s.update(updates)
+                    break
+
+    def _process_song(self, item: dict, settings: dict, task_id: str = None):
         """处理单首歌曲：下载音频 + 写 metadata + 返回结果
 
         settings: {writeMetadata, filenameFormat}
+        task_id: 批量任务 ID，传入后会更新 per-song 状态
         返回：{'tmp_path', 'arcname', 'lrc_content', 'name'} 或 None
         """
         song_id = item.get('id')
@@ -382,12 +415,25 @@ class BatchDownloadService:
         else:
             song_id_arg = song_id
 
+        # 标记 per-song 状态：开始处理
+        if task_id:
+            self._update_song_status(task_id, song_id,
+                status='processing',
+                started_at=time.time(),
+            )
+
         last_error = None
         for attempt in range(3):
             try:
                 song_info = music_service.get_song_info(song_id_arg, quality, source, quality_map=item_quality_map)
                 url = song_info.get('url') if song_info else None
                 if not url:
+                    if task_id:
+                        self._update_song_status(task_id, song_id,
+                            status='failed',
+                            error='无法获取下载链接（可能因版权问题）',
+                            completed_at=time.time(),
+                        )
                     return None
 
                 extension = _get_extension(url, fallback=song_info.get('fileType', 'mp3'))
@@ -440,6 +486,15 @@ class BatchDownloadService:
                                     settings.get('filenameFormat', 'song-artist'))
                 )
 
+                # 标记 per-song 状态：完成 + 实际文件大小
+                actual_size = os.path.getsize(tmp_path)
+                if task_id:
+                    self._update_song_status(task_id, song_id,
+                        status='done',
+                        file_size=actual_size,
+                        completed_at=time.time(),
+                    )
+
                 return {
                     'tmp_path': tmp_path,
                     'arcname': arcname,
@@ -452,6 +507,13 @@ class BatchDownloadService:
                     time.sleep(0.5 * (2 ** attempt))
 
         logger.warning(f"批量下载: 重试 3 次仍失败 [{song_id}]: {last_error}")
+        # 标记 per-song 状态：失败
+        if task_id:
+            self._update_song_status(task_id, song_id,
+                status='failed',
+                error=str(last_error)[:200],
+                completed_at=time.time(),
+            )
         return None
 
     def _run_batch_task(self, task_id: str, items: list, zip_name: str, settings: dict):
@@ -469,7 +531,7 @@ class BatchDownloadService:
         failed_items: list[dict] = []
 
         with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
-            future_to_item = {executor.submit(self._process_song, item, settings): item for item in items}
+            future_to_item = {executor.submit(self._process_song, item, settings, task_id): item for item in items}
             for future in as_completed(future_to_item):
                 # 检查是否被取消
                 with self._lock:

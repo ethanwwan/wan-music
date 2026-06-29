@@ -84,6 +84,16 @@ const addTask = async (items, name = 'playlist', settings = {}) => {
     error: '',
     created_at: Date.now() / 1000,
     completed_at: 0,
+    songs: items.map(it => ({  // 立即构造初始 songs 列表（后端会推送真实状态）
+      id: it.id,
+      name: it.name,
+      artist: it.artist || it.artists,
+      platform: it.platform || it.source,
+      level: it.quality,
+      status: 'pending',
+      file_size: 0,
+      error: '',
+    })),
     _items: items,  // 暂存用于重试
     _settings: settings
   }
@@ -110,7 +120,8 @@ const subscribeTask = (taskId) => {
         completed: data.completed,
         failed: data.failed,
         current: data.current,
-        file_size: data.file_size || 0
+        file_size: data.file_size || 0,
+        songs: data.songs || undefined,   // 后端推送 per-song 状态（undefined 时保留本地）
       })
     },
     onComplete: (data) => {
@@ -122,6 +133,7 @@ const subscribeTask = (taskId) => {
         current: data.status === 'done' ? '完成' : '已取消',
         completed_at: Date.now() / 1000,
         file_size: data.file_size || 0,
+        songs: data.songs || undefined,
       })
       subscriptions.delete(taskId)
     },
@@ -168,6 +180,7 @@ const refreshTask = async (taskId) => {
       error: found.error || '',
       completed_at: found.completed_at || 0,
       file_size: found.file_size || 0,
+      songs: found.songs || [],
     })
     // 如果是进行中，重新订阅
     if (found.status === 'running') {
@@ -222,6 +235,7 @@ const syncWithBackend = async () => {
         created_at: bt.created_at || Date.now() / 1000,
         completed_at: bt.completed_at || 0,
         file_size: bt.file_size || 0,
+        songs: bt.songs || [],            // per-song 状态
       })
     } else {
       // 同步最新进度
@@ -237,6 +251,7 @@ const syncWithBackend = async () => {
           error: bt.error || '',
           completed_at: bt.completed_at || 0,
           file_size: bt.file_size || 0,
+          songs: bt.songs || [],
         })
       }
     }

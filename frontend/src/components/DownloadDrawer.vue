@@ -101,13 +101,48 @@
 
         <!-- 错误信息 -->
         <a-collapse
-          v-if="task.errors && task.errors.length > 0"
+          v-if="(task.errors && task.errors.length > 0) || (task.songs && task.songs.length > 0)"
           :default-active-key="['errors-' + task.task_id]"
           :bordered="false"
           class="task-errors"
         >
-          <a-collapse-panel :key="'errors-' + task.task_id" :header="`${task.errors.length} 首失败`">
+          <a-collapse-panel :key="'errors-' + task.task_id" :header="getCollapseHeader(task)">
+            <!-- per-song 状态列表 -->
+            <div v-if="task.songs && task.songs.length > 0" class="song-list">
+              <div
+                v-for="(song, idx) in task.songs"
+                :key="song.id + '-' + idx"
+                :class="`song-item song-status-${song.status}`"
+              >
+                <div class="song-icon">
+                  <component :is="getSongStatusIcon(song.status)" />
+                </div>
+                <div class="song-info">
+                  <div class="song-name" :title="song.name">
+                    {{ song.name }}
+                    <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
+                  </div>
+                  <div class="song-meta">
+                    <a-tag v-if="song.platform" :color="getPlatformColor(song.platform)" size="small">
+                      {{ song.platform }}
+                    </a-tag>
+                    <a-tag v-if="song.level" color="default" size="small">
+                      {{ song.level }}
+                    </a-tag>
+                    <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
+                      {{ formatFileSize(song.file_size) }}
+                    </span>
+                    <span v-if="song.status === 'failed' && song.error" class="song-error" :title="song.error">
+                      {{ song.error }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 错误列表（仅当没有 songs 详情时显示） -->
             <a-list
+              v-if="task.errors && task.errors.length > 0 && (!task.songs || task.songs.length === 0)"
               :data-source="task.errors.slice(0, 10)"
               size="small"
               class="error-list"
@@ -209,7 +244,10 @@ const {
   CloudDownloadOutlined,
   AlertCircleOutlined = icons.WarningOutlined,
   CloseOutlined,
-  TrashOutlined
+  TrashOutlined,
+  ClockCircleOutlined,
+  LoadingOutlined,
+  MinusCircleOutlined
 } = icons
 import { downloadQueueStore as store } from '../stores/downloadQueue.js'
 
@@ -266,6 +304,55 @@ const formatFileSize = (bytes) => {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
+// ==================== per-song 状态渲染 ====================
+
+/**
+ * per-song 状态 → 状态图标
+ * pending → ClockCircleOutlined（灰色时钟，等待）
+ * processing → LoadingOutlined（旋转加载）
+ * done → CheckCircleOutlined（绿色勾）
+ * failed → CloseCircleOutlined（红色叉）
+ */
+const getSongStatusIcon = (status) => {
+  const icons_map = {
+    pending: ClockCircleOutlined,
+    processing: LoadingOutlined,
+    done: CheckCircleOutlined,
+    failed: CloseCircleOutlined,
+  }
+  return icons_map[status] || MinusCircleOutlined
+}
+
+/**
+ * 平台 → 标签颜色
+ */
+const getPlatformColor = (platform) => {
+  const colors = {
+    netease: 'red',
+    qq: 'green',
+    kugou: 'orange',
+    kuwo: 'blue',
+  }
+  return colors[platform] || 'default'
+}
+
+/**
+ * Collapse 标题：显示歌曲数量
+ * - 有 songs 时显示 "N 首歌曲"
+ * - 仅有 errors 时显示 "N 首失败"
+ */
+const getCollapseHeader = (task) => {
+  if (task.songs && task.songs.length > 0) {
+    const done = task.songs.filter(s => s.status === 'done').length
+    const failed = task.songs.filter(s => s.status === 'failed').length
+    if (task.status === 'done' || task.status === 'error') {
+      return `${task.songs.length} 首歌曲 (成功 ${done}, 失败 ${failed})`
+    }
+    return `${task.songs.length} 首歌曲 (${done} 完成)`
+  }
+  return `${task.errors.length} 首失败`
 }
 
 const handleCancel = async (task) => {
@@ -655,6 +742,115 @@ const handleClearCompleted = async () => {
   color: var(--color-text-muted, #9ca3af);
   text-align: center;
   padding: 4px 0;
+}
+
+/* ==================== per-song 状态列表样式 ==================== */
+
+.song-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.song-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-surface-light, #f9fafb);
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.song-item.song-status-pending {
+  border-left-color: #9ca3af;
+  opacity: 0.6;
+}
+
+.song-item.song-status-processing {
+  border-left-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.song-item.song-status-done {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.song-item.song-status-failed {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.song-icon {
+  font-size: 16px;
+  line-height: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.song-item.song-status-pending .song-icon { color: #9ca3af; }
+.song-item.song-status-processing .song-icon { color: #3b82f6; }
+.song-item.song-status-done .song-icon { color: #10b981; }
+.song-item.song-status-failed .song-icon { color: #ef4444; }
+
+/* processing 状态图标旋转动画 */
+.song-item.song-status-processing :deep(.anticon) {
+  animation: song-spin 1s linear infinite;
+}
+
+@keyframes song-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.song-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.song-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-on-surface, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 18px;
+}
+
+.song-artist {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-muted, #9ca3af);
+  margin-left: 4px;
+}
+
+.song-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.song-size {
+  font-size: 11px;
+  color: #10b981;
+  font-weight: 500;
+}
+
+.song-error {
+  font-size: 11px;
+  color: #ef4444;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-actions {

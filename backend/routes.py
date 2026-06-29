@@ -293,7 +293,8 @@ def download_batch_progress(task_id):
                 'completed': state['completed'],
                 'failed': state['failed'],
                 'current': state['current'],
-                'file_size': state['file_size']
+                'file_size': state['file_size'],
+                'songs': state.get('songs', []),   # per-song 状态
             }
 
             if state['status'] == 'done':
