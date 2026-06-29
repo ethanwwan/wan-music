@@ -99,9 +99,41 @@
           </a-space>
         </div>
 
-        <!-- 错误信息 -->
+        <!-- 单首歌曲：直接展开 per-song 状态（无折叠面板） -->
+        <div
+          v-if="task.total === 1 && task.songs && task.songs.length === 1"
+          :class="`single-song-wrapper song-status-${task.songs[0].status}`"
+        >
+          <div class="song-item">
+            <div class="song-icon">
+              <component :is="getSongStatusIcon(task.songs[0].status)" />
+            </div>
+            <div class="song-info">
+              <div class="song-name" :title="task.songs[0].name">
+                {{ task.songs[0].name }}
+                <span v-if="task.songs[0].artist" class="song-artist">- {{ task.songs[0].artist }}</span>
+              </div>
+              <div class="song-meta">
+                <a-tag v-if="task.songs[0].platform" :color="getPlatformColor(task.songs[0].platform, task.songs[0].status)" size="small">
+                  {{ task.songs[0].platform }}
+                </a-tag>
+                <a-tag v-if="task.songs[0].level" :color="getSongStatusColor(task.songs[0].status)" size="small">
+                  {{ task.songs[0].level }}
+                </a-tag>
+                <span v-if="task.songs[0].status === 'done' && task.songs[0].file_size > 0" class="song-size">
+                  {{ formatFileSize(task.songs[0].file_size) }}
+                </span>
+                <span v-if="task.songs[0].status === 'failed' && task.songs[0].error" class="song-error" :title="task.songs[0].error">
+                  {{ task.songs[0].error }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 多首歌曲：用折叠面板 -->
         <a-collapse
-          v-if="(task.errors && task.errors.length > 0) || (task.songs && task.songs.length > 0)"
+          v-else-if="(task.errors && task.errors.length > 0) || (task.songs && task.songs.length > 1)"
           :class="getCollapseContainerClass(task)"
           :default-active-key="['errors-' + task.task_id]"
           :bordered="false"
@@ -754,6 +786,11 @@ const handleClearCompleted = async () => {
   padding: 4px 0 !important;
   font-size: 12px;
   color: #ef4444;
+  align-items: center !important;   /* 垂直居中：icon + 标题对齐 */
+}
+
+.task-errors :deep(.ant-collapse-header) {
+  align-items: center !important;   /* 垂直居中：icon + 标题对齐 */
 }
 
 .task-errors :deep(.ant-collapse-content) {
@@ -772,6 +809,7 @@ const handleClearCompleted = async () => {
   padding: 4px 0 !important;
   font-size: 12px;
   color: var(--color-text-secondary, #6b7280);
+  align-items: center !important;   /* 垂直居中：icon + 标题对齐 */
 }
 
 .error-list :deep(.ant-list-item) {
@@ -906,6 +944,23 @@ const handleClearCompleted = async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ==================== 单首歌曲 wrapper 样式 ==================== */
+
+.single-song-wrapper {
+  margin-top: 8px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--color-surface-light, #f9fafb);
+  padding: 2px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.single-song-wrapper.song-status-pending { border-left-color: #9ca3af; }
+.single-song-wrapper.song-status-processing { border-left-color: #3b82f6; background: rgba(59, 130, 246, 0.04); }
+.single-song-wrapper.song-status-done { border-left-color: #10b981; background: rgba(16, 185, 129, 0.04); }
+.single-song-wrapper.song-status-failed { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.04); }
 
 .task-actions {
   display: flex;
