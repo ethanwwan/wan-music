@@ -767,7 +767,7 @@ const handleClearCompleted = async () => {
 }
 
 .task-errors :deep(.ant-collapse-content) {
-  padding: 8px 0 !important;
+  padding: 0 !important;   /* 完全归零：避免与 .task-errors 自身的 8px 重复 */
 }
 
 /* per-song 列表容器：中性背景，per-song 内部已按状态用绿/红/蓝标识 */
