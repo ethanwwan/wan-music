@@ -118,7 +118,23 @@ if __name__ == '__main__':
     try:
         port = _resolve_default_port()
         logger.info(f"启动服务: http://0.0.0.0:{port}")
-        app.run(host='0.0.0.0', port=port, debug=True)
+
+        # 用 werkzeug.serving.run_simple 替代 app.run：
+        # 1. 立即监听端口（不等待 reloader fork 完成，reloader fork 期间也能接受请求）
+        # 2. threaded=True 多线程（避免单请求 hang 阻塞）
+        # 3. use_reloader=True 保留 auto-reload
+        # 4. passthrough_errors=True 异常直接抛出
+        # 这样 Vite proxy 在 0.5s 内就能连上后端，不再 ECONNREFUSED
+        from werkzeug.serving import run_simple
+        run_simple(
+            hostname='0.0.0.0',
+            port=port,
+            application=app,
+            use_reloader=True,        # 保留 auto-reload
+            use_debugger=True,        # 保留 debugger
+            threaded=True,            # 多线程
+            passthrough_errors=False,
+        )
     except Exception as e:
         logger.error(f"启动服务失败: {e}")
         sys.exit(1)

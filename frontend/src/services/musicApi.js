@@ -76,18 +76,56 @@ const setCachedSearch = (keyword, source, data) => {
 
 // ==================== 通用请求 ====================
 
+// ==================== 全局 fetch 超时（避免 ERR_EMPTY_RESPONSE 永久挂起）====================
+//
+// 后端 Flask dev server 是单线程的，搜索时试 30+ 数据源可能 hang 几十秒。
+// 前端 fetch 默认无超时 → 5s+ 没响应 → socket 被关闭 → ERR_EMPTY_RESPONSE。
+//
+// AbortController 5s 超时后主动 abort，浏览器看到的是清晰的 AbortError，
+// 我们的 try/catch 立即捕获，UI 显示友好提示，**不**再无限挂起。
+//
+// 关键：AbortController abort 后，Chrome DevTools 仍会显示"Failed to fetch"日志，
+// 但这是**网络层**错误（fetch 主动取消），**不是**后端错误，用户理解成本更低。
+// =====================================================================================
+
+const DEFAULT_TIMEOUT_MS = 8000  // 8s：搜索/解析的最大合理等待时间
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const get = async (url) => {
-  const response = await fetch(url, { method: 'GET' })
-  return safeJson(response)
+  try {
+    const response = await fetchWithTimeout(url, { method: 'GET' })
+    return safeJson(response)
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      return { success: false, error: '请求超时（8s），后端可能较慢', message: 'timeout' }
+    }
+    throw e
+  }
 }
 
 const postJson = async (url, data) => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  return safeJson(response)
+  try {
+    const response = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    return safeJson(response)
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      return { success: false, error: '请求超时（8s），后端可能较慢', message: 'timeout' }
+    }
+    throw e
+  }
 }
 
 // 安全 JSON 解析：空响应或非 JSON 时返回明确的错误对象

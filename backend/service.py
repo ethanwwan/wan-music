@@ -310,13 +310,27 @@ class BatchDownloadService:
 
     @staticmethod
     def _estimate_size(items: list) -> int:
-        """从 qualityMap 估算总文件大小"""
+        """从 qualityMap 估算总文件大小
+
+        qualityMap 格式（前端约定）：
+        - 简版: {standard: 128, exhigh: 320, lossless: 999, ...}  ← value 是 kbps
+        - 完整版: {standard: {size: ...}, ...}  ← value 是 dict
+        """
         total = 0
         for item in items:
             qm = item.get('qualityMap') or {}
             quality = item.get('quality', 'lossless')
             if quality in qm:
-                total += qm[quality].get('size', 0)
+                val = qm[quality]
+                if isinstance(val, dict):
+                    # 完整版：val = {size: ..., bitrate: ...}
+                    total += val.get('size', 0)
+                elif isinstance(val, (int, float)):
+                    # 简版：val = kbps，根据常见码率估算大小
+                    # 公式：size_bytes = (kbps * 1000 / 8) * duration_sec
+                    # 但我们没 duration，用 kbps * 150 作为粗略估算（4分钟平均）
+                    duration_sec = item.get('duration', 240) / 1000  # 默认 4 分钟
+                    total += int(val * 1000 / 8 * duration_sec)
         return total
 
     @staticmethod

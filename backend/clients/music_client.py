@@ -134,7 +134,10 @@ class MusicClient:
             else:
                 parse_id = song_id_str
 
-            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric, quality_map=quality_map)
+            # 不传 quality_map 给子类：quality_map 只在 MusicClient 层用于降级链过滤
+            # （get_platform_quality_chain），子类的 get_song 不需要这个参数
+            # 否则会触发 TypeError: get_song() got an unexpected keyword argument 'quality_map'
+            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric)
             if result and result.get('url'):
                 # 标记实际使用的音质（前端可基于此判断是否降级）
                 if try_quality != quality:
@@ -188,9 +191,15 @@ def search_music(keywords: str, platform: str = None, limit: int = 50) -> List[D
 
 
 def get_song(song_id: str, quality: str, platform: str = None,
-             with_lyric: bool = True) -> Optional[Dict[str, Any]]:
-    """获取歌曲完整信息（向后兼容，新接口推荐用 music_client.get_song）"""
-    return music_client.get_song(song_id, quality, platform, with_lyric=with_lyric)
+             with_lyric: bool = True,
+             quality_map: dict = None) -> Optional[Dict[str, Any]]:
+    """获取歌曲完整信息（向后兼容，新接口推荐用 music_client.get_song）
+
+    quality_map: 该歌曲可用音质字典（从 search result 带过来），
+                 传入后 music_client.get_song 会做智能降级
+    """
+    return music_client.get_song(song_id, quality, platform,
+                                 with_lyric=with_lyric, quality_map=quality_map)
 
 
 def parse_playlist(playlist_id: str, platform: str = None,

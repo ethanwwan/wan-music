@@ -55,6 +55,25 @@ def _resolve_song_ref(payload: dict) -> tuple[Optional[str], Optional[str], Opti
     return music_id, source, url
 
 
+def _infer_file_type(url: str) -> str:
+    """从 URL 推断文件类型：flac > m4a > mp3
+
+    用于 fileType 字段，前端可基于此选择解码器（FLAC 需 hifi 解码）
+    """
+    if not url:
+        return 'mp3'
+    url_lower = url.lower()
+    if '.flac' in url_lower:
+        return 'flac'
+    if '.m4a' in url_lower or '.mp4' in url_lower:
+        return 'm4a'
+    if '.ogg' in url_lower or '.oga' in url_lower:
+        return 'ogg'
+    if '.wav' in url_lower:
+        return 'wav'
+    return 'mp3'
+
+
 # ==================== 核心业务接口 ====================
 
 @music_bp.route('/search', methods=['POST'])
@@ -141,7 +160,7 @@ def get_song_info():
         'level': actual_level,                                 # 实际获取的音质
         'requested_level': level,                              # 用户请求的音质
         'level_fallback': bool(song_info.get('level_fallback', False)),  # 是否降级
-        'fileType': song_info.get('fileType', 'mp3'),
+        'fileType': song_info.get('fileType') or _infer_file_type(song_info.get('url', '')),
         'source': song_info.get('source', source or 'netease'),
         'api_source': song_info.get('api_source', ''),
         'available': True,
