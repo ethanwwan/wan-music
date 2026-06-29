@@ -127,7 +127,7 @@
                     <a-tag v-if="song.platform" :color="getPlatformColor(song.platform, song.status)" size="small">
                       {{ song.platform }}
                     </a-tag>
-                    <a-tag v-if="song.level" :color="getStatusColor(song.status)" size="small">
+                    <a-tag v-if="song.level" :color="getSongStatusColor(song.status)" size="small">
                       {{ song.level }}
                     </a-tag>
                     <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
@@ -350,9 +350,11 @@ const getPlatformColor = (platform, status) => {
 }
 
 /**
- * 状态 → 标签颜色（用于音质 level tag）
+ * 状态 → 标签颜色（用于 per-song 状态 tag）
+ * 与上面的 getStatusColor 区分：那个用于 task-level 状态（running/done/error/cancelled）
+ * 这个用于 per-song 状态（pending/processing/done/failed）
  */
-const getStatusColor = (status) => {
+const getSongStatusColor = (status) => {
   const colors = {
     pending: 'default',
     processing: 'blue',
