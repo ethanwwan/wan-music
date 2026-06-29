@@ -390,12 +390,14 @@ const startDownload = (musicList, label) => queueStore.addTask(
   queueStore.openDrawer()
 })
 
-const buildDownloadItem = (track) => ({
+const buildDownloadItem = (track, quality = 'lossless') => ({
   id: track.id,
   name: track.name,
   artist: track.artists,
   album: track.album,
   source: track.source || '',
+  // 用户请求的音质：用于后端做精准降级（用户请求 lossless，歌曲只有 exhigh → 直接 exhigh）
+  quality: quality,
   qualityMap: track.qualityMap || {},
 })
 
@@ -411,7 +413,8 @@ const downloadSingle = async (track) => {
   parsingId.value = track.id
   parsingType.value = 'download'
   try {
-    await startDownload([buildDownloadItem(track)], track.name)
+    const quality = settings.value?.selectedQuality || 'lossless'
+    await startDownload([buildDownloadItem(track, quality)], track.name)
   } catch (error) {
     const msg = error?.message || String(error) || '未知错误'
     if (msg.includes('已下架') || msg.includes('无法获取') || msg.includes('未找到') || msg.includes('版权')) {
@@ -432,7 +435,8 @@ const handleBatchDownloadSelected = async () => {
     return
   }
   const tracks = props.songs.filter(t => selectedIds.value.includes(t.id))
-  const items = tracks.map(buildDownloadItem)
+  const quality = settings.value?.selectedQuality || 'lossless'
+  const items = tracks.map(t => buildDownloadItem(t, quality))
   const label = items.length > 1 ? `${items[0].name}等${items.length}首` : items[0].name
   try {
     await startDownload(items, label)
@@ -445,7 +449,8 @@ const handleBatchDownloadSelected = async () => {
 // 歌单模式：一键全部下载（跳过选择模式）
 const downloadAllInPlaylist = async () => {
   if (props.songs.length === 0) return
-  const items = props.songs.map(buildDownloadItem)
+  const quality = settings.value?.selectedQuality || 'lossless'
+  const items = props.songs.map(t => buildDownloadItem(t, quality))
   const name = props.detail?.name || '歌单'
   const label = items.length > 1 ? `${name}（${items.length}首）` : items[0].name
   try {

@@ -486,12 +486,13 @@ class BatchDownloadService:
                                     settings.get('filenameFormat', 'song-artist'))
                 )
 
-                # 标记 per-song 状态：完成 + 实际文件大小
+                # 标记 per-song 状态：完成 + 实际文件大小 + 实际拿到的音质（fallback 后）
                 actual_size = os.path.getsize(tmp_path)
                 if task_id:
                     self._update_song_status(task_id, song_id,
                         status='done',
                         file_size=actual_size,
+                        level=song_info.get('level') or quality,   # 实际拿到的音质（fallback 后）
                         completed_at=time.time(),
                     )
 

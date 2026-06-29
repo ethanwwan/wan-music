@@ -139,7 +139,8 @@ class MusicClient:
             # 否则会触发 TypeError: get_song() got an unexpected keyword argument 'quality_map'
             result = client.get_song(parse_id, try_quality, with_lyric=with_lyric)
             if result and result.get('url'):
-                # 标记实际使用的音质（前端可基于此判断是否降级）
+                # 标记实际拿到的音质（用于前端展示 + fallback 对比）
+                result['level'] = try_quality
                 if try_quality != quality:
                     result['requested_quality'] = quality
                     # 区分升级/降级（用音质 rank 比较）
