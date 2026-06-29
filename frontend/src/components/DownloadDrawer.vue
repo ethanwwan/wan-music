@@ -565,6 +565,7 @@ const handleClearCompleted = async () => {
 }
 .task-list :deep(.ant-card-body) {
   overflow: visible !important;
+  padding: 16px !important;   /* 覆盖 Ant Design Vue 默认 24px，更紧凑 */
 }
 
 /* 任务卡片：使用对称彩色辉光阴影（四周均匀分布） */
