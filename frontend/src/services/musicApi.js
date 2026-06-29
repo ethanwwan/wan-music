@@ -346,7 +346,15 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
   const poll = async () => {
     if (closed) return
     try {
-      const data = await fetchWithTimeout(`/download/batch/progress/${taskId}`, {}, 5000)
+      // 显式接收 Response，然后转 JSON（之前用 fetchWithTimeout 直接当 data 用是错的，会拿到 Response 对象）
+      const response = await fetchWithTimeout(`/download/batch/progress/${taskId}`, {}, 5000)
+      if (!response.ok) {
+        onError?.(new Error(`HTTP ${response.status}`))
+        return close()
+      }
+      const wrapper = await safeJson(response)
+      // 后端包装层：{ success, message, data: {status, total, ...} }
+      const data = wrapper?.data || wrapper
       consecutiveErrors = 0   // 成功后重置错误计数
       if (data.error) { onError?.(new Error(data.error)); return close() }
       if (['done', 'error', 'cancelled'].includes(data.status)) {
