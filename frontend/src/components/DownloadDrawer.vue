@@ -823,7 +823,7 @@ const handleClearCompleted = async () => {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  padding: 4px 6px;
+  padding: 8px;
   border-radius: 4px;
   background: #e5e7eb;
   transition: all 0.2s ease;
