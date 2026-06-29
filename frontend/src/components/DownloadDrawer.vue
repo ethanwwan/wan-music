@@ -115,28 +115,26 @@
                 :key="song.id + '-' + idx"
                 :class="`song-item song-status-${song.status}`"
               >
-                <div class="song-icon">
-                  <component :is="getSongStatusIcon(song.status)" />
+                <!-- 第一行：歌名（标题） -->
+                <div class="song-name" :title="song.name">
+                  {{ song.name }}
+                  <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
                 </div>
-                <div class="song-info">
-                  <div class="song-name" :title="song.name">
-                    {{ song.name }}
-                    <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
-                  </div>
-                  <div class="song-meta">
-                    <a-tag v-if="song.platform" :color="getPlatformColor(song.platform, song.status)" size="small">
-                      {{ song.platform }}
-                    </a-tag>
-                    <a-tag v-if="song.level" :color="getSongStatusColor(song.status)" size="small">
-                      {{ song.level }}
-                    </a-tag>
-                    <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
-                      {{ formatFileSize(song.file_size) }}
-                    </span>
-                    <span v-if="song.status === 'failed' && song.error" class="song-error" :title="song.error">
-                      {{ song.error }}
-                    </span>
-                  </div>
+                <!-- 第二行：状态 icon + 平台 tag + 音质 tag + 大小（与标题对齐） -->
+                <div class="song-meta">
+                  <component :is="getSongStatusIcon(song.status)" class="song-icon-inline" />
+                  <a-tag v-if="song.platform" :color="getPlatformColor(song.platform, song.status)" size="small">
+                    {{ song.platform }}
+                  </a-tag>
+                  <a-tag v-if="song.level" :color="getSongStatusColor(song.status)" size="small">
+                    {{ song.level }}
+                  </a-tag>
+                  <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
+                    {{ formatFileSize(song.file_size) }}
+                  </span>
+                  <span v-if="song.status === 'failed' && song.error" class="song-error" :title="song.error">
+                    {{ song.error }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -822,8 +820,9 @@ const handleClearCompleted = async () => {
 
 .song-item {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 8px 10px;
   border-radius: 6px;
   background: var(--color-surface-light, #f9fafb);
@@ -851,17 +850,19 @@ const handleClearCompleted = async () => {
   background: rgba(239, 68, 68, 0.04);
 }
 
-.song-icon {
-  font-size: 16px;
+/* per-song 内嵌状态 icon（与 platform tag / size 并排） */
+.song-icon-inline {
+  font-size: 14px;
   line-height: 20px;
   flex-shrink: 0;
-  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
 }
 
-.song-item.song-status-pending .song-icon { color: #9ca3af; }
-.song-item.song-status-processing .song-icon { color: #3b82f6; }
-.song-item.song-status-done .song-icon { color: #10b981; }
-.song-item.song-status-failed .song-icon { color: #ef4444; }
+.song-item.song-status-pending .song-icon-inline { color: #9ca3af; }
+.song-item.song-status-processing .song-icon-inline { color: #3b82f6; }
+.song-item.song-status-done .song-icon-inline { color: #10b981; }
+.song-item.song-status-failed .song-icon-inline { color: #ef4444; }
 
 /* processing 状态图标旋转动画 */
 .song-item.song-status-processing :deep(.anticon) {
@@ -871,14 +872,6 @@ const handleClearCompleted = async () => {
 @keyframes song-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
-
-.song-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .song-name {
