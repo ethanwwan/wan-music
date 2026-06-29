@@ -61,3 +61,6 @@ def setup_logging(level: int = logging.INFO) -> None:
     # 5. 静默一些过吵的第三方 logger
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
+    # werkzeug 自带 access log 与 __main__.after_request 双行重复，静默 werkzeug
+    # （我们自己的 _log_request 已经记录 API 请求）
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)

@@ -36,8 +36,47 @@ app.register_blueprint(music_bp)
 
 # ==================== HTTP 请求日志 ====================
 
-# 不打日志的路径（健康检查 + 静态资源噪声大）
-_QUIET_PATHS = {'/health', '/favicon.ico', '/favicon.svg'}
+# 不打日志的路径（健康检查 + 静态资源 + 图片代理 噪声大）
+_QUIET_PATHS = {
+    '/health', '/favicon.ico', '/favicon.svg',
+    '/image',  # 图片代理：每首歌封面/歌手头像都会触发，刷屏
+}
+
+
+def _extract_request_context(path: str) -> str:
+    """提取 API 请求的关键业务参数（不打印完整 URL，避免日志爆炸）
+
+    目的：让 /search /song /lyric /playlist /download 的日志更可读
+    格式：path + 关键参数（song_id, keyword, quality, task_id）
+    """
+    if path == '/search' and request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        kw = body.get('keyword', '')[:20]
+        src = body.get('source', 'all')
+        return f'/search k="{kw}" src={src}'
+    if path == '/song' and request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        sid = body.get('id', '')[:30]
+        src = body.get('source', 'auto')
+        q = body.get('quality', '')
+        return f'/song id={sid} src={src} q={q}'
+    if path == '/lyric' and request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        sid = body.get('id', '')[:30]
+        src = body.get('source', 'auto')
+        return f'/lyric id={sid} src={src}'
+    if path == '/playlist' and request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        pid = body.get('id', '')[:30]
+        src = body.get('source', 'auto')
+        return f'/playlist id={pid} src={src}'
+    if path.startswith('/download/batch/progress/'):
+        task_id = path.rsplit('/', 1)[-1][:30]
+        return f'/download/batch/progress task={task_id}'
+    if path.startswith('/download/batch/file/'):
+        task_id = path.rsplit('/', 1)[-1][:30]
+        return f'/download/batch/file task={task_id}'
+    return path  # 其他路径原样
 
 
 @app.before_request
@@ -47,16 +86,17 @@ def _start_timer():
 
 @app.after_request
 def _log_request(response):
-    """只记录 API 请求，跳过静态资源/健康检查/首页"""
+    """统一 API 请求日志：跳过噪声路径 + 提取关键参数 + 单行格式"""
     try:
+        # 静默噪声路径
         if request.path in _QUIET_PATHS or request.path.startswith('/assets/'):
             return response
-        # 跳过首页（前端 SPA，每次刷新都会打）
         if request.path in {'/', '/docs'}:
             return response
         duration_ms = (time.time() - request._start_time) * 1000
+        context = _extract_request_context(request.path)
         logger.info(
-            f'{request.method} {request.path} {response.status_code} {duration_ms:.0f}ms'
+            f'{request.method} {context} {response.status_code} {duration_ms:.0f}ms'
         )
     except Exception:
         pass
