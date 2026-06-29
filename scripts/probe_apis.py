@@ -761,6 +761,34 @@ def main():
     if not domain_dead and not suggestions:
         print('  🎉 所有 source 正常工作！')
 
+    # 5.0 官方 API 优先策略审查（用户要求）
+    print('\n' + '=' * 70)
+    print('【官方 API 优先策略审查】')
+    print('=' * 70)
+    print('  规则：每平台每能力中，name 包含 "official" 的源必须 priority=0（最高）\n')
+    official_violations = []
+    for platform, sources_map in PLATFORM_SOURCES.items():
+        for cap in ('search', 'info', 'lyric', 'playlist'):
+            cap_name = {'search': '搜索', 'info': '元信息', 'lyric': '歌词', 'playlist': '歌单'}[cap]
+            official_sources = [s for s in sources_map[cap] if 'official' in s.name and s.enabled]
+            if not official_sources:
+                # 检查是否完全没有官方源（QQ/酷我歌词场景）
+                any_official = any('official' in s.name for s in sources_map[cap])
+                if not any_official:
+                    print(f'  ⚠️  {PLATFORM_SOURCES[platform]["name"]:8s} {cap_name:6s}: 无官方 API（依赖第三方）')
+                continue
+            for s in official_sources:
+                if s.priority != 0:
+                    official_violations.append(f'  ❌ {platform}/{cap_name}/{s.name}: priority={s.priority}（应为 0）')
+                else:
+                    print(f'  ✅ {PLATFORM_SOURCES[platform]["name"]:8s} {cap_name:6s}: 官方 {s.name:30s} P={s.priority}')
+    if official_violations:
+        print('\n  ⚠️ 官方优先策略违规：')
+        for v in official_violations:
+            print(v)
+    else:
+        print('\n  🎉 所有「有官方 API 的能力」都 priority=0 严格优先！')
+
     # 6. JSON 输出（可选）
     if getattr(main, 'json_output', None):
         json_data = {
