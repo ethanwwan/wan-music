@@ -78,26 +78,8 @@
           class="task-progress"
         />
 
-        <!-- 进度详情 -->
-        <div class="task-detail">
-          <a-space :size="12">
-            <span class="detail-item">
-              <component :is="CheckCircleOutlined" class="success-icon" />
-              {{ task.completed }} / {{ task.total }}
-            </span>
-            <span v-if="task.failed > 0" class="detail-item failed">
-              <component :is="CloseCircleOutlined" class="error-icon" />
-              {{ task.failed }} 失败
-            </span>
-            <span v-if="task.file_size > 0" class="detail-item">
-              {{ formatFileSize(task.file_size) }}
-            </span>
-            <span v-if="task.current && task.status === 'running'" class="detail-item current">
-              <component :is="HeadphonesOutlined" class="current-icon" />
-              {{ task.current }}
-            </span>
-          </a-space>
-        </div>
+        <!-- 进度详情（已合并到 collapse header） -->
+        <!-- task-detail div 已删除：数量 + 文件大小 + 当前歌曲名 都整合到折叠面板 header -->
 
         <!-- 错误信息 / per-song 状态列表（用折叠面板，1 首多首都用） -->
         <a-collapse
@@ -239,7 +221,6 @@ const {
   CheckCircleOutlined,
   MusicOutlined,
   CloseCircleOutlined,
-  HeadphonesOutlined,
   CloudDownloadOutlined,
   AlertCircleOutlined = icons.WarningOutlined,
   CloseOutlined,
@@ -392,10 +373,21 @@ const getCollapseHeader = (task) => {
   if (task.songs && task.songs.length > 0) {
     const done = task.songs.filter(s => s.status === 'done').length
     const failed = task.songs.filter(s => s.status === 'failed').length
+    const parts = []
     if (task.status === 'done' || task.status === 'error') {
-      return `${task.songs.length} 首歌曲 (成功 ${done}, 失败 ${failed})`
+      parts.push(`${task.songs.length} 首歌曲 (成功 ${done}, 失败 ${failed})`)
+    } else {
+      parts.push(`${task.songs.length} 首歌曲 (${done} 完成)`)
     }
-    return `${task.songs.length} 首歌曲 (${done} 完成)`
+    // 进行中：附加当前正在下载的歌曲名（仅 1 首歌时显示，多首避免过长）
+    if (task.status === 'running' && task.current && task.songs.length <= 1) {
+      parts.push(`正在下载：${task.current}`)
+    }
+    // 附加总文件大小
+    if (task.file_size > 0) {
+      parts.push(formatFileSize(task.file_size))
+    }
+    return parts.join(' · ')
   }
   return `${task.errors.length} 首失败`
 }
@@ -724,42 +716,11 @@ const handleClearCompleted = async () => {
   height: 4px !important;
 }
 
-.task-detail {
-  margin-bottom: 12px;
-}
-
-/* 实际格式展示（已移除） */
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--color-text-secondary, #6b7280);
-}
-
-.detail-item.failed {
-  color: #ef4444;
-}
-
-.detail-item.current {
-  color: #3b82f6;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.success-icon {
-  color: #10b981;
-}
+/* 进度详情（已合并到折叠面板 header） */
+/* task-detail / detail-item / success-icon / current-icon CSS 已废弃 */
 
 .error-icon {
   color: #ef4444;
-}
-
-.current-icon {
-  color: #3b82f6;
 }
 
 .task-errors {
