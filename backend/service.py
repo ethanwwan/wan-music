@@ -26,6 +26,30 @@ from utils.filename import (
     sanitize_filename as _sanitize_filename,
     build_filename as _build_filename,
 )
+from app_config import QUALITY_LEVELS
+
+
+def _get_level_display(quality: str, file_ext: str = '') -> Dict[str, str]:
+    """把 quality key 转成前端展示所需的字段
+
+    Args:
+        quality: quality key ('hires' / 'lossless' / 'exhigh' / 'standard')
+        file_ext: 实际下载文件的扩展名（带或不带点，如 '.flac' / 'mp3'）
+
+    Returns:
+        {
+            'name': '无损',           # 显示名（label）
+            'format': 'FLAC',         # 格式描述（description）
+            'file_ext': 'flac',       # 文件扩展名（不带点）
+        }
+    """
+    cfg = QUALITY_LEVELS.get(quality) or QUALITY_LEVELS.get('standard', {})
+    ext = file_ext.lstrip('.').lower() if file_ext else cfg.get('format', 'mp3').split('/')[0].lower()
+    return {
+        'name': cfg.get('label', quality),
+        'format': cfg.get('description', ''),
+        'file_ext': ext,
+    }
 from utils.audio_utils import (
     get_extension as _get_extension,
     detect_audio_type as _detect_audio_type,
@@ -489,10 +513,16 @@ class BatchDownloadService:
                 # 标记 per-song 状态：完成 + 实际文件大小 + 实际拿到的音质（fallback 后）
                 actual_size = os.path.getsize(tmp_path)
                 if task_id:
+                    # 把 level key + 真实文件扩展名 转成前端展示字段
+                    actual_level = song_info.get('level') or quality
+                    display = _get_level_display(actual_level, extension)
                     self._update_song_status(task_id, song_id,
                         status='done',
                         file_size=actual_size,
-                        level=song_info.get('level') or quality,   # 实际拿到的音质（fallback 后）
+                        level=actual_level,             # 音质 key（后端用）
+                        level_name=display['name'],     # 音质显示名（如"无损"）
+                        file_ext=display['file_ext'],   # 文件扩展名（如"flac"/"mp3"）
+                        file_format=display['format'],  # 格式描述（如"FLAC"/"320kbps"）
                         completed_at=time.time(),
                     )
 

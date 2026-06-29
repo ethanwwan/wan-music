@@ -141,6 +141,17 @@ class MusicClient:
             if result and result.get('url'):
                 # 标记实际拿到的音质（用于前端展示 + fallback 对比）
                 result['level'] = try_quality
+                # 附加前端展示字段（label 显示名、format 描述）
+                from app_config import QUALITY_LEVELS
+                level_cfg = QUALITY_LEVELS.get(try_quality) or {}
+                result['level_name'] = level_cfg.get('label', try_quality)
+                result['level_format'] = level_cfg.get('description', '')
+                # 从 url 推断 file_ext（CDN URL 通常带 .flac/.mp3/.m4a 后缀）
+                url_lower = result.get('url', '').lower()
+                for ext in ('.flac', '.mp3', '.m4a', '.ape', '.ogg', '.opus', '.wav'):
+                    if ext in url_lower:
+                        result['file_ext'] = ext.lstrip('.')
+                        break
                 if try_quality != quality:
                     result['requested_quality'] = quality
                     # 区分升级/降级（用音质 rank 比较）

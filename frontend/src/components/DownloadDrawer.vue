@@ -59,8 +59,8 @@
         <div class="task-head">
           <div class="task-name-wrapper">
             <component :is="MusicOutlined" class="task-icon" />
-            <span class="task-name" :title="task.name">
-              {{ task.name || '未命名任务' }}
+            <span class="task-name" :title="getTaskNameWithExt(task)">
+              {{ getTaskNameWithExt(task) || '未命名任务' }}
             </span>
           </div>
           <a-tag :color="getStatusColor(task.status)">
@@ -116,8 +116,8 @@
                 :class="`song-item song-status-${song.status}`"
               >
                 <!-- 第一行：歌名（标题） -->
-                <div class="song-name" :title="song.name">
-                  {{ song.name }}
+                <div class="song-name" :title="songNameWithExt(song)">
+                  {{ song.name }}<span v-if="song.file_ext" class="song-ext">.{{ song.file_ext }}</span>
                   <span v-if="song.artist" class="song-artist">- {{ song.artist }}</span>
                 </div>
                 <!-- 第二行：状态 icon + 平台 tag + 音质 tag + 大小（与标题对齐） -->
@@ -126,8 +126,8 @@
                   <a-tag v-if="song.platform" :color="getPlatformColor(song.platform, song.status)" size="small">
                     {{ song.platform }}
                   </a-tag>
-                  <a-tag v-if="song.level" :color="getSongStatusColor(song.status)" size="small">
-                    {{ song.level }}
+                  <a-tag v-if="song.level_name || song.level" :color="getSongStatusColor(song.status)" size="small">
+                    {{ song.level_name || song.level }}
                   </a-tag>
                   <span v-if="song.status === 'done' && song.file_size > 0" class="song-size">
                     {{ formatFileSize(song.file_size) }}
@@ -283,6 +283,27 @@ const getStatusColor = (status) => {
 const getPercentage = (task) => {
   if (task.total === 0) return 0
   return Math.round((task.completed / task.total) * 100)
+}
+
+// 给 task.name 追加文件后缀：多首歌曲 → .zip，单首 → .flac/.mp3
+const getTaskNameWithExt = (task) => {
+  if (!task) return ''
+  const name = task.name || '未命名任务'
+  // 多首歌曲（zip 包下载）
+  if (task.total > 1 || task.single_file === false) {
+    return name + '.zip'
+  }
+  // 单首歌曲：用第一首 done 歌曲的 file_ext
+  const firstDone = (task.songs || []).find(s => s.status === 'done' && s.file_ext)
+  if (firstDone) return name + '.' + firstDone.file_ext
+  return name
+}
+
+const songNameWithExt = (song) => {
+  if (!song) return ''
+  let s = song.name || ''
+  if (song.file_ext) s += '.' + song.file_ext
+  return s
 }
 
 const getProgressStatus = (status) => {
@@ -890,6 +911,15 @@ const handleClearCompleted = async () => {
   font-weight: 400;
   color: var(--color-text-muted, #9ca3af);
   margin-left: 4px;
+}
+
+/* 文件后缀（.flac / .mp3）：灰色小字，紧贴歌名 */
+.song-ext {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted, #9ca3af);
+  margin-left: 2px;
+  text-transform: lowercase;
 }
 
 .song-meta {
