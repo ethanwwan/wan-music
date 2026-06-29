@@ -59,6 +59,50 @@ from utils.metadata import write_metadata as _write_metadata
 
 logger = logging.getLogger(__name__)
 
+# ==================== 重试错误分类 ====================
+
+# 可重试的 HTTP 状态码（临时性错误）
+_RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504, 507}
+# 可重试的网络异常类型
+_RETRYABLE_NETWORK_ERRORS = (
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectTimeout,
+    requests.exceptions.ReadTimeout,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
+def _classify_error(e: Exception, attempt: int, max_attempts: int) -> tuple:
+    """分类异常：返回 (是否可重试, 原因)
+
+    确定性错误（不重试）：
+      - HTTP 4xx（除 408/425/429）：资源不存在/无权限/请求格式错
+      - KeyError/ValueError/TypeError：代码 bug
+      - OSError (EEXIST 等)：文件系统错误
+      - Exception with 'Forbidden'/'Not Found' message
+
+    不确定错误（可重试）：
+      - 网络异常（Timeout/ConnectionError/ChunkedEncodingError）
+      - HTTP 5xx/429/408/425：服务器临时过载
+    """
+    # 网络异常 → 可重试
+    if isinstance(e, _RETRYABLE_NETWORK_ERRORS):
+        if attempt < max_attempts - 1:
+            return True, f'网络异常 {type(e).__name__}'
+        return False, f'网络异常已达最大重试次数'
+    # HTTP 异常 → 看状态码
+    if isinstance(e, requests.exceptions.HTTPError):
+        status = e.response.status_code if e.response is not None else 0
+        if status in _RETRYABLE_HTTP_STATUSES:
+            if attempt < max_attempts - 1:
+                return True, f'HTTP {status} 临时错误'
+            return False, f'HTTP {status} 已达最大重试次数'
+        return False, f'HTTP {status} 确定性错误（如 403/404）'
+    # 其他 Exception → 不可重试（代码 bug、文件系统错误等）
+    return False, f'{type(e).__name__} 非网络错误'
+
+
 # ==================== Music Service ====================
 
 class MusicService:
@@ -427,11 +471,27 @@ class BatchDownloadService:
             )
 
         last_error = None
-        for attempt in range(3):
+        tmp_path = None  # 重试时复用，初始化一次
+        # 重试策略：chain 内部已按 priority 串行 fallback 到 N 个源；
+        # 外部再做 3 次重试是浪费（每次都重新调 chain + 重新做 url+info+lyric）。
+        # 改为 2 次（1 次原始 + 1 次重试），且重试时跳过 lyric（已成功一次无需重做），
+        # 这样从 9 个 API 请求减到 5-6 个，节省 ~50% 时间和带宽。
+        max_attempts = 2
+        for attempt in range(max_attempts):
             try:
-                song_info = music_service.get_song_info(song_id_arg, quality, source, quality_map=item_quality_map)
+                # 重试时跳过 lyric（如果第 1 次已经拿到，第 2 次没必要重做）
+                with_lyric = (attempt == 0)
+                song_info = music_service.get_song_info(
+                    song_id_arg, quality, source,
+                    quality_map=item_quality_map,
+                    with_lyric=with_lyric,
+                )
                 url = song_info.get('url') if song_info else None
                 if not url:
+                    if attempt < max_attempts - 1:
+                        logger.debug(f'[{song_id}] 拿不到 URL（attempt {attempt+1}/{max_attempts}），重试')
+                        continue   # 重试让 chain 换源
+                    # 最后一次仍失败，标记 failed
                     if task_id:
                         self._update_song_status(task_id, song_id,
                             status='failed',
@@ -455,8 +515,10 @@ class BatchDownloadService:
                         file_format=display['format'],
                     )
 
-                fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-batch-')
-                os.close(fd)
+                # 准备临时文件（重试时复用同一路径，避免泄漏旧文件）
+                if not tmp_path:
+                    fd, tmp_path = tempfile.mkstemp(suffix=extension, prefix='wan-music-batch-')
+                    os.close(fd)
 
                 try:
                     resp = requests.get(url, stream=True, timeout=60, headers={'User-Agent': 'Mozilla/5.0'})
@@ -465,9 +527,10 @@ class BatchDownloadService:
                         for chunk in resp.iter_content(chunk_size=65536):
                             if chunk:
                                 f.write(chunk)
-                except Exception as e:
-                    _safe_remove(tmp_path)
-                    raise e
+                except Exception:
+                    # 不在这里清理：让外层 except（_classify_error）统一处理
+                    # 重试时 tmp_path 复用（不被删除），确定性错误下外层会清理
+                    raise
 
                 # 用 magic bytes 检测真实类型，覆盖错误扩展名
                 detected = _detect_audio_type(tmp_path)
@@ -520,10 +583,26 @@ class BatchDownloadService:
                 }
             except Exception as e:
                 last_error = e
-                if attempt < 2:
+                # 异常分类：只重试可重试错误（网络/临时），确定性错误立即放弃
+                retryable, reason = _classify_error(e, attempt, max_attempts)
+                if retryable:
+                    logger.info(
+                        f'[{song_id}] 可重试错误 (attempt {attempt+1}/{max_attempts}): '
+                        f'{type(e).__name__}: {str(e)[:100]} — {reason}'
+                    )
                     time.sleep(0.5 * (2 ** attempt))
+                    continue
+                # 确定性错误：清理临时文件 + 跳出循环
+                logger.warning(
+                    f'[{song_id}] 确定性错误（不重试）: '
+                    f'{type(e).__name__}: {str(e)[:100]} — {reason}'
+                )
+                _safe_remove(tmp_path)
+                break
 
-        logger.warning(f"批量下载: 重试 3 次仍失败 [{song_id}]: {last_error}")
+        # 失败原因（最后一次错误）
+        err_str = str(last_error)[:200] if last_error else 'unknown'
+        logger.warning(f'批量下载: [{song_id}] 失败: {err_str}')
         # 标记 per-song 状态：失败
         if task_id:
             self._update_song_status(task_id, song_id,
