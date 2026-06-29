@@ -52,9 +52,59 @@ export default defineConfig(({ mode }) => {
 
   // 代理路径列表（server 和 preview 复用）
   const proxyPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms']
-  const buildProxy = () => Object.fromEntries(
-    proxyPaths.map(p => [p, { target: proxyTarget, changeOrigin: true }])
-  )
+  const buildProxy = () => {
+    const opts = {
+      target: proxyTarget,
+      changeOrigin: true,
+      // 关键：后端没启动时 ECONNREFUSED 静默处理
+      // retry 必须 = 0：每次 retry 都会 close socket 一次，导致浏览器
+      // 显示 ERR_EMPTY_RESPONSE（Chrome DevTools 网络层错误，JS 无法拦截）
+      // 让前端 silentFetch 自己做 retry（应用层），vite 不再 retry
+      retry: 0,                  // 关键：不重试，避免重复 ERR_EMPTY_RESPONSE
+      timeout: 3000,
+      proxyTimeout: 3000,
+      // ECONNREFUSED 是后端未启动导致，频繁刷屏会干扰开发
+      // 用 configure 钩子自定义错误处理
+      configure: (proxy) => {
+        proxy.on('error', (err, req, res) => {
+          // ECONNREFUSED / ECONNRESET 不打 vite 的错误日志
+          if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'].includes(err.code)) {
+            // 给前端一个 503 + JSON，前端 store 自己决定如何 retry
+            if (res && !res.headersSent) {
+              res.statusCode = 503
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({
+                code: 503,
+                message: `后端服务未就绪 (${proxyTarget})，请稍后重试`,
+                retry_after: 2,
+              }))
+            }
+          } else {
+            // 其他错误才打日志
+            console.error(`[vite proxy] ${err.code} ${req.url} →`, err.message)
+          }
+        })
+      },
+    }
+    return Object.fromEntries(proxyPaths.map(p => [p, opts]))
+  }
+
+  // 静默 vite 5 的 http proxy error 日志（v1.1.3 configure hook 之后 vite 还会打）
+  // vite 5 源码 proxy.ts → proxy.on("error") → config.logger.error
+  // 这条 console.error 在 configure 之后才注册，无法在 configure 里覆盖
+  // 唯一办法：拦截 console.error，过滤 http proxy error + ECONNREFUSED/ECONNRESET/ETIMEDOUT
+  const installConsoleErrorFilter = () => {
+    const originalError = console.error
+    console.error = function (...args) {
+      const msg = args.map(a => (typeof a === 'string' ? a : (a && a.message) || String(a))).join(' ')
+      if (msg.includes('http proxy error') &&
+          /ECONNREFUSED|ECONNRESET|ETIMEDOUT/.test(msg)) {
+        // 后端未就绪，silent 掉
+        return
+      }
+      return originalError.apply(console, args)
+    }
+  }
 
   return {
     plugins: [vue()],
@@ -66,12 +116,19 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: vitePort,
-      proxy: buildProxy()
+      proxy: buildProxy(),
+      // dev 启动时静默 vite 5 的 http proxy error
+      configureServer(server) {
+        installConsoleErrorFilter()
+      }
     },
     preview: {
       host: '0.0.0.0',
       port: vitePort,
-      proxy: buildProxy()
+      proxy: buildProxy(),
+      configurePreviewServer(server) {
+        installConsoleErrorFilter()
+      }
     },
     build: {
       // 把环境变量注入到前端（必须以 VITE_ 或 BACKEND_ 开头才能暴露给客户端）

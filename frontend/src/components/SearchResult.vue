@@ -349,8 +349,8 @@ const playTrack = async (track) => {
 
   try {
     const quality = settings.selectedQuality || 'lossless'
-    // 透传 qualityMap 给后端，让后端做智能降级（跳过不可用音质）
-    const info = await parseMusicInfo(track.id, quality, track.source, track.qualityMap)
+    // 调用方只传 track，qualityMap 内部自动从 track.qualityMap 提取
+    const info = await parseMusicInfo(track, quality)
     if (!info?.url || !info.available) {
       markUnavailable(track)
       message.warning(`《${track.name}》因版权问题暂时无法播放`)

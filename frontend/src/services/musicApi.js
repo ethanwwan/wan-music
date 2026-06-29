@@ -131,16 +131,22 @@ export const getConfig = async () => {
  * 调用后端 /song 接口获取歌曲完整信息：基本信息 + 播放 URL + 歌词
  * 播放、下载、歌词展示都基于此接口的返回数据
  *
- * @param {string} musicId
- * @param {string} quality  - 用户请求的音质
- * @param {string} source   - 平台（netease/qq/kugou/kuwo）
- * @param {object} qualityMap - 该歌曲可用音质字典（来自 search 结果，可选）
- *   传入后，后端降级时会跳过不可用音质
+ * 设计原则（按用户意图）：
+ * 1. 调用方只传 (track, quality)，不直接传 qualityMap
+ * 2. 内部从 track.qualityMap 提取（该字段在 search result 中已存在）
+ * 3. qualityMap 让后端做精准降级：用户请求 lossless，歌曲只有 exhigh → 直接 exhigh
+ *
+ * @param {object} track  - 歌曲对象（来自 search result，含 id/source/qualityMap）
+ * @param {string} quality - 用户请求的音质（如 lossless/jymaster/hires）
  */
-export const parseMusicInfo = async (musicId, quality = 'lossless', source = '', qualityMap = null) => {
+export const parseMusicInfo = async (track, quality = 'lossless') => {
+  if (!track) throw new Error('歌曲对象缺失')
+  const musicId = track.id
   if (!musicId) throw new Error('歌曲ID缺失，请重新搜索')
 
-  const platform = source || getCurrentDataSource()
+  const platform = track.source || getCurrentDataSource()
+  const qualityMap = track.qualityMap || null
+
   const result = await postJson('/song', {
     id: String(musicId),
     level: quality,

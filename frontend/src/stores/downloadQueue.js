@@ -12,6 +12,42 @@ import {
   downloadBatchAsZip
 } from '../services/musicApi.js'
 
+// ==================== 后端未就绪的容错机制 ====================
+//
+// 后端启动慢（加载 30+ 数据源 ~ 10s），前端启动时（特别是 Vite HMR 触发）
+// 调用 /download/batch/list 会 ECONNREFUSED。
+// 这里对 store 内的所有 fetch 提供"静默重试"包装：
+// - 失败时指数退避重试 3 次（2s, 4s, 8s），总等待 ~14s，足够后端就绪
+// - 重试都失败时用 console.warn（黄色，不刷红色 error）
+// - 用户主动操作（addTask/cancelTask/downloadTask）失败仍 throw
+// - 后台自动调用（init / refreshTask）失败静默吞掉
+//
+// 这样开发体验显著提升，不会再看到 1 行 + 0 行的红色 error 错误。
+// ====================================================================
+
+/**
+ * 静默重试包装（用于后台自动调用的 API）
+ * - 不 throw
+ * - 重试都失败时 console.warn（不 console.error）
+ * - 用户操作场景不要用这个（应该把错误暴露给用户）
+ */
+const silentFetch = async (fn, { maxRetries = 3, baseDelay = 2000, context = '' } = {}) => {
+  let lastErr
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+      if (i < maxRetries) {
+        await new Promise(r => setTimeout(r, baseDelay * (1 << i)))  // 2s, 4s, 8s
+      }
+    }
+  }
+  // 重试都失败：静默 warn（不是 error）
+  console.warn(`[downloadQueue] ${context} 后端未就绪（已重试 ${maxRetries} 次）: ${lastErr?.message || lastErr}`)
+  return null  // 静默吞掉
+}
+
 // ==================== State ====================
 
 /** 所有任务列表：Map<taskId, task> */
@@ -114,43 +150,42 @@ const updateTask = (taskId, patch) => {
  * 从后端拉取单个任务最新状态（用于重连）
  */
 const refreshTask = async (taskId) => {
-  try {
-    const result = await getBatchList()
-    if (result.success) {
-      const found = result.data.find(t => t.task_id === taskId)
-      if (found) {
-        updateTask(taskId, {
-          status: found.status,
-          total: found.total,
-          completed: found.completed,
-          failed: found.failed,
-          current: found.current || '',
-          errors: found.errors || [],
-          error: found.error || '',
-          completed_at: found.completed_at || 0,
-          file_size: found.file_size || 0,
-        })
-        // 如果是进行中，重新订阅
-        if (found.status === 'running') {
-          if (subscriptions.has(taskId)) {
-            subscriptions.get(taskId)()
-            subscriptions.delete(taskId)
-          }
-          subscribeTask(taskId)
-        } else {
-          // 已完成/失败/取消，清理订阅
-          if (subscriptions.has(taskId)) {
-            subscriptions.get(taskId)()
-            subscriptions.delete(taskId)
-          }
-        }
-      } else {
-        // 后端已无此任务（重启/清理）
-        removeTask(taskId)
+  // 后台静默重试：SSE 错误时自动重连，后端未就绪时静默等待
+  const result = await silentFetch(() => getBatchList(), {
+    context: `刷新任务 ${taskId}`,
+    maxRetries: 2,        // 2s + 4s = 6s（比 syncWithBackend 短，因为这是 SSE 重连）
+  })
+  if (!result || !result.success) return
+  const found = result.data.find(t => t.task_id === taskId)
+  if (found) {
+    updateTask(taskId, {
+      status: found.status,
+      total: found.total,
+      completed: found.completed,
+      failed: found.failed,
+      current: found.current || '',
+      errors: found.errors || [],
+      error: found.error || '',
+      completed_at: found.completed_at || 0,
+      file_size: found.file_size || 0,
+    })
+    // 如果是进行中，重新订阅
+    if (found.status === 'running') {
+      if (subscriptions.has(taskId)) {
+        subscriptions.get(taskId)()
+        subscriptions.delete(taskId)
+      }
+      subscribeTask(taskId)
+    } else {
+      // 已完成/失败/取消，清理订阅
+      if (subscriptions.has(taskId)) {
+        subscriptions.get(taskId)()
+        subscriptions.delete(taskId)
       }
     }
-  } catch (e) {
-    console.error(`[downloadQueue] 刷新任务 ${taskId} 失败:`, e)
+  } else {
+    // 后端已无此任务（重启/清理）
+    removeTask(taskId)
   }
 }
 
@@ -161,88 +196,96 @@ const refreshTask = async (taskId) => {
  * - 重新订阅进行中的任务
  */
 const syncWithBackend = async () => {
-  try {
-    const result = await getBatchList()
-    if (!result.success) return
-    const backendTasks = new Map(result.data.map(t => [t.task_id, t]))
-    const localIds = new Set(tasks.value.keys())
-    const backendIds = new Set(backendTasks.keys())
+  // 启动时静默重试：后端需要 ~10s 加载，silentFetch 等到 ~14s
+  const result = await silentFetch(() => getBatchList(), {
+    context: '同步后端任务',
+    maxRetries: 3,        // 2s + 4s + 8s = 14s
+  })
+  if (!result || !result.success) return
+  const backendTasks = new Map(result.data.map(t => [t.task_id, t]))
+  const localIds = new Set(tasks.value.keys())
+  const backendIds = new Set(backendTasks.keys())
 
-    // 1. 后端有，前端没有 → 添加
-    for (const [taskId, bt] of backendTasks) {
-      if (!localIds.has(taskId)) {
-        tasks.value.set(taskId, {
-          task_id: taskId,
-          name: bt.name,
+  // 1. 后端有，前端没有 → 添加
+  for (const [taskId, bt] of backendTasks) {
+    if (!localIds.has(taskId)) {
+      tasks.value.set(taskId, {
+        task_id: taskId,
+        name: bt.name,
+        status: bt.status,
+        total: bt.total,
+        completed: bt.completed,
+        failed: bt.failed,
+        current: bt.current || '',
+        errors: bt.errors || [],
+        error: bt.error || '',
+        created_at: bt.created_at || Date.now() / 1000,
+        completed_at: bt.completed_at || 0,
+        file_size: bt.file_size || 0,
+      })
+    } else {
+      // 同步最新进度
+      const local = tasks.value.get(taskId)
+      if (local.status === 'running' && bt.status !== 'running') {
+        // 状态有变化，更新
+        updateTask(taskId, {
           status: bt.status,
-          total: bt.total,
           completed: bt.completed,
           failed: bt.failed,
           current: bt.current || '',
           errors: bt.errors || [],
           error: bt.error || '',
-          created_at: bt.created_at || Date.now() / 1000,
           completed_at: bt.completed_at || 0,
           file_size: bt.file_size || 0,
         })
-      } else {
-        // 同步最新进度
-        const local = tasks.value.get(taskId)
-        if (local.status === 'running' && bt.status !== 'running') {
-          // 状态有变化，更新
-          updateTask(taskId, {
-            status: bt.status,
-            completed: bt.completed,
-            failed: bt.failed,
-            current: bt.current || '',
-            errors: bt.errors || [],
-            error: bt.error || '',
-            completed_at: bt.completed_at || 0,
-            file_size: bt.file_size || 0,
-          })
-        }
       }
     }
-
-    // 2. 前端有，后端没有 → 移除
-    for (const taskId of localIds) {
-      if (!backendIds.has(taskId)) {
-        tasks.value.delete(taskId)
-      }
-    }
-
-    // 3. 重新订阅所有进行中的任务
-    for (const [taskId, bt] of backendTasks) {
-      if (bt.status === 'running') {
-        subscribeTask(taskId)
-      }
-    }
-
-    tasks.value = new Map(tasks.value)
-  } catch (e) {
-    console.error('[downloadQueue] 同步后端任务失败:', e)
   }
+
+  // 2. 前端有，后端没有 → 移除
+  for (const taskId of localIds) {
+    if (!backendIds.has(taskId)) {
+      tasks.value.delete(taskId)
+    }
+  }
+
+  // 3. 重新订阅所有进行中的任务
+  for (const [taskId, bt] of backendTasks) {
+    if (bt.status === 'running') {
+      subscribeTask(taskId)
+    }
+  }
+
+  tasks.value = new Map(tasks.value)
 }
 
 /**
  * 取消/删除任务
  */
 const cancelTask = async (taskId) => {
-  try {
-    // 先取消订阅
-    if (subscriptions.has(taskId)) {
-      subscriptions.get(taskId)()
-      subscriptions.delete(taskId)
-    }
-    // 调后端
-    await cancelBatchTask(taskId)
-    // 从列表移除
-    removeTask(taskId)
-    return { success: true }
-  } catch (e) {
-    console.error(`[downloadQueue] 取消任务 ${taskId} 失败:`, e)
-    throw e
+  // 先取消订阅
+  if (subscriptions.has(taskId)) {
+    subscriptions.get(taskId)()
+    subscriptions.delete(taskId)
   }
+  // 调后端（用户主动操作，错误要暴露给 UI，但静默重试一次）
+  let err
+  for (let i = 0; i < 2; i++) {  // 最多重试 1 次
+    try {
+      await cancelBatchTask(taskId)
+      // 从列表移除
+      removeTask(taskId)
+      return { success: true }
+    } catch (e) {
+      err = e
+      if (i < 1) {
+        await new Promise(r => setTimeout(r, 1500))  // 等 1.5s 重试
+      }
+    }
+  }
+  // 重试后仍失败：console.warn 而不是 console.error
+  console.warn(`[downloadQueue] 取消任务 ${taskId} 失败:`, err?.message || err)
+  throw err
 }
 
 /**
@@ -257,15 +300,23 @@ const removeTask = (taskId) => {
  * 下载完成任务的 zip
  */
 const downloadTask = async (taskId) => {
-  try {
-    const filename = await downloadBatchAsZip(taskId)
-    // 下载完成后删除任务
-    await cancelTask(taskId)
-    return filename
-  } catch (e) {
-    console.error(`[downloadQueue] 下载任务 ${taskId} 失败:`, e)
-    throw e
+  // 用户主动操作，错误要暴露给 UI，但 console.warn 而不是 console.error
+  let err
+  for (let i = 0; i < 2; i++) {
+    try {
+      const filename = await downloadBatchAsZip(taskId)
+      // 下载完成后删除任务
+      await cancelTask(taskId)
+      return filename
+    } catch (e) {
+      err = e
+      if (i < 1) {
+        await new Promise(r => setTimeout(r, 1500))
+      }
+    }
   }
+  console.warn(`[downloadQueue] 下载任务 ${taskId} 失败:`, err?.message || err)
+  throw err
 }
 
 /**
@@ -286,10 +337,26 @@ const clearCompleted = async () => {
 }
 
 // ==================== 抽屉控制 ====================
+//
+// 关键设计：syncWithBackend 不在 init() 触发，而是 lazy 在 openDrawer 触发。
+// 这样启动时**完全零 fetch**（Chrome DevTools 网络层错误无法用 JS 拦截）。
+//
+// 但 syncWithBackend 自身仍然会做静默重试（silentFetch）——
+// 因为用户打开 drawer 时，后端可能仍没就绪（init 时不做 → 用户可能
+// 立即点开 drawer，那时后端只启动了 1-2s）。
 
-const openDrawer = () => { drawerOpen.value = true }
+const openDrawer = async () => {
+  drawerOpen.value = true
+  // 打开抽屉时按需同步任务列表
+  await syncWithBackend()
+}
 const closeDrawer = () => { drawerOpen.value = false }
-const toggleDrawer = () => { drawerOpen.value = !drawerOpen.value }
+const toggleDrawer = async () => {
+  drawerOpen.value = !drawerOpen.value
+  if (drawerOpen.value) {
+    await syncWithBackend()
+  }
+}
 
 // ==================== Computed ====================
 
@@ -312,10 +379,24 @@ const completedCount = computed(() => {
 // ==================== 初始化 ====================
 
 /**
- * 启动时初始化：从后端同步任务列表
+ * 启动时初始化：故意不做任何 fetch
+ *
+ * 原因：Chrome DevTools 对任何 fetch 失败都会自动打印网络层错误
+ * （如 ERR_EMPTY_RESPONSE / net::ERR_ABORTED），这是浏览器自身行为，
+ * JS 代码无法拦截。
+ *
+ * 后端启动慢（~10s 加载 30+ 数据源），前端启动时立即调 fetch 几乎必败。
+ *
+ * 解决方案：
+ * 1. App 启动时**不**自动调 syncWithBackend
+ * 2. 用户**主动操作**（打开抽屉 / 点击刷新）时调
+ * 3. silentFetch 在应用层重试 + 静默
+ *
+ * 这样启动期间**零**网络层错误，用户体验最佳。
  */
 const init = async () => {
-  await syncWithBackend()
+  // 故意不做事。syncWithBackend 在 openDrawer / 手动刷新时按需调用
+  return
 }
 
 // ==================== 暴露 API ====================

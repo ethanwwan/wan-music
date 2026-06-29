@@ -134,7 +134,7 @@ class MusicClient:
             else:
                 parse_id = song_id_str
 
-            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric)
+            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric, quality_map=quality_map)
             if result and result.get('url'):
                 # 标记实际使用的音质（前端可基于此判断是否降级）
                 if try_quality != quality:

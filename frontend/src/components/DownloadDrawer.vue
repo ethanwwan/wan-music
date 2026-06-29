@@ -197,7 +197,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import * as icons from '@ant-design/icons-vue'
 const {
@@ -320,10 +320,6 @@ const handleClearCompleted = async () => {
     clearing.value = false
   }
 }
-
-onMounted(() => {
-  store.syncWithBackend()
-})
 </script>
 
 <style scoped>

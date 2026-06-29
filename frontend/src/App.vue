@@ -139,7 +139,9 @@ onMounted(() => {
   loadConfig()                  // 异步拉取后端 /config，24h 缓存
   initThemeFromLocalStorage()
   themeToken.colorPrimary = DEFAULT_THEME_COLOR
-  queueStore.init()
+  // 不调 queueStore.init()，因为 init 内部是空操作
+  // syncWithBackend 在用户主动打开 drawer 时按需触发（store.openDrawer）
+  // 避免启动时 /download/batch/list 在后端未就绪时调用导致 ERR_EMPTY_RESPONSE
 })
 </script>
 
