@@ -331,6 +331,17 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
   let closed = false
   let timer = null
   let consecutiveErrors = 0
+  // 智能轮询：状态/进度有变化时高频，无变化时降频
+  let lastStatus = null
+  let lastCompleted = -1
+  let lastFailed = -1
+  let slowMode = false
+
+  const scheduleNext = (delay) => {
+    if (closed) return
+    if (timer) clearTimeout(timer)   // 取消上一次的延时
+    timer = setTimeout(poll, delay)
+  }
 
   const poll = async () => {
     if (closed) return
@@ -342,7 +353,20 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
         onComplete?.(data)
         return close()
       }
+
+      // 智能调度：状态/计数有变化 → 1s 实时；无变化 → 3s 降频
+      const changed = (
+        data.status !== lastStatus ||
+        data.completed !== lastCompleted ||
+        data.failed !== lastFailed
+      )
+      lastStatus = data.status
+      lastCompleted = data.completed
+      lastFailed = data.failed
+
       onProgress?.(data)
+      scheduleNext(changed || !slowMode ? 1000 : 3000)
+      slowMode = !slowMode   // 简单实现：第一次 fast (1s)，之后 slow (3s)，有变化时重置
     } catch (err) {
       consecutiveErrors++
       // 连续 3 次失败才报错（容忍短暂网络抖动）
@@ -350,19 +374,19 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
         onError?.(err)
         return close()
       }
-      // 否则静默重试
+      // 否则静默重试（2s 后）
+      scheduleNext(2000)
     }
   }
 
-  // 立即跑一次，然后每 1 秒轮询
+  // 立即跑一次
   poll()
-  timer = setInterval(poll, 1000)
 
   function close() {
     if (closed) return
     closed = true
     if (timer) {
-      clearInterval(timer)
+      clearTimeout(timer)
       timer = null
     }
   }
