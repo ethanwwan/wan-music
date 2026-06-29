@@ -213,7 +213,6 @@ class BatchDownloadService:
         if not items:
             raise ValueError("缺少 items 参数")
 
-        estimated_file_size = self._estimate_size(items)
         task_id = f"task_{uuid.uuid4().hex[:16]}"
 
         # 初始化每首歌曲的状态：pending
@@ -253,7 +252,7 @@ class BatchDownloadService:
                 'cancelled': False,
                 'created_at': time.time(),
                 'completed_at': 0,
-                'file_size': estimated_file_size,
+                'file_size': 0,                # 前端实时累加 done 歌曲的 file_size
                 'songs': initial_songs,        # per-song 状态数组
             }
 
@@ -267,7 +266,7 @@ class BatchDownloadService:
         return {
             'task_id': task_id,
             'total': len(items),
-            'file_size': estimated_file_size,
+            'file_size': 0,    # 前端实时累加 done 歌曲的 file_size
         }
 
     def get_list(self) -> list:
@@ -357,31 +356,6 @@ class BatchDownloadService:
             _safe_remove(t.get('zip_path', ''))
 
     # ==================== 私有方法（仅服务内部使用） ====================
-
-    @staticmethod
-    def _estimate_size(items: list) -> int:
-        """从 qualityMap 估算总文件大小
-
-        qualityMap 格式（前端约定）：
-        - 简版: {standard: 128, exhigh: 320, lossless: 999, ...}  ← value 是 kbps
-        - 完整版: {standard: {size: ...}, ...}  ← value 是 dict
-        """
-        total = 0
-        for item in items:
-            qm = item.get('qualityMap') or {}
-            quality = item.get('quality', 'lossless')
-            if quality in qm:
-                val = qm[quality]
-                if isinstance(val, dict):
-                    # 完整版：val = {size: ..., bitrate: ...}
-                    total += val.get('size', 0)
-                elif isinstance(val, (int, float)):
-                    # 简版：val = kbps，根据常见码率估算大小
-                    # 公式：size_bytes = (kbps * 1000 / 8) * duration_sec
-                    # 但我们没 duration，用 kbps * 150 作为粗略估算（4分钟平均）
-                    duration_sec = item.get('duration', 240) / 1000  # 默认 4 分钟
-                    total += int(val * 1000 / 8 * duration_sec)
-        return total
 
     @staticmethod
     def _task_to_dict(task_id: str, task: dict) -> dict:
@@ -617,14 +591,6 @@ class BatchDownloadService:
 
         # Phase 2: 单曲直接保留，多首打包 zip
         try:
-            # 累加实际文件大小（用于覆盖估算）
-            actual_size_total = 0
-            for r in completed_results:
-                try:
-                    actual_size_total += os.path.getsize(r['tmp_path'])
-                except OSError:
-                    pass
-
             if len(completed_results) == 1:
                 result = completed_results[0]
                 final_path = result['tmp_path']
@@ -636,8 +602,6 @@ class BatchDownloadService:
                     task['single_file'] = True
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
-                    # 单文件也用真实大小覆盖估算
-                    task['file_size'] = actual_size_total or task.get('file_size', 0)
             else:
                 fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
                 os.close(fd)
@@ -651,11 +615,6 @@ class BatchDownloadService:
                     task['zip_path'] = zip_path
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
-                    # 用真实大小覆盖估算（仅在成功时）
-                    try:
-                        task['file_size'] = os.path.getsize(zip_path)
-                    except OSError:
-                        pass
 
             # 启动延迟清理（TASK_TTL 秒未下载则清理）
             def _cleanup_task():
