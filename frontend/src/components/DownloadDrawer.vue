@@ -793,6 +793,13 @@ const handleClearCompleted = async () => {
   align-items: center !important;   /* 垂直居中：icon + 标题对齐 */
 }
 
+/* 展开图标（左侧箭头）加一点左边距，避开容器左边缘 */
+.task-errors :deep(.ant-collapse-expand-icon),
+.task-songs-section :deep(.ant-collapse-expand-icon),
+.task-errors.only-errors :deep(.ant-collapse-expand-icon) {
+  margin-left: 8px;
+}
+
 .task-errors :deep(.ant-collapse-content) {
   padding: 8px 0 !important;
 }
@@ -952,7 +959,7 @@ const handleClearCompleted = async () => {
   margin-bottom: 12px;
   border-radius: 8px;
   background: var(--color-surface-light, #f9fafb);
-  padding: 2px;
+  padding: 2px 2px 2px 8px;   /* 左边距让出 3px 状态条 + 5px 呼吸空间 */
   border-left: 3px solid transparent;
   transition: all 0.2s ease;
 }
