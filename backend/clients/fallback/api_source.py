@@ -60,6 +60,8 @@ class ApiSource:
         post_data: dict (for POST)
         # POST 数据是否需要 json 编码（True: json.dumps；False: form-urlencoded）
         is_json: bool
+        # 是否需要网易云 eapi 加密（True: 自动 AES-ECB 加密 body 为 params=...）
+        is_eapi: bool = False
 
         # Cookie
         needs_cookie: 是否需要 cookie（netease 官方需要）
@@ -105,6 +107,7 @@ class ApiSource:
     timeout: int = 10
     post_data: dict = field(default_factory=dict)
     is_json: bool = False
+    is_eapi: bool = False  # 网易云 eapi 端点需要 AES-ECB 加密 body
 
     # Cookie
     needs_cookie: bool = False

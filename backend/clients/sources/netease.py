@@ -95,11 +95,20 @@ NETEASE_PARSE_URL_SOURCES = [
         name='netease_official_url',
         platform='netease',
         priority=0,
-        description='网易云官方 player/url（需 cookie 才能拿付费资源）',
+        description='网易云官方 player/url eapi (AES 加密, 需 cookie 才能拿付费资源)',
         can_parse_url=True,
         parse_url_url='https://interface3.music.163.com/eapi/song/enhance/player/url/v1?',
         method='POST',
-        post_data={'ids': '[{song_id}]', 'br': '{__br__}', 'e_r': True},
+        # eapi payload 格式: ids=[id], level=lossless/hires, encodeType=flac/mp3
+        #   {song_id} 占位符会被替换为数字（如 3398250102）
+        #   {quality} 会被替换为用户选择的音质（lossless/hires/exhigh/standard）
+        #   {encode_type} 会被替换为 flac/mp3（根据 quality 决定）
+        post_data={
+            'ids': '[{song_id}]',
+            'level': '{quality}',
+            'encodeType': '{encode_type}',
+        },
+        is_eapi=True,  # ★ 关键：触发 chain._fetch_one 用 AES-ECB 加密
         extract_url=extract_netease_official_url,
         headers=NETEASE_EAPI_HEADERS,
         timeout=10,
