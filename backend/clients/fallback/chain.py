@@ -37,11 +37,20 @@ class FallbackChain:
     """
 
     def __init__(self, sources: List[ApiSource], platform: str = '', strategy: str = 'serial',
-                 max_workers: int = 4, request_timeout_default: int = 10):
+                 max_workers: int = 4, request_timeout_default: int = 10,
+                 max_chain_seconds: float = 6.0):
+        """
+        Args:
+            max_chain_seconds: 整条链的最大执行时间（秒），超过立即返回
+                - 0 或负数表示不限制
+                - 设为 6 是经验值：留 2s 给前端 8s timeout 内的网络/JSON 解析开销
+                - 配合前端 DEFAULT_TIMEOUT_MS=8s，避免 ERR_EMPTY_RESPONSE
+        """
         self.platform = platform
         self.strategy = strategy  # 'serial' | 'parallel'
         self.max_workers = max_workers
         self.request_timeout_default = request_timeout_default
+        self.max_chain_seconds = max_chain_seconds
         # 按 priority 排序
         self.sources = sorted([s for s in sources if s.platform == platform or platform == ''],
                               key=lambda s: s.priority)
@@ -328,7 +337,19 @@ class FallbackChain:
             recent = [s.name for s in sources if self._is_source_success_recent(s.name)]
             logger.debug(f'[{self.platform}.{op}] 优先使用最近成功源: {recent}')
 
+        # ★ 链级超时：避免链中多个源依次超时导致总耗时超过前端 timeout
+        chain_start = time.time()
+
         for source in sources:
+            # ★ 链级超时检查：超过 max_chain_seconds 立即放弃
+            if self.max_chain_seconds > 0:
+                elapsed_chain = time.time() - chain_start
+                if elapsed_chain >= self.max_chain_seconds:
+                    logger.warning(
+                        f'[{self.platform}.{op}] ⏱️ 链超时 ({elapsed_chain:.1f}s >= {self.max_chain_seconds}s)，'
+                        f'放弃剩余 {len(sources) - sources.index(source)} 个源（{source.name} 起）'
+                    )
+                    return _default_for_op(op), None
             # ★ 跳过失败名单（两段式：global + per-rid）
             if self._is_source_failed(source.name, song_id):
                 reason = '全局' if source.name in self._global_failed else f'per-rid({song_id})'
@@ -548,6 +569,14 @@ class FallbackChain:
             is_json = source.is_json
 
         # 发起请求
+        # ★ 关键：源 timeout 上限 = 链 timeout - 1s 余量
+        # 例：源 timeout=15, 链 timeout=6 → 该源会跑 15s，链超时失去意义
+        # 这里取 min(源, 链-余量)，让单源不会撑爆链
+        # 例外：源 timeout ≤ 5s 时不截断（本身就快，不要越搞越慢）
+        eff_timeout = source.timeout or self.request_timeout_default
+        if self.max_chain_seconds > 0 and eff_timeout > 5:
+            eff_timeout = min(eff_timeout, max(2, int(self.max_chain_seconds - 1)))
+
         if method.upper() == 'POST':
             # 网易云 eapi 端点：先用 AES-ECB 加密 payload，再以 form-encoded "params=..." 发送
             if source.is_eapi:
@@ -558,10 +587,10 @@ class FallbackChain:
             else:
                 body = json.dumps(post_data) if is_json else post_data
             r = self._session.post(url, data=body, headers=headers, cookies=cookies,
-                                   timeout=source.timeout or self.request_timeout_default)
+                                   timeout=eff_timeout)
         else:
             r = self._session.get(url, headers=headers, cookies=cookies,
-                                  timeout=source.timeout or self.request_timeout_default)
+                                  timeout=eff_timeout)
 
         # 解析
         if r.status_code >= 400:

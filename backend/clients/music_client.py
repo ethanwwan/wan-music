@@ -212,8 +212,22 @@ class MusicClient:
                 f"请求={quality} → 实际起始={chain[0]}（qualityMap 或平台能力限制）"
             )
 
+        # ★ 总超时：每个 quality 单独跑可能很慢（链超时 6s × 3 音质 = 18s），
+        # 超出后立即放弃剩余音质，返回已有结果
+        # 配合前端 8s timeout 留 2s 余量
+        import time as _time
+        song_start = _time.time()
+        max_total_seconds = 6.5
+
         last_result = None
         for try_quality in chain:
+            # 检查总耗时
+            if _time.time() - song_start >= max_total_seconds:
+                logger.warning(
+                    f'[{platform}/{song_id_str}] ⏱️ 总耗时超 {max_total_seconds}s，'
+                    f'放弃剩余 {len(chain) - chain.index(try_quality)} 个音质（{try_quality} 起）'
+                )
+                break
             # 酷狗特殊：lossless/hires 用 FLAC hash（id = SQFileHash），
             # exhigh/standard 用 MP3 hash（mp3_hash = FileHash）
             if platform == 'kugou' and mp3_hash and try_quality in ('exhigh', 'standard'):

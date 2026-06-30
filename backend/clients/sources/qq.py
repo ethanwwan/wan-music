@@ -420,14 +420,16 @@ QQ_PARSE_URL_SOURCES = [
     # 11. QQ 官方 music.vkey.GetVkey/UrlGetVkey（★ 关键数据源，能拿 FLAC）
     # 完整照搬 v1.1.3 _get_song_url_official 真实能下载 FLAC 的实现
     # 实测：002dB4xY3S3gCr (巴拉莱卡) → 25.3MB FLAC ✅
-    # 无 cookie 必败：result=101404/purl 空 → fallback 链继续尝试 M4A
-    # ❌ 关闭：vkeys 已能拿 FLAC，且官方 API 必浪费 10s（无 cookie）
+    # 必须有 QQ cookie（uin + qqmusic_key），无 cookie 时 result=101404/purl 空
+    # needs_cookie=True：chain 框架自动跳过无 cookie 情况，行为与 netease 一致
     ApiSource(
         name='qq_official_vkey',
         platform='qq',
-        priority=0,  # 历史保留，已禁用
-        description='QQ 官方 vkey (v1.1.3 同款，无 cookie 必失败，已禁用)',
-        enabled=False,  # ★ 关闭：无 cookie 时 100% 失败，浪费 10s
+        priority=0,  # 最高：有 cookie 时能拿 FLAC
+        description='QQ 官方 vkey (v1.1.3 同款，需 cookie 才能拿 FLAC)',
+        enabled=True,
+        needs_cookie=True,
+        cookie_file='qq_cookie.txt',
         can_parse_url=True,
         method='POST',
         parse_url_url='https://u.y.qq.com/cgi-bin/musicu.fcg',
@@ -435,7 +437,7 @@ QQ_PARSE_URL_SOURCES = [
         prepare_request=_qq_vkey_prepare_request,
         extract_url=_extract_qq_official_vkey,
         headers=QQ_COMMON_HEADERS,
-        timeout=10,
+        timeout=8,
         max_quality='hires',  # 有 cookie 时理论能拿 SQ00 (Hi-Res)
     ),
 ]
@@ -600,7 +602,7 @@ QQ_PARSE_LYRIC_SOURCES = [
         parse_lyric_url='https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={song_id}&format=json',
         extract_lyric=lambda d: _decode_qq_cgi_lyric(d) if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
-        timeout=10,
+        timeout=5,  # c.y.qq.com 有时 ReadTimeout，缩短超时避免 8s 前端超时
     ),
     # 1. xunhuisi 提供 LRC 歌词（在 lyric 字段）
     ApiSource(
