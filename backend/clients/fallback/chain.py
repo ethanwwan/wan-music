@@ -95,7 +95,7 @@ class FallbackChain:
               如果 vkeys_url 失败，mark_source_failed 会覆盖
         """
         self._success_recent[name] = time.time() + expire_seconds
-        logger.debug(f'[{self.platform}] 源 {name} 最近成功（{expire_seconds}s 内优先使用）')
+        logger.info(f'[{self.platform}] 源 {name} 最近成功（{expire_seconds}s 内优先使用）')
 
     def _is_source_success_recent(self, name: str) -> bool:
         """检查源是否在成功记忆内（自动清理过期项）"""
