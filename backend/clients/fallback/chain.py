@@ -443,26 +443,57 @@ class FallbackChain:
         return bool(data)
 
     def _load_cookie(self, cookie_file: str) -> dict:
-        """从 cookie 文件加载（netease 专用）"""
+        """从 cookie 文件加载（netease 专用）
+
+        支持两种格式：
+          1. Netscape 7-tab 格式（标准）：
+                # Netscape HTTP Cookie File
+                domain	flag	path	secure	expiration	name	value
+          2. 单行 key=value 格式（Cookie header 风格，用 ; 分隔）：
+                _ntes_nnid=xxx; _ntes_nuid=xxx; MUSIC_U=xxx; ...
+
+        候选路径（CWD 启动 vs docker 部署）：
+          backend/netease_cookie.txt           ← 相对 CWD
+          backend/clients/cookie/...           ← 实际项目结构
+          /app/cookie/...                      ← docker 镜像根
+          /app/clients/cookie/...              ← docker 镜像源码路径
+        """
         from pathlib import Path
-        # 候选路径
         candidates = [
-            Path(cookie_file),
-            Path('/app/cookie') / Path(cookie_file).name,
-            Path('/app/clients/cookie') / Path(cookie_file).name,
+            Path(cookie_file),                                          # CWD 相对
+            Path('clients/cookie') / Path(cookie_file).name,            # 项目内 (CWD=backend/)
+            Path('backend/clients/cookie') / Path(cookie_file).name,    # 项目内 (CWD=root/)
+            Path('/app/cookie') / Path(cookie_file).name,               # docker 根
+            Path('/app/clients/cookie') / Path(cookie_file).name,       # docker 源码路径
         ]
         for p in candidates:
             if p.exists():
                 try:
-                    lines = p.read_text(encoding='utf-8', errors='ignore').splitlines()
+                    content = p.read_text(encoding='utf-8', errors='ignore').strip()
+                    if not content:
+                        continue
                     cookies = {}
-                    for line in lines:
-                        if not line.strip() or line.startswith('#'):
-                            continue
-                        parts = line.split('\t')
-                        if len(parts) >= 7:
-                            cookies[parts[5]] = parts[6]
-                    return cookies
+                    # 格式探测：是否含 \t → Netscape 格式；否则 → 单行 key=value
+                    if '\t' in content:
+                        # Netscape 7-tab 格式
+                        for line in content.splitlines():
+                            if not line.strip() or line.startswith('#'):
+                                continue
+                            parts = line.split('\t')
+                            if len(parts) >= 7:
+                                cookies[parts[5]] = parts[6]
+                    else:
+                        # 单行 key=value 格式（Cookie header 风格，; 分隔）
+                        for pair in content.split(';'):
+                            pair = pair.strip()
+                            if '=' in pair:
+                                k, v = pair.split('=', 1)
+                                cookies[k.strip()] = v.strip()
+                    if cookies:
+                        logger.info(
+                            f'[{self.platform}] 加载 cookie {p}（{len(cookies)} 个字段）'
+                        )
+                        return cookies
                 except Exception as e:
                     logger.debug(f'加载 cookie 失败 {p}: {e}')
         return {}
