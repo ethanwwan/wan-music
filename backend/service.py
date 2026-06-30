@@ -614,6 +614,7 @@ class BatchDownloadService:
                 last_error = e
                 # ★ 4xx 永久错误：标记 api_source 为坏源，让重试自动换源
                 # 场景：vkeys_url 返的 URL → 403 → mark vkeys_url → 下次重试跳过
+                # 配合 chain 框架的 per-rid 失败：传 song_id 让该失败只影响当前 song
                 if isinstance(e, requests.exceptions.HTTPError):
                     status_code = e.response.status_code if e.response is not None else 0
                     if 400 <= status_code < 500 and status_code not in (408, 425, 429):
@@ -621,11 +622,25 @@ class BatchDownloadService:
                         if isinstance(api_source, dict):
                             url_source = api_source.get('url')
                             if url_source and source:
-                                music_client.mark_source_failed(
-                                    source, url_source,
-                                    reason=f'HTTP {status_code}: {str(e)[:100]}',
-                                    expire_seconds=300,  # 5 分钟过期，QQ 风控通常临时
-                                )
+                                # 4xx → per-rid permanent（30min）只影响该 song 的同源
+                                # 但 QQ 403 风控是全局性的（短 TTL）→ 改用 transient 5min
+                                # 区分：403/451 版权风控 → 短 transient；404 资源不存在 → per-rid permanent
+                                if status_code in (403, 451):
+                                    music_client.mark_source_failed(
+                                        source, url_source,
+                                        reason=f'HTTP {status_code}: 风控/版权',
+                                        expire_seconds=300,  # 5min TTL，QQ 风控通常临时
+                                        scope='transient',  # 强制全局（QQ 风控对所有 song 都生效）
+                                    )
+                                else:
+                                    # 404 等资源错误 → per-rid permanent（不影响其他 song）
+                                    music_client.mark_source_failed(
+                                        source, url_source,
+                                        reason=f'HTTP {status_code}: {str(e)[:100]}',
+                                        expire_seconds=1800,  # 30min
+                                        song_id=song_id,
+                                        scope='permanent',
+                                    )
                 # 异常分类：只重试可重试错误（网络/临时），确定性错误立即放弃
                 retryable, reason = _classify_error(e, attempt, max_attempts)
                 if retryable:

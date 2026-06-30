@@ -53,7 +53,8 @@ class MusicClient:
     # ==================== 坏源管理（service 层调用） ====================
 
     def mark_source_failed(self, platform: str, source_name: str,
-                           reason: str = '', expire_seconds: int = 300) -> None:
+                           reason: str = '', expire_seconds: int = 300,
+                           song_id: str = None, scope: str = 'auto') -> None:
         """标记某 platform 的某个 source 为临时失败（让下次重试自动跳过）
 
         字段约定（用户定义）：
@@ -63,11 +64,19 @@ class MusicClient:
         场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
         通知 chain 这个 source 不可用，避免下次重试仍用同源。
 
+        两段式失败缓存（向后兼容）：
+          scope='auto'       → 自动分类（默认，旧调用方式）
+          scope='transient'  → 强制全局（5xx/timeout）
+          scope='permanent'  → 强制 per-rid（4xx/empty/parse，需要 song_id）
+          不传 song_id 时降级为全局（旧行为）
+
         Args:
-            platform: 4 大平台名（'netease'/'qq'/'kugou'/'kuwo'）
-            source_name: 失败的 source 名（如 'vkeys_url'）
+            platform: 4 大平台名
+            source_name: 失败的 source 名
             reason: 失败原因（仅用于日志）
-            expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
+            expire_seconds: TTL（transient 5min, permanent 30min）
+            song_id: 当前 song ID（per-rid 失败时需要）
+            scope: 'auto'/'transient'/'permanent'
         """
         try:
             client = self._get_client(platform)
@@ -77,7 +86,10 @@ class MusicClient:
                       client.parse_lyric_chain, client.parse_playlist_chain,
                       client.search_chain):
             if chain:
-                chain.mark_source_failed(source_name, expire_seconds, reason)
+                chain.mark_source_failed(
+                    source_name, expire_seconds, reason,
+                    song_id=song_id, scope=scope,
+                )
 
     def reset_failed_sources(self, platform: str = None) -> None:
         """清空失败名单（task 启动时调用）

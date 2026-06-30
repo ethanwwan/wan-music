@@ -49,9 +49,22 @@ class FallbackChain:
         self._session = requests.Session()
         # 统计
         self._stats = defaultdict(lambda: {'ok': 0, 'fail': 0, 'last_error': '', 'last_used': 0, 'total_ms': 0})
-        # 临时失败名单：mark_source_failed() 加入，过期自动恢复
-        # 场景：下载 4xx 时通知 chain 跳过该源，避免重试仍用同源失败
-        self._failed_sources: dict = {}  # {name: expire_timestamp}
+        # ============ 失败名单：两段式设计 ============
+        # 1. 全局 transient 失败（per-source，服务端临时故障如 5xx/timeout）
+        #    旧设计用 _failed_sources，5 分钟内其他歌曲也跳过同一源。
+        #    改造后只用于真正"服务不可用"的场景，TTL 短（60-120s）。
+        self._global_failed: dict = {}  # {name: expire_timestamp}
+        # 2. Per-rid permanent 失败（per-source + song_id，这首歌没数据）
+        #    例：江南在 kuwo_official_lyric 返空（无版权）→ 只对江南跳过该源，
+        #    不影响晴天/十年等其他 rid。这是旧设计缺失的关键能力。
+        #    容量上限 _max_per_rid_cache 防内存爆。
+        self._per_rid_failed: dict = {}  # {(name, song_id): expire_timestamp}
+        self._max_per_rid_cache = 1000
+        # 3. 死 URL 列表（per-URL，URL HEAD 验证失败时记录）
+        #    旧设计把"URL 404"算作"源失败"，会误伤其他 URL。
+        #    现在只死该 URL，TTL 5min。
+        self._url_dead: dict = {}  # {url: expire_timestamp}
+        # ============================================
         # 成功记忆：mark_source_success() 记录成功时间，过期后回归 priority
         # 场景：vkeys_url 成功下载后，5 分钟内其他歌曲优先用 vkeys_url（直到它失败）
         self._success_recent: dict = {}  # {name: success_at_timestamp}
@@ -65,34 +78,111 @@ class FallbackChain:
         return False
 
     def mark_source_failed(self, name: str, expire_seconds: int = 300,
-                           reason: str = '') -> None:
-        """标记 source 临时失败（默认 5 分钟内 try_fetch 自动跳过）
+                           reason: str = '', song_id: str = None,
+                           scope: str = 'auto') -> None:
+        """标记 source 临时失败
 
         字段约定（用户定义）：
           self.platform = 4 大 platform（netease/qq/kugou/kuwo）
           name          = source 名称（底层 API 域名，如 'vkeys_url'）
 
-        场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
-        通知 chain 这个 source 不可用，避免下次重试仍用同源。
+        两段式设计：
+          scope='transient'  → 写入 _global_failed（per-source）
+                              用于 5xx/timeout/网络错误等"服务端临时故障"
+                              默认 TTL 120s（兼容旧行为 expire_seconds=300）
+          scope='permanent'  → 写入 _per_rid_failed（per-source + song_id）
+                              用于 4xx/empty/parse_error 等"这首歌该源没数据"
+                              默认 TTL 1800s（30 分钟）
+                              必须传 song_id 才生效
+          scope='auto'       → 根据 reason 字符串自动分类（向后兼容默认）
+                              含 'timeout'/'connect'/'5' 等关键词 → transient
+                              其他 → permanent（需 song_id，否则降级 transient）
 
-        Args:
-            name: 失败的 source 名称
-            expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
-            reason: 失败原因（仅用于日志）
+        旧调用方式（service.py 仍按此调用）默认 scope='auto' 走老逻辑：
+          - expire_seconds=300 仍按 5 分钟兜底
+          - 不传 song_id 时按 transient 处理（避免 per-rid 升级为全局时反而更宽松）
         """
-        self._failed_sources[name] = time.time() + expire_seconds
-        logger.warning(
-            f'[{self.platform}] 临时禁用 source {name}（{expire_seconds}s 内 try_fetch 跳过）'
-            f' 原因: {reason[:80]}'
+        # 自动分类
+        if scope == 'auto':
+            r = (reason or '').lower()
+            if any(k in r for k in ('timeout', 'timed out', 'connect', 'connection', '5xx', '5', 'proxy')):
+                scope = 'transient'
+            else:
+                scope = 'permanent' if song_id else 'transient'
+
+        if scope == 'transient':
+            ttl = expire_seconds
+            self._global_failed[name] = time.time() + ttl
+            logger.warning(
+                f'[{self.platform}] 全局禁用 source {name}（{ttl}s 内所有 song 都跳过）'
+                f' 原因: {reason[:80]}'
+            )
+        elif scope == 'permanent':
+            if not song_id:
+                # 没传 song_id 时降级为 transient（保证旧调用不破坏）
+                ttl = expire_seconds
+                self._global_failed[name] = time.time() + ttl
+                logger.warning(
+                    f'[{self.platform}] permanent 失败未传 song_id，降级为全局 {ttl}s: {name}'
+                )
+                return
+            ttl = expire_seconds
+            key = (name, str(song_id))
+            self._per_rid_failed[key] = time.time() + ttl
+            # LRU 容量控制
+            if len(self._per_rid_failed) > self._max_per_rid_cache:
+                # 删除最旧的 20%
+                n_drop = len(self._per_rid_failed) // 5 or 1
+                oldest = sorted(self._per_rid_failed.items(), key=lambda x: x[1])[:n_drop]
+                for k, _ in oldest:
+                    del self._per_rid_failed[k]
+                logger.debug(f'[{self.platform}] per-rid 失败缓存满，清理 {n_drop} 条')
+            logger.info(
+                f'[{self.platform}] per-rid 禁用 {name}（{song_id}）（{ttl}s 内跳过该 song）'
+                f' 原因: {reason[:80]}'
+            )
+        else:
+            raise ValueError(f'mark_source_failed: unknown scope={scope!r}')
+
+    def mark_url_dead(self, url: str, source_name: str = '',
+                      expire_seconds: int = 300) -> None:
+        """标记某个 URL 不可用（5min 内同 URL 跳过）
+
+        场景：parse_url 拿到 URL 后 HEAD 验证 4xx/超时 → 标记该 URL 死，
+        避免下次同 URL 再次触发 HEAD 探测浪费 5s 超时。
+        不会影响该 source 对其他 song 的工作（与旧 mark_source_failed 关键区别）。
+        """
+        self._url_dead[url] = time.time() + expire_seconds
+        logger.debug(
+            f'[{self.platform}] 标记死 URL ({source_name}, {expire_seconds}s): {url[:80]}'
         )
+
+    def _is_url_dead(self, url: str) -> bool:
+        """检查 URL 是否在死链列表中（自动清理过期项）"""
+        expire_at = self._url_dead.get(url)
+        if expire_at is None:
+            return False
+        if time.time() > expire_at:
+            del self._url_dead[url]
+            return False
+        return True
 
     def reset_failed_sources(self) -> None:
         """清空失败名单（通常在 task 启动时调用）"""
-        if self._failed_sources:
-            logger.info(f'[{self.platform}] 重置失败名单: {list(self._failed_sources.keys())}')
-            self._failed_sources.clear()
+        items = list(self._global_failed.keys())
+        per_rid_count = len(self._per_rid_failed)
+        url_count = len(self._url_dead)
+        if items or per_rid_count or url_count:
+            logger.info(
+                f'[{self.platform}] 重置失败名单: global={items}, '
+                f'per_rid={per_rid_count}, url_dead={url_count}'
+            )
+        self._global_failed.clear()
+        self._per_rid_failed.clear()
+        self._url_dead.clear()
 
-    def mark_source_success(self, name: str, expire_seconds: int = 86400) -> None:
+    def mark_source_success(self, name: str, expire_seconds: int = 86400,
+                            song_id: str = None) -> None:
         """标记 source 最近成功（默认 24 小时内优先使用）
 
         字段约定（用户定义）：
@@ -103,8 +193,26 @@ class FallbackChain:
               如果 vkeys_url 失败，mark_source_failed 会覆盖
         改为 24h：QQ/酷狗 等平台 API 稳定性以天为单位，
                  source 24h 内不会突然从"能下"变成"不能下"（除非风控）。
+
+        顺带：清掉 per-rid 中关于该 source 的失败记录，
+              因为这个 source 现在能成功 → 之前 per-rid 标记的失败应该失效。
+              （避免"江南失败后晴天明明成功还用不了"的脏状态）
         """
         self._success_recent[name] = time.time() + expire_seconds
+        # 清掉该 source 在 per-rid 中的所有失败记录
+        # 一次成功的请求说明该源整体可用
+        before = len(self._per_rid_failed)
+        self._per_rid_failed = {
+            k: v for k, v in self._per_rid_failed.items() if k[0] != name
+        }
+        cleared = before - len(self._per_rid_failed)
+        if cleared:
+            logger.debug(
+                f'[{self.platform}] source {name} 成功，顺带清掉 {cleared} 条 per-rid 失败'
+            )
+        # 同时清掉全局（如果它在失败名单里被 mark 过）
+        if name in self._global_failed:
+            del self._global_failed[name]
         logger.info(f'[{self.platform}] source {name} 最近成功（{expire_seconds}s 内优先使用）')
 
     def _is_source_success_recent(self, name: str) -> bool:
@@ -141,16 +249,36 @@ class FallbackChain:
             logger.debug(f'[verify_url] {url[:60]}... 验证失败: {type(e).__name__}: {str(e)[:60]}')
             return False
 
-    def _is_source_failed(self, name: str) -> bool:
-        """检查源是否在失败名单中（自动清理过期项）"""
-        expire_at = self._failed_sources.get(name)
-        if expire_at is None:
-            return False
-        if time.time() > expire_at:
-            del self._failed_sources[name]
-            logger.info(f'[{self.platform}] 源 {name} 失败名单已过期，自动恢复')
-            return False
-        return True
+    def _is_source_failed(self, name: str, song_id: str = None) -> bool:
+        """检查源是否在失败名单中（自动清理过期项）
+
+        两段式检查：
+          1. _global_failed：per-source，所有 song 都被跳过
+          2. _per_rid_failed：per-(source, song_id)，只跳过该 song
+
+        Args:
+            name: source 名
+            song_id: 当前 song 的 ID（可选；不传则只检查全局）
+        """
+        # 1. 全局检查（任何原因导致的"服务不可用"）
+        expire_at = self._global_failed.get(name)
+        if expire_at is not None:
+            if time.time() > expire_at:
+                del self._global_failed[name]
+                logger.info(f'[{self.platform}] 源 {name} 全局失败名单已过期，自动恢复')
+            else:
+                return True
+        # 2. Per-rid 检查（这首歌该源没数据）
+        if song_id:
+            key = (name, str(song_id))
+            expire_at = self._per_rid_failed.get(key)
+            if expire_at is not None:
+                if time.time() > expire_at:
+                    del self._per_rid_failed[key]
+                    logger.debug(f'[{self.platform}] 源 {name}({song_id}) per-rid 失败已过期')
+                else:
+                    return True
+        return False
 
     def get_health(self) -> dict:
         """获取所有源的健康状态"""
@@ -186,6 +314,8 @@ class FallbackChain:
         - 例：用户请求 lossless，xunhuisi_url (max_quality=exhigh) 应该跳过
         """
         user_quality = kwargs.get('quality', '')
+        # 取 song_id（per-rid 失败检查用）
+        song_id = kwargs.get('song_id') or kwargs.get('rid') or kwargs.get('mid') or kwargs.get('hash') or kwargs.get('playlist_id')
 
         # ★ 按成功记忆重排：最近成功的源排前面（24 小时内）
         # 稳定排序：保留 priority 顺序，只把成功过的源前置
@@ -199,10 +329,11 @@ class FallbackChain:
             logger.debug(f'[{self.platform}.{op}] 优先使用最近成功源: {recent}')
 
         for source in sources:
-            # ★ 跳过失败名单（mark_source_failed 标记的源）
-            if self._is_source_failed(source.name):
+            # ★ 跳过失败名单（两段式：global + per-rid）
+            if self._is_source_failed(source.name, song_id):
+                reason = '全局' if source.name in self._global_failed else f'per-rid({song_id})'
                 logger.info(
-                    f'[{self.platform}.{op}] 跳过 {source.name}（失败名单中，临时禁用）'
+                    f'[{self.platform}.{op}] 跳过 {source.name}（{reason} 失败名单中）'
                 )
                 continue
             # 关键：按 max_quality 过滤
@@ -225,22 +356,33 @@ class FallbackChain:
 
             logger.info(f'[{self.platform}.{op}] 尝试 {source.name} (P={source.priority})...')
             t0 = time.time()
+            elapsed_ms = 0
+            data = None
             try:
                 data = self._fetch_one(source, op, **kwargs)
                 elapsed_ms = int((time.time() - t0) * 1000)
                 if self._is_valid(data, op):
                     # ★ parse_url：拿到 URL 后立刻验证可用性（避免下载时才发现 4xx）
                     if op == 'parse_url' and isinstance(data, str):
+                        if self._is_url_dead(data):
+                            # 之前已验证过该 URL 不可用 → 直接跳过该源（不动 source 状态）
+                            logger.info(
+                                f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
+                            )
+                            continue
                         if not self._verify_url_reachable(data):
                             source._stats['fail'] += 1
                             source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时）'
                             source._stats['total_ms'] += elapsed_ms
-                            # 直接 mark 失败（5 分钟内不再尝试）
-                            self._failed_sources[source.name] = time.time() + 300
+                            # ★ 改造：只标记这个 URL 死，不影响 source 对其他 song 的工作
+                            # 旧版会全局禁用 source 5min（误伤其他 song）
+                            self.mark_url_dead(data, source.name, expire_seconds=300)
                             logger.warning(
-                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已 mark 失败 5 分钟）: {data[:80]}'
+                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
                             )
                             continue
+                    # 成功：清理该 source 的 per-rid 失败记录 + 全局失败
+                    self._per_rid_failed.pop((source.name, str(song_id)) if song_id else None, None)
                     source._stats['ok'] += 1
                     source._stats['last_used'] = time.time()
                     source._stats['total_ms'] += elapsed_ms
@@ -251,17 +393,63 @@ class FallbackChain:
                         f'[{self.platform}.{op}] ✅ {source.name} 成功 ({elapsed_ms}ms){url_preview}'
                     )
                     return data, source.name
-                # 拿到数据但无效（如 url 为空）算 fail
+                # 拿到数据但无效（如 url 为空 / lyric 为空）→ permanent 失败（per-rid）
                 source._stats['fail'] += 1
-                source._stats['last_error'] = '数据无效'
+                source._stats['last_error'] = '数据无效（empty/parse）'
                 source._stats['total_ms'] += elapsed_ms
+                if song_id:
+                    self.mark_source_failed(
+                        source.name, expire_seconds=1800,  # 30 分钟
+                        reason='empty result / parse error', song_id=song_id, scope='permanent',
+                    )
+                else:
+                    # 没有 song_id 时降级为 transient
+                    self.mark_source_failed(
+                        source.name, expire_seconds=300, reason='empty result (no song_id)', scope='transient',
+                    )
                 logger.info(
                     f'[{self.platform}.{op}] ⚠️ {source.name} 返空数据 ({elapsed_ms}ms)'
                 )
             except Exception as e:
                 source._stats['fail'] += 1
                 source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
-                logger.info(f'[{self.platform}.{op}] ❌ {source.name} 失败 ({type(e).__name__}): {str(e)[:80]}')
+                source._stats['total_ms'] += elapsed_ms
+                # 分类：5xx/timeout → transient（global）；4xx → permanent（per-rid）
+                status_code = getattr(e, 'status_code', None)
+                err_msg = f'{type(e).__name__}: {str(e)[:80]}'
+                if status_code and status_code >= 500:
+                    # 5xx → 全局临时
+                    self.mark_source_failed(
+                        source.name, expire_seconds=120, reason=err_msg, scope='transient',
+                    )
+                elif status_code and 400 <= status_code < 500:
+                    # 4xx → per-rid permanent
+                    if song_id:
+                        self.mark_source_failed(
+                            source.name, expire_seconds=1800, reason=err_msg,
+                            song_id=song_id, scope='permanent',
+                        )
+                    else:
+                        self.mark_source_failed(
+                            source.name, expire_seconds=300, reason=err_msg, scope='transient',
+                        )
+                elif isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+                    # 网络层 transient
+                    self.mark_source_failed(
+                        source.name, expire_seconds=120, reason=err_msg, scope='transient',
+                    )
+                else:
+                    # 其他异常（parse / extractor 错误）→ per-rid permanent
+                    if song_id:
+                        self.mark_source_failed(
+                            source.name, expire_seconds=1800, reason=err_msg,
+                            song_id=song_id, scope='permanent',
+                        )
+                    else:
+                        self.mark_source_failed(
+                            source.name, expire_seconds=300, reason=err_msg, scope='transient',
+                        )
+                logger.info(f'[{self.platform}.{op}] ❌ {source.name} 失败: {err_msg}')
         return _default_for_op(op), None
 
     def _try_parallel(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
@@ -377,7 +565,10 @@ class FallbackChain:
 
         # 解析
         if r.status_code >= 400:
-            raise RuntimeError(f'HTTP {r.status_code}')
+            # 把 status_code 挂在异常上，_try_serial 用来分类 5xx/4xx
+            err = RuntimeError(f'HTTP {r.status_code}')
+            err.status_code = r.status_code
+            raise err
 
         # 尝试 JSON
         try:

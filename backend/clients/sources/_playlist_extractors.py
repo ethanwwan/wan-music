@@ -105,8 +105,69 @@ def extract_qq_playlist(raw: dict, **kwargs) -> dict:
     }
 
 
+def _normalize_kugou_playlist_song(raw: dict) -> dict:
+    """把 mobilecdn.kugou.com 返回的歌曲 dict 标准化为 normalize_kugou_song 能识别的格式
+
+    移动端 API 字段（小写）：
+      - hash (主 hash)
+      - 320hash / sqhash (各音质 hash)
+      - filename = "歌手 - 歌名"（参考 music-lib kugou.go fetchPlaylistDetail）
+      - duration: 秒
+      - album_id / audio_id
+      - trans_param.union_cover (封面)
+
+    标准化映射（让 normalize_kugou_song 能直接处理）：
+      - hash → FileHash
+      - 320hash → FileHash（如需 320 音质时 normalize_kugou_song 自行覆盖）
+      - filename → 拆出 SingerName + SongName
+      - duration 秒 → 毫秒
+      - trans_param.union_cover → Image
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = dict(raw)  # 保留原字段
+
+    # 1. hash 兼容（playlist API 用小写 hash，normalize_kugou_song 用 FileHash）
+    h = raw.get('hash') or raw.get('FileHash') or ''
+    if h:
+        out['FileHash'] = h
+
+    # 2. filename 拆出歌手 + 歌名（参考 music-lib）
+    fn = raw.get('filename') or raw.get('FileName') or ''
+    if fn and (not raw.get('SongName') or not raw.get('SingerName')):
+        parts = fn.split(' - ', 1)
+        if len(parts) == 2:
+            if not raw.get('SingerName'):
+                out['SingerName'] = parts[0].strip()
+            if not raw.get('SongName'):
+                out['SongName'] = parts[1].strip()
+        elif not raw.get('SongName'):
+            out['SongName'] = fn.strip()
+
+    # 3. 封面：trans_param.union_cover → Image
+    if not raw.get('Image'):
+        tp = raw.get('trans_param') or {}
+        cover = tp.get('union_cover') if isinstance(tp, dict) else ''
+        if cover:
+            out['Image'] = cover
+
+    # 4. duration：playlist API 返回秒，normalize_kugou_song 有智能检测 (<10000 当秒)
+    # 但为了明确，强制转 ms
+    d = raw.get('duration')
+    if d is not None and 0 < int(d) < 10000:
+        out['Duration'] = int(d) * 1000
+
+    # 5. 时长：playlist API 没 AlbumName 字段（响应中为 None），但有 album_id
+    return out
+
+
 def extract_kugou_playlist(raw: dict, **kwargs) -> dict:
-    """从酷狗 /v2/get_other_list_file 响应中提取歌单信息"""
+    """从酷狗 mobilecdn.kugou.com 歌单 API 响应中提取歌单信息
+
+    参考 https://github.com/guohuiyuan/music-lib/blob/main/kugou/kugou.go
+    注意：此 API 不返回歌单元数据（name/cover），只有歌曲列表。
+    name/cover 由调用方通过 kwargs['playlist_name'] / kwargs['playlist_cover'] 传入。
+    """
     if not isinstance(raw, dict) or int(raw.get('status', 0)) != 1:
         return {'name': '', 'creator': '', 'cover': '', 'trackCount': 0, 'tracks': []}
     data = raw.get('data') or {}
@@ -117,14 +178,15 @@ def extract_kugou_playlist(raw: dict, **kwargs) -> dict:
         if not isinstance(t, dict):
             continue
         try:
-            tracks.append(normalize_kugou_song(t))
+            normalized = normalize_kugou_song(_normalize_kugou_playlist_song(t))
+            tracks.append(normalized)
         except Exception:
             continue
     return {
         'name': data.get('specialname') or kwargs.get('playlist_name') or '',
         'creator': '',
-        'cover': data.get('img') or data.get('cover') or '',
-        'trackCount': int(data.get('count') or len(tracks)),
+        'cover': data.get('img') or data.get('cover') or kwargs.get('playlist_cover') or '',
+        'trackCount': int(data.get('total') or data.get('count') or len(tracks)),
         'tracks': tracks,
     }
 

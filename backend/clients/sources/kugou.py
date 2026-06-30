@@ -4,8 +4,6 @@
 
 酷狗 file_hash 模式，第三方解析 API 较少。
 """
-import hashlib
-import time
 from ..fallback.api_source import ApiSource
 from ..fallback.extractors import (
     extract_first_url,
@@ -20,6 +18,15 @@ from ._playlist_extractors import (
 KUGOU_COMMON_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
     'Referer': 'https://www.kugou.com/',
+}
+
+
+# 移动端 UA（mobilecdn.kugou.com 官方 mobile API 需要 iPhone UA，参考 music-lib kugou.go）
+KUGOU_MOBILE_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+                  'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 '
+                  'Mobile/15E148 Safari/604.1',
+    'Referer': 'http://m.kugou.com',
 }
 
 
@@ -191,6 +198,7 @@ KUGOU_PARSE_URL_SOURCES = [
 
 KUGOU_PARSE_INFO_SOURCES = [
     # 1. 酷狗官方 song info（响应直接在顶层，songName 字段；映射为 name 字段以通过 _is_valid）
+    # duration 在 extra.{sq/high/320/128}timelength（ms），顶层 timeLength 经常为 0
     ApiSource(
         name='kugou_official_info',
         platform='kugou',
@@ -199,11 +207,18 @@ KUGOU_PARSE_INFO_SOURCES = [
         can_parse_info=True,
         parse_info_url='https://m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash={hash}',
         extract_info=lambda d: (
-            {'id': d.get('hash', ''), 'name': d.get('songName', ''),
-             'artists': d.get('singerName', ''), 'album': d.get('albumName', ''),
-             'picUrl': d.get('album_img', d.get('imgUrl', '')),
-             'duration': d.get('timeLength', 0) * 1000 if d.get('timeLength') else 0,
-             **d} if isinstance(d, dict) and d.get('songName') else {}
+            (lambda extra: {
+                'id': d.get('hash', ''),
+                'name': d.get('songName', ''),
+                'artists': d.get('singerName', ''),
+                'album': d.get('albumName', ''),
+                'picUrl': d.get('album_img', d.get('imgUrl', '')),
+                # 时长优先取 SQ > high > 320 > 128（毫秒）
+                'duration': (extra.get('sqtimelength') or extra.get('hightimelength')
+                             or extra.get('320timelength') or extra.get('128timelength')
+                             or 0),
+                **d,
+            })(d.get('extra') or {}) if isinstance(d, dict) and d.get('songName') else {}
         ),
         headers=KUGOU_COMMON_HEADERS,
         timeout=10,
@@ -255,16 +270,148 @@ KUGOU_PARSE_INFO_SOURCES = [
 
 # ==================== 歌词源 ====================
 
+# KRC 解密 key（16 字节），参考 music-lib krcKey
+_KRC_KEY = bytes([0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47,
+                  0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69])
+
+
+def _decode_kugou_lyric_content(d: dict) -> str:
+    """解码酷狗官方 lyrics.kugou.com/download API 返回的歌词
+
+    支持两种 fmt:
+      - fmt=krc: KRC 加密格式（跳过 4 字节 + XOR 16 字节 key + zlib raw deflate）
+      - fmt=lrc: 简单 base64 LRC（直接 base64 解码即可）
+
+    参考 https://github.com/guohuiyuan/music-lib/blob/main/lyrics/lyrics.go (DecodeKRCBase64)
+    """
+    import base64
+    import zlib
+    import re
+
+    if not isinstance(d, dict):
+        return ''
+    content = d.get('content', '')
+    if not content:
+        return ''
+    fmt = d.get('fmt', '')
+    try:
+        decoded_bytes = base64.b64decode(content)
+    except Exception:
+        return ''
+
+    if fmt == 'lrc':
+        # LRC 模式：直接 base64 解码
+        try:
+            return decoded_bytes.decode('utf-8', errors='replace')
+        except Exception:
+            return ''
+
+    if fmt == 'krc':
+        # KRC 模式：跳过 4 字节 + XOR + zlib（带 78xx header）解压
+        if len(decoded_bytes) < 4:
+            return ''
+        encrypted = decoded_bytes[4:]
+        # XOR 解密
+        plain = bytes([b ^ _KRC_KEY[i % 16] for i, b in enumerate(encrypted)])
+        # zlib 解压（注意：xor 后第 1 字节是 0x78 = zlib header）
+        try:
+            text = zlib.decompress(plain).decode('utf-8', errors='replace')
+        except Exception:
+            return ''
+
+        # 提取 LRC 头部标签 + 把 KRC 时间格式转 LRC
+        # KRC 行: [start_ms,duration_ms]<word_offset,word_duration,0>word1<...>word2
+        # LRC 行: [mm:ss.xx]line
+        lines = text.split('\n')
+        out_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            # 标签行 [ti:xxx]
+            if re.match(r'^\[[A-Za-z]+:', line):
+                out_lines.append(line)
+                continue
+            # 时间行 [start,duration]<...>words
+            m = re.match(r'^\[(\d+),(\d+)\](.*)$', line)
+            if m:
+                start_ms = int(m.group(1))
+                # 转换 ms → mm:ss.xx
+                minutes = start_ms // 60000
+                seconds = (start_ms % 60000) // 1000
+                cents = (start_ms % 1000) // 10
+                # 提取所有 word 文本
+                content_part = m.group(3)
+                words = re.findall(r'<[^>]*>([^<]*)', content_part)
+                lyric_text = ''.join(words)
+                out_lines.append(f'[{minutes:02d}:{seconds:02d}.{cents:02d}]{lyric_text}')
+            else:
+                out_lines.append(line)
+        return '\n'.join(out_lines)
+
+    return ''
+
+
+def _kugou_two_step_lyric(search_resp: dict) -> str:
+    """酷狗官方歌词两步调用包装器（Step 2 + 3）
+
+    入参: search_resp (来自 krcs.kugou.com/search 的 JSON 响应)
+    流程:
+      1. 从 search_resp.candidates[0] 拿 id + accesskey
+      2. 调 lyrics.kugou.com/download?fmt=krc 拿加密歌词
+      3. 解密 (XOR + zlib) + 转 LRC 格式
+
+    参考 https://github.com/guohuiyuan/music-lib/blob/main/kugou/lyric.go
+    失败返回空字符串（fallback 链继续走下一个 source）
+    """
+    import requests
+
+    if not isinstance(search_resp, dict):
+        return ''
+    candidates = search_resp.get('candidates', [])
+    if not candidates:
+        return ''
+    top = candidates[0]
+    cid = top.get('id')
+    accesskey = top.get('accesskey')
+    if not cid or not accesskey:
+        return ''
+
+    # Step 2: download 加密歌词（参考 music-lib 不带 duration 参数）
+    try:
+        r = requests.get(
+            'http://lyrics.kugou.com/download',
+            params={
+                'ver': 1, 'client': 'pc',
+                'id': cid, 'accesskey': accesskey,
+                'fmt': 'krc', 'charset': 'utf8',
+            },
+            headers=KUGOU_COMMON_HEADERS,
+            timeout=10,
+        )
+        if r.status_code >= 400:
+            return ''
+        d2 = r.json()
+        return _decode_kugou_lyric_content(d2)
+    except Exception:
+        return ''
+
+
 KUGOU_PARSE_LYRIC_SOURCES = [
-    # 1. 酷狗官方 lyrics.kugou.com（两步：search 然后 download）
+    # 0. 酷狗官方 krcs.kugou.com + lyrics.kugou.com（两步：search+download，KRC 加密歌词）
+    # Step 1: chain 调 parse_lyric_url (krcs.kugou.com/search) 拿 candidates JSON
+    #   URL 中 duration={duration} 来自 service.py 透传（ms）
+    #         song_id={song_id} 来自 service.py 透传（file_hash）
+    # Step 2: extract_lyric 接 candidates，自己调 download API + 解密
+    # 参考 https://github.com/guohuiyuan/music-lib/blob/main/kugou/lyric.go
     ApiSource(
         name='kugou_official_lyric',
         platform='kugou',
         priority=0,
-        description='酷狗官方 lyrics.kugou.com (两步：search+download)',
+        description='酷狗官方 krcs+lyrics.kugou.com (两步 KRC 解密)',
         can_parse_lyric=True,
-        parse_lyric_url='http://lyrics.kugou.com/search?keyword={keyword_encoded}&duration={duration}&hash={hash}',
-        extract_lyric=lambda d: '',  # 实际为两步调用，由 _two_step_lyric 包装
+        parse_lyric_url='http://krcs.kugou.com/search?ver=1&client=mobi&duration={duration}&hash={song_id}&album_audio_id=',
+        extract_lyric=_kugou_two_step_lyric,  # (d) 一个参数，duration 已在 Step1 URL
         headers=KUGOU_COMMON_HEADERS,
         timeout=10,
     ),
@@ -313,53 +460,22 @@ KUGOU_PARSE_LYRIC_SOURCES = [
 
 # ==================== 歌单解析 ====================
 
-def _kugou_playlist_prepare(url: str, method: str, headers: dict, post_data, is_json, kwargs: dict):
-    """酷狗歌单 API 需要 MD5 签名（参考 musicdl kugou.py）
-
-    signature = MD5("OIlwieks28dk2k092lksi2UIkp" + sorted_query + "OIlwieks28dk2k092lksi2UIkp")
-    """
-    # 替换 {clienttime} 占位
-    if headers.get('clienttime') == '{clienttime}':
-        headers['clienttime'] = str(int(time.time()))
-    # 取 query 部分
-    if '?' in url:
-        q = url.split('?', 1)[1]
-    else:
-        q = ''
-    # 排序拼接
-    sorted_q = ''.join(sorted(q.split('&')))
-    sig = hashlib.md5(
-        ('OIlwieks28dk2k092lksi2UIkp' + sorted_q + 'OIlwieks28dk2k092lksi2UIkp').encode('utf-8')
-    ).hexdigest()
-    new_url = url + '&signature=' + sig
-    return {'url': new_url, 'method': method, 'headers': headers,
-            'post_data': post_data, 'is_json': is_json}
-
-
 KUGOU_PARSE_PLAYLIST_SOURCES = [
-    # 1. 酷狗官方 gatewayretry.kugou.com（带签名 + 特殊 headers）
+    # 1. 酷狗官方 mobilecdn.kugou.com（移动端 API，无需签名）
+    # 参考 https://github.com/guohuiyuan/music-lib/blob/main/kugou/kugou.go (fetchPlaylistDetail)
+    # 响应：data.info[] 里 hash/filename/duration/320hash/sqhash 等
     ApiSource(
         name='kugou_official_playlist',
         platform='kugou',
         priority=0,
-        description='酷狗官方 gatewayretry.kugou.com（带签名，特殊 headers）',
+        description='酷狗官方 mobilecdn.kugou.com (移动端 API，无需签名)',
         can_parse_playlist=True,
         parse_playlist_url=(
-            'http://gatewayretry.kugou.com/v2/get_other_list_file'
-            '?specialid={playlist_id}&need_sort=1&module=CloudMusic'
-            '&clientver=11239&pagesize=300&specalidpgc={playlist_id}'
-            '&userid=0&page={page}&type=0&area_code=1&appid=1005'
+            'http://mobilecdn.kugou.com/api/v3/special/song'
+            '?specialid={playlist_id}&page=1&pagesize=300&version=9108&area_code=1'
         ),
         extract_playlist=_extract_kugou_playlist,
-        headers={
-            'User-Agent': 'Android9-AndroidPhone-11239-18-0-playlist-wifi',
-            'Host': 'gatewayretry.kugou.com',
-            'x-router': 'pubsongscdn.kugou.com',
-            'mid': '239526275778893399526700786998289824956',
-            'dfid': '-',
-            'clienttime': '{clienttime}',  # 运行时替换
-        },
-        prepare_request=_kugou_playlist_prepare,
+        headers=KUGOU_MOBILE_HEADERS,
         timeout=15,
     ),
     ApiSource(

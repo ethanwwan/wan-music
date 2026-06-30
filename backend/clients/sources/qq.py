@@ -37,6 +37,23 @@ def _qq_album_cover(albummid: str, size: int = 300) -> str:
     return f'https://y.gtimg.cn/music/photo_new/T002R{size}x{size}M000{albummid}.jpg'
 
 
+def _decode_qq_cgi_lyric(d: dict) -> str:
+    """解码 QQ 官方 c.y.qq.com 旧版歌词 API 返回的 base64 编码歌词
+
+    字段:
+        d['lyric']  : 原歌词 base64 字符串
+        d['trans']  : 翻译歌词 base64 字符串
+    """
+    import base64
+    b64 = d.get('lyric') or ''
+    if not b64:
+        return ''
+    try:
+        return base64.b64decode(b64).decode('utf-8', errors='replace')
+    except Exception:
+        return ''
+
+
 # ==================== QQ 官方 music.vkey.GetVkey（参考 v1.1.3 + musicdl 实际可工作版本） ====================
 # 关键实测发现（v1.1.3 真实代码能拿 FLAC，HEAD 改的 musicdl ct=19 反而拿不到）：
 # 1. comm.ct 必须是 **24 (int)**，不是 musicdl 风格的 "19" (string)
@@ -569,11 +586,27 @@ QQ_PARSE_INFO_SOURCES = [
 # ==================== 歌词源 ====================
 
 QQ_PARSE_LYRIC_SOURCES = [
+    # 0. QQ 官方 c.y.qq.com 旧版歌词接口（实测可用，无 cookie 也能拿到）
+    # GET  c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=...
+    # 返 Content-Type: text/html 但 body 是 JSON
+    # 字段: data.lyric (base64), data.trans (base64 翻译)
+    # priority=0 最高：官方源无第三方依赖，无 cookie
+    ApiSource(
+        name='qq_official_cgi_lyric',
+        platform='qq',
+        priority=0,
+        description='QQ 官方 c.y.qq.com 旧版歌词（base64，无 cookie 即可）',
+        can_parse_lyric=True,
+        parse_lyric_url='https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={song_id}&format=json',
+        extract_lyric=lambda d: _decode_qq_cgi_lyric(d) if isinstance(d, dict) else '',
+        headers=QQ_COMMON_HEADERS,
+        timeout=10,
+    ),
     # 1. xunhuisi 提供 LRC 歌词（在 lyric 字段）
     ApiSource(
         name='xunhuisi_lyric',
         platform='qq',
-        priority=0,
+        priority=10,
         description='xunhuisi (LRC 歌词)',
         can_parse_lyric=True,
         parse_lyric_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',

@@ -1,7 +1,8 @@
 """酷狗音乐客户端（重写版 - 使用 FallbackChain 框架）
 
-酷狗 file_hash 模式，第三方 API 较少。酷狗的歌词走搜词 → 选 → 拿 lyric_url，
-需要 2 步，目前未实现，所以 with_lyric=False。
+酷狗 file_hash 模式，第三方 API 较少。
+歌词走两步流程（krcs.kugou.com/search → lyrics.kugou.com/download KRC 解密），
+由 kugou_official_lyric (P=0) source 自动处理。
 """
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,7 @@ from .sources.kugou import (
     KUGOU_SEARCH_SOURCES,
     KUGOU_PARSE_URL_SOURCES,
     KUGOU_PARSE_INFO_SOURCES,
+    KUGOU_PARSE_LYRIC_SOURCES,
     KUGOU_PARSE_PLAYLIST_SOURCES,
 )
 
@@ -31,6 +33,7 @@ class KugouClient(BaseMusicClient):
         self.search_chain = FallbackChain(KUGOU_SEARCH_SOURCES, platform='kugou', strategy='parallel')
         self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='serial')
         self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='serial')
+        self.parse_lyric_chain = FallbackChain(KUGOU_PARSE_LYRIC_SOURCES, platform='kugou', strategy='serial')
         self.parse_playlist_chain = FallbackChain(KUGOU_PARSE_PLAYLIST_SOURCES, platform='kugou', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -51,7 +54,7 @@ class KugouClient(BaseMusicClient):
 
     def get_song(self, song_id, quality: str = QualityLevel.LOSSLESS.value,
                  with_lyric: bool = True) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息（酷狗用 hash 标识；暂无歌词链）"""
+        """一次性获取歌曲完整信息（酷狗用 hash 标识）"""
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
 
@@ -89,13 +92,26 @@ class KugouClient(BaseMusicClient):
             }
             info_src_name = 'unknown'
 
+        # 歌词链（酷狗官方两步：krcs.search + lyrics.download KRC 解密）
+        # 必须用 info.duration（ms）当 search 的 duration 参数，所以 lyric 在 info 后再调
+        lyric = ''
+        lyric_src = None
+        if with_lyric:
+            try:
+                duration_ms = int(base.get('duration') or 0)
+                lyric, lyric_src = self.parse_lyric_chain.try_fetch(
+                    'parse_lyric', song_id=parse_hash, duration=duration_ms
+                )
+            except Exception as e:
+                logger.warning(f'[kugou.get_song] 取歌词失败: {e}')
+
         return {
             **base,
             'url': url,
             'level': quality,                  # 前端用 'level' 字段
-            'lyric': '',  # 酷狗暂未实现歌词链
+            'lyric': lyric or '',
             'source': self.platform_id,
-            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': None},
+            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},
         }
 
     def get_health(self) -> dict:

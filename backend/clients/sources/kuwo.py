@@ -296,12 +296,13 @@ KUWO_PARSE_INFO_SOURCES = [
         can_parse_info=True,
         parse_info_url='https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={rid}',
         # 酷我官方响应：{"data": {"songinfo": {"id", "songName", "artist", "album", "pic"}}}
+        # 注意：mobi.kuwo.cn 偶尔返回 {"data": null, "msg": "..."}，需要 d.get('data') or {} 兜底
         extract_info=lambda d: {
-            'id': (d.get('data', {}).get('songinfo', {}) or {}).get('id', 0),
-            'name': (d.get('data', {}).get('songinfo', {}) or {}).get('songName', ''),
-            'artists': (d.get('data', {}).get('songinfo', {}) or {}).get('artist', ''),
-            'album': (d.get('data', {}).get('songinfo', {}) or {}).get('album', ''),
-            'picUrl': (d.get('data', {}).get('songinfo', {}) or {}).get('pic', ''),
+            'id': ((d.get('data') or {}).get('songinfo') or {}).get('id', 0),
+            'name': ((d.get('data') or {}).get('songinfo') or {}).get('songName', ''),
+            'artists': ((d.get('data') or {}).get('songinfo') or {}).get('artist', ''),
+            'album': ((d.get('data') or {}).get('songinfo') or {}).get('album', ''),
+            'picUrl': ((d.get('data') or {}).get('songinfo') or {}).get('pic', ''),
         } if isinstance(d, dict) else {},
         headers={
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
@@ -392,32 +393,82 @@ KUWO_PARSE_INFO_SOURCES = [
 
 # ==================== 歌词源 ====================
 
+def _extract_kuwo_lyric_from_lrclist(d: dict) -> str:
+    """从酷我 m.kuwo.cn/newh5/singles/songinfoandlrc 响应里提取 LRC
+
+    响应: data.lrclist[] = [{"time": "0.0", "lineLyric": "..."}]
+    转换: [mm:ss.cc]lineLyric (time 为浮点秒)
+    """
+    if not isinstance(d, dict):
+        return ''
+    data = d.get('data') or {}
+    if not isinstance(data, dict):
+        return ''
+    lrclist = data.get('lrclist') or []
+    if not lrclist:
+        return ''
+    lines = []
+    for item in lrclist:
+        if not isinstance(item, dict):
+            continue
+        t = item.get('time')
+        text = item.get('lineLyric') or ''
+        if not text.strip():
+            continue
+        try:
+            secs = float(t)
+        except (TypeError, ValueError):
+            continue
+        m = int(secs) // 60
+        s = int(secs) % 60
+        # 保留 2 位小数（centiseconds）
+        cs = int((secs - int(secs)) * 100)
+        lines.append(f'[{m:02d}:{s:02d}.{cs:02d}]{text}')
+    return '\n'.join(lines)
+
+
 KUWO_PARSE_LYRIC_SOURCES = [
-    # 1. 酷我官方 newlyric (musicdl 列表) - 需 buildlyricsparams + decodelyrics
+    # 0. 酷我官方 m.kuwo.cn 移动端歌词（实测可用，无需 cookie）
+    # 参考 https://github.com/guohuiyuan/music-lib/blob/main/kuwo/lyric.go (legacy fallback)
+    # 响应 data.lrclist[] = [{"time": "0.0", "lineLyric": "..."}]
+    ApiSource(
+        name='kuwo_official_lyric',
+        platform='kuwo',
+        priority=0,
+        description='酷我官方 m.kuwo.cn/newh5 lyric (legacy JSON)',
+        can_parse_lyric=True,
+        parse_lyric_url=(
+            'http://m.kuwo.cn/newh5/singles/songinfoandlrc'
+            '?musicId={rid}&httpsStatus=1'
+        ),
+        extract_lyric=_extract_kuwo_lyric_from_lrclist,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+                          'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 '
+                          'Mobile/15E148 Safari/604.1',
+            'Referer': 'http://m.kuwo.cn',
+        },
+        timeout=10,
+    ),
+    # 1. 酷我官方 newlyric.kuwo.cn (新 API，XOR+base64+zlib 加密)
+    #   参考 music-lib kuwo.go fetchNewLyrics
+    #   URL: http://newlyric.kuwo.cn/newlyric.lrc?{base64_xor_params}
+    #   由于响应是二进制（zlib），chain 框架无法直接处理（r.text UTF-8 解码会乱码），
+    #   此处 URL 仅作记录，实际需要 kuwo_client 直接调用 + 解码。
+    #   当前已禁用，兜底用 cenguigui/haitanw/gdstudio 三方源。
     ApiSource(
         name='kuwo_newlyric',
         platform='kuwo',
-        priority=0,
-        description='酷我官方 newlyric (musicdl 列表，需 buildlyricsparams+decodelyrics)',
+        priority=10,
+        description='酷我官方 newlyric (musicdl 列表，需 buildlyricsparams+decodelyrics，已禁用)',
+        enabled=False,  # 需要框架支持二进制响应解码
         can_parse_lyric=True,
         parse_lyric_url='http://newlyric.kuwo.cn/newlyric.lrc?{__encoded_params__}',
         extract_lyric=lambda d: d if isinstance(d, str) else '',
         headers=KUWO_COMMON_HEADERS,
         timeout=10,
     ),
-    # 2. 酷我 mobi 歌词 (musicdl 列表，f=bodian 为 API 原生参数)
-    ApiSource(
-        name='kuwo_mobi_lyric',
-        platform='kuwo',
-        priority=10,
-        description='酷我 mobi 歌词 (musicdl 列表)',
-        can_parse_lyric=True,
-        parse_lyric_url='http://mlyric.kuwo.cn/mobi.s?f=bodian&q={__base64_q__}',
-        extract_lyric=lambda d: d.get('data', {}).get('lrclist', '') if isinstance(d, dict) else '',
-        headers=KUWO_COMMON_HEADERS,
-        timeout=10,
-    ),
-    # 3. cenguigui lyric (data.lyric 字段)
+    # 2. cenguigui lyric (data.lyric 字段)
     ApiSource(
         name='cgg_lyric',
         platform='kuwo',
@@ -432,7 +483,7 @@ KUWO_PARSE_LYRIC_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
     ),
-    # 4. haitanw lyric (data.lyric 字段)
+    # 3. haitanw lyric (data.lyric 字段)
     ApiSource(
         name='haitanw_lyric',
         platform='kuwo',
@@ -447,7 +498,7 @@ KUWO_PARSE_LYRIC_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
     ),
-    # 5. gdstudio lyric
+    # 4. gdstudio lyric
     ApiSource(
         name='gdstudio_lyric',
         platform='kuwo',
