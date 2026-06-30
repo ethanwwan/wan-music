@@ -66,19 +66,23 @@ class FallbackChain:
 
     def mark_source_failed(self, name: str, expire_seconds: int = 300,
                            reason: str = '') -> None:
-        """标记源临时失败（默认 5 分钟内 try_fetch 自动跳过）
+        """标记 source 临时失败（默认 5 分钟内 try_fetch 自动跳过）
+
+        字段约定（用户定义）：
+          self.platform = 4 大 platform（netease/qq/kugou/kuwo）
+          name          = source 名称（底层 API 域名，如 'vkeys_url'）
 
         场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
-        通知 chain 这个源不可用，避免下次重试仍用同源。
+        通知 chain 这个 source 不可用，避免下次重试仍用同源。
 
         Args:
-            name: 失败的源名称
+            name: 失败的 source 名称
             expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
             reason: 失败原因（仅用于日志）
         """
         self._failed_sources[name] = time.time() + expire_seconds
         logger.warning(
-            f'[{self.platform}] 临时禁用源 {name}（{expire_seconds}s 内 try_fetch 跳过）'
+            f'[{self.platform}] 临时禁用 source {name}（{expire_seconds}s 内 try_fetch 跳过）'
             f' 原因: {reason[:80]}'
         )
 
@@ -89,13 +93,17 @@ class FallbackChain:
             self._failed_sources.clear()
 
     def mark_source_success(self, name: str, expire_seconds: int = 600) -> None:
-        """标记源最近成功（默认 10 分钟内优先使用）
+        """标记 source 最近成功（默认 10 分钟内优先使用）
+
+        字段约定（用户定义）：
+          self.platform = 4 大 platform（netease/qq/kugou/kuwo）
+          name          = source 名称（底层 API 域名，如 'vkeys_url'）
 
         场景：vkeys_url 成功下载 → 后续歌曲优先用 vkeys_url
               如果 vkeys_url 失败，mark_source_failed 会覆盖
         """
         self._success_recent[name] = time.time() + expire_seconds
-        logger.info(f'[{self.platform}] 源 {name} 最近成功（{expire_seconds}s 内优先使用）')
+        logger.info(f'[{self.platform}] source {name} 最近成功（{expire_seconds}s 内优先使用）')
 
     def _is_source_success_recent(self, name: str) -> bool:
         """检查源是否在成功记忆内（自动清理过期项）"""

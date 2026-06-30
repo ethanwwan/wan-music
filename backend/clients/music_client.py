@@ -54,14 +54,18 @@ class MusicClient:
 
     def mark_source_failed(self, platform: str, source_name: str,
                            reason: str = '', expire_seconds: int = 300) -> None:
-        """标记某平台的某个源为临时失败（让下次重试自动跳过）
+        """标记某 platform 的某个 source 为临时失败（让下次重试自动跳过）
+
+        字段约定（用户定义）：
+          platform  = 4 大平台名（'netease'/'qq'/'kugou'/'kuwo'）
+          source    = 底层 API 域名（'vkeys_url'/'xuanluoge_url'/'gdstudio_lyric' 等）
 
         场景：service.py 下载时遇到 4xx（如 vkeys_url 返的 URL 403），
-        通知 chain 这个源不可用，避免下次重试仍用同源。
+        通知 chain 这个 source 不可用，避免下次重试仍用同源。
 
         Args:
-            platform: 平台名（'netease'/'qq'/'kugou'/'kuwo'）
-            source_name: 失败的源名（如 'vkeys_url'）
+            platform: 4 大平台名（'netease'/'qq'/'kugou'/'kuwo'）
+            source_name: 失败的 source 名（如 'vkeys_url'）
             reason: 失败原因（仅用于日志）
             expire_seconds: 多少秒后自动恢复（默认 5 分钟，QQ 风控通常临时）
         """
@@ -101,7 +105,11 @@ class MusicClient:
 
     def mark_source_success(self, platform: str, source_name: str,
                             expire_seconds: int = 600) -> None:
-        """标记源最近成功（让后续 try_fetch 优先使用该源）
+        """标记某 platform 的某个 source 最近成功（让后续 try_fetch 优先使用该 source）
+
+        字段约定（用户定义）：
+          platform  = 4 大平台名（'netease'/'qq'/'kugou'/'kuwo'）
+          source    = 底层 API 域名（'vkeys_url'/'xuanluoge_url'/'gdstudio_lyric' 等）
 
         场景：vkeys_url 成功下载某首歌 → 后续 10 分钟内优先用 vkeys_url
               直到它失败（被 mark_source_failed 覆盖）

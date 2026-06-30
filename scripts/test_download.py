@@ -33,14 +33,20 @@ def search_song(keyword, source, limit=3):
     return data
 
 def start_batch(songs, quality='lossless', name='test'):
-    """启动批量下载（模仿前端 /download/batch/start）"""
+    """启动批量下载（模仿前端 /download/batch/start）
+
+    字段约定（用户定义）：
+      item['source']  =  platform：4 大平台名（netease/qq/kugou/kuwo）
+      song_info['api_source'] = source：底层 API 域名（vkeys_url 等）
+      前端 buildDownloadItem 用 'source' 字段名传 platform
+    """
     items = []
     for s in songs:
         items.append({
             'id': s['id'],
             'name': s['name'],
             'artist': s['artists'],
-            'source': s['source'],   # 前端 buildDownloadItem 用 source 字段
+            'source': s['source'],   # source 字段 = platform（4 大平台名）
             'quality': quality,
             'picUrl': s.get('picUrl', ''),
             'album': s.get('album', ''),

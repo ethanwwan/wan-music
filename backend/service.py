@@ -446,6 +446,7 @@ class BatchDownloadService:
             return None
 
         quality = item.get('quality', 'lossless')
+        # item.source = 4 大 platform（netease/qq/kugou/kuwo）
         source = item.get('source', '').strip() or None
         name = item.get('name', 'song')
         artist = item.get('artist', '')
@@ -468,6 +469,12 @@ class BatchDownloadService:
         # 注意：不要重置失败名单 — mark_source_failed 应该跨歌曲生效
         # 让 vkeys_url 失败后 5 分钟内其他歌曲都自动跳过它（除非过期）
         # 重置会在 mark_source_failed 5 分钟后自动清理（_is_source_failed 懒清理）
+
+        # ===== 字段约定（用户定义）=====
+        # item['source']  =  platform：4 大平台名（netease/qq/kugou/kuwo）
+        # song_info['api_source'] = source：底层 API 域名（vkeys_url/xunhuisi_lyric 等）
+        # source = platform 是 4 平台层，api_source 是 3 方 API 层
+        # 前端 buildDownloadItem 用 'source' 字段名传 platform
 
         # 标记 per-song 状态：开始处理
         if task_id:
