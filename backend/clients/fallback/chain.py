@@ -92,15 +92,17 @@ class FallbackChain:
             logger.info(f'[{self.platform}] 重置失败名单: {list(self._failed_sources.keys())}')
             self._failed_sources.clear()
 
-    def mark_source_success(self, name: str, expire_seconds: int = 600) -> None:
-        """标记 source 最近成功（默认 10 分钟内优先使用）
+    def mark_source_success(self, name: str, expire_seconds: int = 86400) -> None:
+        """标记 source 最近成功（默认 24 小时内优先使用）
 
         字段约定（用户定义）：
           self.platform = 4 大 platform（netease/qq/kugou/kuwo）
           name          = source 名称（底层 API 域名，如 'vkeys_url'）
 
-        场景：vkeys_url 成功下载 → 后续歌曲优先用 vkeys_url
+        场景：vkeys_url 成功下载 → 后续 24h 优先用 vkeys_url
               如果 vkeys_url 失败，mark_source_failed 会覆盖
+        改为 24h：QQ/酷狗 等平台 API 稳定性以天为单位，
+                 source 24h 内不会突然从"能下"变成"不能下"（除非风控）。
         """
         self._success_recent[name] = time.time() + expire_seconds
         logger.info(f'[{self.platform}] source {name} 最近成功（{expire_seconds}s 内优先使用）')
@@ -185,7 +187,7 @@ class FallbackChain:
         """
         user_quality = kwargs.get('quality', '')
 
-        # ★ 按成功记忆重排：最近成功的源排前面（10 分钟内）
+        # ★ 按成功记忆重排：最近成功的源排前面（24 小时内）
         # 稳定排序：保留 priority 顺序，只把成功过的源前置
         sources = sorted(
             sources,

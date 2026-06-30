@@ -104,15 +104,16 @@ class MusicClient:
                         chain.reset_failed_sources()
 
     def mark_source_success(self, platform: str, source_name: str,
-                            expire_seconds: int = 600) -> None:
+                            expire_seconds: int = 86400) -> None:
         """标记某 platform 的某个 source 最近成功（让后续 try_fetch 优先使用该 source）
 
         字段约定（用户定义）：
           platform  = 4 大平台名（'netease'/'qq'/'kugou'/'kuwo'）
           source    = 底层 API 域名（'vkeys_url'/'xuanluoge_url'/'gdstudio_lyric' 等）
 
-        场景：vkeys_url 成功下载某首歌 → 后续 10 分钟内优先用 vkeys_url
+        场景：vkeys_url 成功下载某首歌 → 后续 24 小时内优先用 vkeys_url
               直到它失败（被 mark_source_failed 覆盖）
+        改为 24h：API 稳定性以天为单位，避免每 10 分钟重复 try 所有 source。
         """
         try:
             client = self._get_client(platform)
