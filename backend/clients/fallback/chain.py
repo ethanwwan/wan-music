@@ -115,8 +115,32 @@ class FallbackChain:
             return False
         return True
 
+    def _verify_url_reachable(self, url: str, timeout: int = 5) -> bool:
+        """验证 URL 是否可访问（HEAD 探测，HEAD 405 时 fallback Range GET）
+
+        用途：chain 拿到下载 URL 后，立刻验证 URL 是否真能用。
+              拿到 URL 不代表能用（CDN 可能 403/404/token 过期），
+              验证失败 → mark_source_failed 换源（不浪费真正下载时间）。
+        """
+        try:
+            resp = requests.head(url, timeout=timeout, allow_redirects=True)
+            if resp.status_code in (200, 206):
+                return True
+            if resp.status_code == 405:  # HEAD 不支持
+                # Range GET 1KB 探测
+                r2 = requests.get(url, headers={'Range': 'bytes=0-1023'},
+                                  timeout=timeout, stream=True)
+                try:
+                    return r2.status_code in (200, 206)
+                finally:
+                    r2.close()
+            return False
+        except Exception as e:
+            logger.debug(f'[verify_url] {url[:60]}... 验证失败: {type(e).__name__}: {str(e)[:60]}')
+            return False
+
     def _is_source_failed(self, name: str) -> bool:
-        """检查源是否在失败名单（自动清理过期项）"""
+        """检查源是否在失败名单中（自动清理过期项）"""
         expire_at = self._failed_sources.get(name)
         if expire_at is None:
             return False
@@ -187,6 +211,15 @@ class FallbackChain:
                         f'(max_quality={source.max_quality} < user_quality={user_quality})'
                     )
                     continue
+            # ★ 跳过需要 cookie 但 cookie 文件不存在的源
+            if source.needs_cookie and source.cookie_file:
+                cookies = self._load_cookie(source.cookie_file)
+                if not cookies:
+                    logger.info(
+                        f'[{self.platform}.{op}] 跳过 {source.name} '
+                        f'(无 cookie file: {source.cookie_file})'
+                    )
+                    continue
 
             logger.info(f'[{self.platform}.{op}] 尝试 {source.name} (P={source.priority})...')
             t0 = time.time()
@@ -194,6 +227,18 @@ class FallbackChain:
                 data = self._fetch_one(source, op, **kwargs)
                 elapsed_ms = int((time.time() - t0) * 1000)
                 if self._is_valid(data, op):
+                    # ★ parse_url：拿到 URL 后立刻验证可用性（避免下载时才发现 4xx）
+                    if op == 'parse_url' and isinstance(data, str):
+                        if not self._verify_url_reachable(data):
+                            source._stats['fail'] += 1
+                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时）'
+                            source._stats['total_ms'] += elapsed_ms
+                            # 直接 mark 失败（5 分钟内不再尝试）
+                            self._failed_sources[source.name] = time.time() + 300
+                            logger.warning(
+                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已 mark 失败 5 分钟）: {data[:80]}'
+                            )
+                            continue
                     source._stats['ok'] += 1
                     source._stats['last_used'] = time.time()
                     source._stats['total_ms'] += elapsed_ms
