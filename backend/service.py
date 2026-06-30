@@ -465,10 +465,9 @@ class BatchDownloadService:
         else:
             song_id_arg = song_id
 
-        # ★ 重置失败名单：每首歌曲的第一次重试从干净状态开始
-        # （之前累积的坏源在清空后重新评估，避免一个 task 内永久受影响）
-        if source and source in ('netease', 'qq', 'kugou', 'kuwo'):
-            music_client.reset_failed_sources(source)
+        # 注意：不要重置失败名单 — mark_source_failed 应该跨歌曲生效
+        # 让 vkeys_url 失败后 5 分钟内其他歌曲都自动跳过它（除非过期）
+        # 重置会在 mark_source_failed 5 分钟后自动清理（_is_source_failed 懒清理）
 
         # 标记 per-song 状态：开始处理
         if task_id:
@@ -479,11 +478,10 @@ class BatchDownloadService:
 
         last_error = None
         tmp_path = None  # 重试时复用，初始化一次
-        # 重试策略：chain 内部已按 priority 串行 fallback 到 N 个源；
-        # 外部再做 3 次重试是浪费（每次都重新调 chain + 重新做 url+info+lyric）。
-        # 改为 2 次（1 次原始 + 1 次重试），且重试时跳过 lyric（已成功一次无需重做），
-        # 这样从 9 个 API 请求减到 5-6 个，节省 ~50% 时间和带宽。
-        max_attempts = 2
+        # 重试策略：mark_source_failed 让 chain 内部自动换源（vkeys 403 后跳过 vkeys 试下个），
+        # 外部再做多次重试没意义（同样换源，同样失败）。
+        # 只在网络/瞬时错误时重试 1 次（5xx/Timeout）。
+        max_attempts = 1   # 取消外层重试，依赖 mark_failed 机制
         for attempt in range(max_attempts):
             try:
                 # 重试时跳过 lyric（如果第 1 次已经拿到，第 2 次没必要重做）
@@ -591,6 +589,13 @@ class BatchDownloadService:
                         file_size=actual_size,
                         completed_at=time.time(),
                     )
+
+                # ★ 标记成功的源：让后续 10 分钟内同平台歌曲优先用这个源
+                api_source = song_info.get('api_source', {}) if song_info else {}
+                if isinstance(api_source, dict):
+                    url_source = api_source.get('url')
+                    if url_source and source:
+                        music_client.mark_source_success(source, url_source)
 
                 return {
                     'tmp_path': tmp_path,

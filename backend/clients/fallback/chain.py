@@ -52,6 +52,9 @@ class FallbackChain:
         # 临时失败名单：mark_source_failed() 加入，过期自动恢复
         # 场景：下载 4xx 时通知 chain 跳过该源，避免重试仍用同源失败
         self._failed_sources: dict = {}  # {name: expire_timestamp}
+        # 成功记忆：mark_source_success() 记录成功时间，过期后回归 priority
+        # 场景：vkeys_url 成功下载后，5 分钟内其他歌曲优先用 vkeys_url（直到它失败）
+        self._success_recent: dict = {}  # {name: success_at_timestamp}
 
     def set_source_enabled(self, name: str, enabled: bool) -> bool:
         """动态启用/禁用某个源"""
@@ -84,6 +87,25 @@ class FallbackChain:
         if self._failed_sources:
             logger.info(f'[{self.platform}] 重置失败名单: {list(self._failed_sources.keys())}')
             self._failed_sources.clear()
+
+    def mark_source_success(self, name: str, expire_seconds: int = 600) -> None:
+        """标记源最近成功（默认 10 分钟内优先使用）
+
+        场景：vkeys_url 成功下载 → 后续歌曲优先用 vkeys_url
+              如果 vkeys_url 失败，mark_source_failed 会覆盖
+        """
+        self._success_recent[name] = time.time() + expire_seconds
+        logger.debug(f'[{self.platform}] 源 {name} 最近成功（{expire_seconds}s 内优先使用）')
+
+    def _is_source_success_recent(self, name: str) -> bool:
+        """检查源是否在成功记忆内（自动清理过期项）"""
+        expire_at = self._success_recent.get(name)
+        if expire_at is None:
+            return False
+        if time.time() > expire_at:
+            del self._success_recent[name]
+            return False
+        return True
 
     def _is_source_failed(self, name: str) -> bool:
         """检查源是否在失败名单（自动清理过期项）"""
@@ -130,6 +152,17 @@ class FallbackChain:
         - 例：用户请求 lossless，xunhuisi_url (max_quality=exhigh) 应该跳过
         """
         user_quality = kwargs.get('quality', '')
+
+        # ★ 按成功记忆重排：最近成功的源排前面（10 分钟内）
+        # 稳定排序：保留 priority 顺序，只把成功过的源前置
+        sources = sorted(
+            sources,
+            key=lambda s: (0 if self._is_source_success_recent(s.name) else 1, s.priority)
+        )
+        # 调试：打印重排后的顺序
+        if any(self._is_source_success_recent(s.name) for s in sources):
+            recent = [s.name for s in sources if self._is_source_success_recent(s.name)]
+            logger.debug(f'[{self.platform}.{op}] 优先使用最近成功源: {recent}')
 
         for source in sources:
             # ★ 跳过失败名单（mark_source_failed 标记的源）

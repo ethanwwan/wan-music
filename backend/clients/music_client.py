@@ -99,6 +99,23 @@ class MusicClient:
                     if chain:
                         chain.reset_failed_sources()
 
+    def mark_source_success(self, platform: str, source_name: str,
+                            expire_seconds: int = 600) -> None:
+        """标记源最近成功（让后续 try_fetch 优先使用该源）
+
+        场景：vkeys_url 成功下载某首歌 → 后续 10 分钟内优先用 vkeys_url
+              直到它失败（被 mark_source_failed 覆盖）
+        """
+        try:
+            client = self._get_client(platform)
+        except ValueError:
+            return
+        for chain in (client.parse_url_chain, client.parse_info_chain,
+                      client.parse_lyric_chain, client.parse_playlist_chain,
+                      client.search_chain):
+            if chain:
+                chain.mark_source_success(source_name, expire_seconds)
+
     def _get_client(self, platform: str) -> BaseMusicClient:
         platform = platform or self.default_platform
         client = self.platform_clients.get(platform)
