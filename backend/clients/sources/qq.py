@@ -329,7 +329,7 @@ QQ_PARSE_URL_SOURCES = [
         parse_url_url='https://lxmusicapi.onrender.com/url/tx/{song_id}/flac24bit',
         extract_url=extract_first_url,
         headers=QQ_LXMUSIC_HEADERS,
-        timeout=15,
+        timeout=8,  # onrender.com 冷启动慢，但有其他源兜底时不必等
         max_quality='hires',
     ),
     # 6. nki - musicdl 列表

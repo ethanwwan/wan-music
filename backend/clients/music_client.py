@@ -238,7 +238,20 @@ class MusicClient:
             # 不传 quality_map 给子类：quality_map 只在 MusicClient 层用于降级链过滤
             # （get_platform_quality_chain），子类的 get_song 不需要这个参数
             # 否则会触发 TypeError: get_song() got an unexpected keyword argument 'quality_map'
-            result = client.get_song(parse_id, try_quality, with_lyric=with_lyric)
+            # 透传 search 阶段记录的 _search_source（来自 _source 字段或 search_source）
+            preferred = ''
+            if isinstance(song_id, dict):
+                preferred = song_id.get('_search_source', '') or song_id.get('api_source', '')
+            # 从 qualityMap 提取当前 try_quality 的 size（用于 URL size 验证）
+            qmap_for_url = {}
+            if quality_map and isinstance(quality_map, dict):
+                qinfo = quality_map.get(try_quality) or {}
+                if isinstance(qinfo, dict) and qinfo.get('size'):
+                    qmap_for_url = {try_quality: qinfo}
+            result = client.get_song(
+                parse_id, try_quality, with_lyric=with_lyric,
+                preferred_source=preferred, quality_map=qmap_for_url or None,
+            )
             if result and result.get('url'):
                 # 标记实际拿到的音质（用于前端展示 + fallback 对比）
                 result['level'] = try_quality

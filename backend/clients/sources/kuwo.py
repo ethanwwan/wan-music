@@ -160,7 +160,7 @@ KUWO_PARSE_URL_SOURCES = [
         parse_url_url='https://lxmusicapi.onrender.com/url/kw/{rid}/flac',
         extract_url=extract_first_url,
         headers=KUWO_LXMUSIC_HEADERS,
-        timeout=20,  # onrender.com 冷启动慢
+        timeout=8,  # onrender.com 冷启动慢，有其他源兜底不必等
         max_quality='lossless',
     ),
     # 6. nxinxz (musicdl 列表) - 西柚

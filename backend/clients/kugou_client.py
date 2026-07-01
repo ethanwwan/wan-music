@@ -31,9 +31,9 @@ class KugouClient(BaseMusicClient):
         self.platform_id = 'kugou'
         self.platform_name = '酷狗音乐'
         self.search_chain = FallbackChain(KUGOU_SEARCH_SOURCES, platform='kugou', strategy='parallel')
-        self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='serial')
-        self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='serial')
-        self.parse_lyric_chain = FallbackChain(KUGOU_PARSE_LYRIC_SOURCES, platform='kugou', strategy='serial')
+        self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='parallel_first')
+        self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='parallel_first')
+        self.parse_lyric_chain = FallbackChain(KUGOU_PARSE_LYRIC_SOURCES, platform='kugou', strategy='parallel_first')
         self.parse_playlist_chain = FallbackChain(KUGOU_PARSE_PLAYLIST_SOURCES, platform='kugou', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -53,8 +53,14 @@ class KugouClient(BaseMusicClient):
         }
 
     def get_song(self, song_id, quality: str = QualityLevel.LOSSLESS.value,
-                 with_lyric: bool = True) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息（酷狗用 hash 标识）"""
+                 with_lyric: bool = True, preferred_source: str = '',
+                 quality_map: dict = None) -> Optional[Dict[str, Any]]:
+        """一次性获取歌曲完整信息（酷狗用 hash 标识）
+
+        Args:
+            preferred_source: 来自 search 的源名，传下去给 url/info/lyric 链优先使用
+            quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
+        """
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
 
@@ -65,12 +71,13 @@ class KugouClient(BaseMusicClient):
         # 这里从传入的 id 中判断：
         # 简化处理：直接用传入的 id（已在 normalize 时选择过）
         parse_hash = song_id_str
+        url_kwargs = dict(hash=parse_hash, quality=quality,
+                          preferred_source=preferred_source, quality_map=quality_map or {})
+        info_kwargs = dict(hash=parse_hash, preferred_source=preferred_source)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url',
-                                hash=parse_hash, quality=quality)
-            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                                 hash=parse_hash)
+            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
 
         url, url_src = f_url.result()
         info, info_src = f_info.result()
@@ -100,7 +107,8 @@ class KugouClient(BaseMusicClient):
             try:
                 duration_ms = int(base.get('duration') or 0)
                 lyric, lyric_src = self.parse_lyric_chain.try_fetch(
-                    'parse_lyric', song_id=parse_hash, duration=duration_ms
+                    'parse_lyric', song_id=parse_hash, duration=duration_ms,
+                    preferred_source=preferred_source,
                 )
             except Exception as e:
                 logger.warning(f'[kugou.get_song] 取歌词失败: {e}')

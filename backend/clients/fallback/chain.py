@@ -234,16 +234,34 @@ class FallbackChain:
             return False
         return True
 
-    def _verify_url_reachable(self, url: str, timeout: int = 5) -> bool:
+    def _verify_url_reachable(self, url: str, timeout: int = 5,
+                              expected_min_size: int = 0) -> bool:
         """验证 URL 是否可访问（HEAD 探测，HEAD 405 时 fallback Range GET）
 
         用途：chain 拿到下载 URL 后，立刻验证 URL 是否真能用。
               拿到 URL 不代表能用（CDN 可能 403/404/token 过期），
               验证失败 → mark_source_failed 换源（不浪费真正下载时间）。
+
+        Args:
+            url: 待验证的 URL
+            timeout: 超时秒数
+            expected_min_size: 预期最小字节数（来自 qualityMap），0 表示不检查
+                - 用于发现"用低码率顶替高码率"的情况
+                - 例：qualityMap 说 FLAC=50MB，HEAD 返回 Content-Length=5MB → 验证失败
+                - 容差：实际 ≥ 预期 × 0.5 才认为合理（CDN 偶发不准）
         """
         try:
             resp = requests.head(url, timeout=timeout, allow_redirects=True)
             if resp.status_code in (200, 206):
+                # ★ size check：避免小源顶替大源（不同 CDN 给的资源 bitrate 不一样）
+                if expected_min_size > 0:
+                    cl = int(resp.headers.get('Content-Length', 0) or 0)
+                    if cl > 0 and cl < expected_min_size * 0.5:
+                        logger.debug(
+                            f'[verify_url] {url[:60]}... size 不匹配: '
+                            f'cl={cl} < expected={expected_min_size}×0.5'
+                        )
+                        return False
                 return True
             if resp.status_code == 405:  # HEAD 不支持
                 # Range GET 1KB 探测
@@ -312,6 +330,9 @@ class FallbackChain:
 
         if self.strategy == 'parallel' and op == 'search':
             return self._try_parallel(candidates, op, **kwargs)
+        if self.strategy == 'parallel_first':
+            # 并行首胜：所有源同时跑，第一个成功的返回
+            return self._try_parallel_first(candidates, op, **kwargs)
         return self._try_serial(candidates, op, **kwargs)
 
     def _try_serial(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
@@ -328,14 +349,23 @@ class FallbackChain:
 
         # ★ 按成功记忆重排：最近成功的源排前面（24 小时内）
         # 稳定排序：保留 priority 顺序，只把成功过的源前置
-        sources = sorted(
-            sources,
-            key=lambda s: (0 if self._is_source_success_recent(s.name) else 1, s.priority)
-        )
+        # 第一优先级：preferred_source（来自上游链：search→info→url 保持一致）
+        # 第二优先级：最近成功过的源
+        # 第三优先级：priority
+        preferred = kwargs.pop('preferred_source', None) or ''
+        def _sort_key(s):
+            if preferred and s.name == preferred:
+                return (0, 0, s.priority)
+            if self._is_source_success_recent(s.name):
+                return (0, 1, s.priority)
+            return (1, 0, s.priority)
+        sources = sorted(sources, key=_sort_key)
         # 调试：打印重排后的顺序
         if any(self._is_source_success_recent(s.name) for s in sources):
             recent = [s.name for s in sources if self._is_source_success_recent(s.name)]
             logger.debug(f'[{self.platform}.{op}] 优先使用最近成功源: {recent}')
+        if preferred:
+            logger.debug(f'[{self.platform}.{op}] 同源优先: {preferred}')
 
         # ★ 链级超时：避免链中多个源依次超时导致总耗时超过前端 timeout
         chain_start = time.time()
@@ -391,9 +421,14 @@ class FallbackChain:
                                 f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
                             )
                             continue
-                        if not self._verify_url_reachable(data):
+                        # ★ 阶段 2：size check
+                        # 期望大小从 kwargs['quality_map'] 取（调用方传入，来自 search/info）
+                        qmap = kwargs.get('quality_map') or {}
+                        user_q = user_quality
+                        expected_size = int((qmap.get(user_q) or {}).get('size') or 0)
+                        if not self._verify_url_reachable(data, expected_min_size=expected_size):
                             source._stats['fail'] += 1
-                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时）'
+                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时/size 不匹配）'
                             source._stats['total_ms'] += elapsed_ms
                             # ★ 改造：只标记这个 URL 死，不影响 source 对其他 song 的工作
                             # 旧版会全局禁用 source 5min（误伤其他 song）
@@ -520,6 +555,80 @@ class FallbackChain:
                 else:
                     all_results.append(data)
         return all_results, first_source
+
+    def _try_parallel_first(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
+        """并行：同时请求多个源，**取第一个成功**的（race-style）
+
+        与 _try_serial 对比：
+        - 串行：source1 超时 5s → 试 source2 (再 5s) → 共 10s+
+        - 并行首胜：所有源同时跑，1s 内出结果就停 → 通常 1-3s
+
+        与 _try_parallel 对比：
+        - _try_parallel：所有源的结果**合并去重**（仅用于 search）
+        - _try_parallel_first：所有源**抢答**，第一个成功的返回（用于 url/info/lyric）
+
+        关键：第一个成功的 future 就 cancel 其余（避免浪费 CDN 流量和源配额）
+        """
+        all_sources = list(sources)
+        if not all_sources:
+            return _default_for_op(op), None
+
+        all_results = []  # (data, source) 按完成顺序
+        winner: Tuple[Any, Optional[str]] = (_default_for_op(op), None)
+        # 链级超时
+        chain_start = time.time()
+        deadline = chain_start + self.max_chain_seconds if self.max_chain_seconds > 0 else float('inf')
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            future_to_source = {
+                pool.submit(self._fetch_one, s, op, **kwargs): s
+                for s in all_sources
+            }
+            try:
+                # 等待第一个成功的（带超时）
+                # 注意：as_completed 的 timeout 只在"完全没有 future 完成"时触发
+                # 内部循环也要检查链级超时（防止所有源都失败时等待到 timeout）
+                for fut in as_completed(future_to_source, timeout=max(0.1, deadline - time.time())):
+                    # ★ 链级超时检查（每轮迭代都看）
+                    if time.time() >= deadline:
+                        logger.warning(
+                            f'[{self.platform}.{op}] ⏱️ parallel_first 链级超时 ({time.time()-chain_start:.1f}s)'
+                        )
+                        break
+                    source = future_to_source[fut]
+                    try:
+                        data = fut.result()
+                    except Exception as e:
+                        source._stats['fail'] += 1
+                        source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
+                        continue
+                    if not self._is_valid(data, op):
+                        source._stats['fail'] += 1
+                        source._stats['last_error'] = '数据无效（empty/parse）'
+                        continue
+                    # ★ 成功：第一个返回有效结果的获胜
+                    source._stats['ok'] += 1
+                    source._stats['last_used'] = time.time()
+                    self.mark_source_success(source.name)
+                    winner = (data, source.name)
+                    logger.info(
+                        f'[{self.platform}.{op}] ✅ {source.name} 成功 (race-first)'
+                    )
+                    # 取消其他 future
+                    for f in future_to_source:
+                        if not f.done():
+                            f.cancel()
+                    return winner
+            except TimeoutError:
+                logger.warning(
+                    f'[{self.platform}.{op}] ⏱️ parallel_first 超时 ({time.time()-chain_start:.1f}s)'
+                )
+            finally:
+                # 等待所有 future 收尾（最多 0.5s），清理资源
+                for f in list(future_to_source.keys()):
+                    if not f.done():
+                        f.cancel()
+        return winner
 
     def _fetch_one(self, source: ApiSource, op: str, **kwargs) -> Any:
         """执行单次 API 调用"""

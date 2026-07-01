@@ -29,9 +29,9 @@ class KuwoClient(BaseMusicClient):
         self.platform_id = 'kuwo'
         self.platform_name = '酷我音乐'
         self.search_chain = FallbackChain(KUWO_SEARCH_SOURCES, platform='kuwo', strategy='parallel')
-        self.parse_url_chain = FallbackChain(KUWO_PARSE_URL_SOURCES, platform='kuwo', strategy='serial')
-        self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='serial')
-        self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='serial')
+        self.parse_url_chain = FallbackChain(KUWO_PARSE_URL_SOURCES, platform='kuwo', strategy='parallel_first')
+        self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='parallel_first')
+        self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='parallel_first')
         self.parse_playlist_chain = FallbackChain(KUWO_PARSE_PLAYLIST_SOURCES, platform='kuwo', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -51,18 +51,26 @@ class KuwoClient(BaseMusicClient):
         }
 
     def get_song(self, song_id, quality: str = QualityLevel.LOSSLESS.value,
-                 with_lyric: bool = True) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息（酷我用 rid）"""
+                 with_lyric: bool = True, preferred_source: str = '',
+                 quality_map: dict = None) -> Optional[Dict[str, Any]]:
+        """一次性获取歌曲完整信息（酷我用 rid）
+
+        Args:
+            preferred_source: 来自 search 的源名，传下去给 url/info/lyric 链优先使用
+            quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
+        """
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
+        url_kwargs = dict(rid=song_id_str, quality=quality,
+                          preferred_source=preferred_source, quality_map=quality_map or {})
+        info_kwargs = dict(rid=song_id_str, preferred_source=preferred_source)
+        lyric_kwargs = dict(rid=song_id_str, preferred_source=preferred_source)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url',
-                                rid=song_id_str, quality=quality)
-            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                                 rid=song_id_str)
+            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
             f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                                   rid=song_id_str) if with_lyric else None)
+                                   **lyric_kwargs) if with_lyric else None)
 
         url, url_src = f_url.result()
         info, info_src = f_info.result()
