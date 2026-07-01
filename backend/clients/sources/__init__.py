@@ -32,7 +32,6 @@ from .kuwo import (
     KUWO_PARSE_LYRIC_SOURCES,
     KUWO_PARSE_PLAYLIST_SOURCES,
 )
-from .common import COMMON_SOURCES
 
 __all__ = [
     'NETEASE_SEARCH_SOURCES',
@@ -55,5 +54,4 @@ __all__ = [
     'KUWO_PARSE_INFO_SOURCES',
     'KUWO_PARSE_LYRIC_SOURCES',
     'KUWO_PARSE_PLAYLIST_SOURCES',
-    'COMMON_SOURCES',
 ]

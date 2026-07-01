@@ -203,16 +203,83 @@ class MusicService:
     def _search_by_keyword(self, keyword: str, platform: str, limit: int) -> Dict[str, Any]:
         """关键字搜索歌曲"""
         try:
-            songs = search_music(keyword, platform, limit)
-            return {'data': songs, 'type': 'song', 'warnings': []}
+            result = search_music(keyword, platform, limit)
+            # music_client.search() 返回 {'data': [...], 'search_source': 'xxx'}
+            songs = result.get('data', []) if isinstance(result, dict) else result
+            search_source = result.get('search_source', '') if isinstance(result, dict) else ''
+            return {'data': songs, 'type': 'song', 'search_source': search_source, 'warnings': []}
         except Exception as e:
             logger.error(f"[{platform}] 搜索失败: {e}")
             return {
                 'data': [],
                 'type': 'song',
+                'search_source': '',
                 'error': f'搜索失败: {e}',
                 'warnings': [],
             }
+
+    def _resolve_from_url(self, parsed: Dict[str, str]) -> Dict[str, Any]:
+        """URL 解析后获取详情（支持歌曲链接和歌单链接）
+
+        返回带 type 字段，前端根据 type 决定是否展示 toolbar：
+        - type='song': 单曲列表（无 toolbar）
+        - type='playlist': 歌单（detail 含 name/cover/creator/trackCount）
+
+        ★ 修复：URL 解析出的单曲也会被标记 _search_source，让 /song 接口的
+        url/info/lyric 链能用同源优先（之前只有 keyword 搜索走这条路径，
+        URL 解析的歌曲 preferred_source 永远是空，会被 random 源顶替）。
+        """
+        resource_type = parsed.get('type')
+        resource_id = parsed['id']
+        source_platform = parsed['platform']
+
+        if resource_type == 'music':
+            song_info = self.get_song_info(resource_id, 'lossless', source_platform)
+            if song_info and song_info.get('id') and song_info.get('url'):
+                # 标记 _search_source（让 /song 后续链可以同源优先）
+                song_info['_search_source'] = 'url_resolved'
+                return {
+                    'data': [song_info],
+                    'type': 'song',
+                    'warnings': [],
+                }
+            return {
+                'data': [],
+                'type': 'song',
+                'error': '未找到歌曲信息（可能 URL 已失效）',
+                'warnings': [],
+            }
+
+        if resource_type == 'playlist':
+            playlist = parse_playlist(resource_id, platform=source_platform)
+            if playlist and playlist.get('tracks'):
+                # 给每首歌标记 _search_source（让 /song 后续链可以同源优先）
+                for t in playlist.get('tracks', []) or []:
+                    t.setdefault('_search_source', 'playlist_resolved')
+                return {
+                    'data': playlist['tracks'],
+                    'type': 'playlist',
+                    'detail': {
+                        'name': playlist.get('name') or '歌单',
+                        'creator': playlist.get('creator') or '',
+                        'cover': playlist.get('cover') or '',
+                        'trackCount': playlist.get('trackCount') or len(playlist['tracks']),
+                    },
+                    'warnings': [],
+                }
+            return {
+                'data': [],
+                'type': 'playlist',
+                'error': f'{source_platform} 平台暂不支持歌单解析',
+                'warnings': [],
+            }
+
+        return {
+            'data': [],
+            'type': 'unknown',
+            'error': f'暂不支持解析 {resource_type} 类型的链接',
+            'warnings': [],
+        }
 
 
 music_service = MusicService()

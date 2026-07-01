@@ -5,7 +5,8 @@
 由 kugou_official_lyric (P=0) source 自动处理。
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -75,12 +76,37 @@ class KugouClient(BaseMusicClient):
                           preferred_source=preferred_source, quality_map=quality_map or {})
         info_kwargs = dict(hash=parse_hash, preferred_source=preferred_source)
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
+        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
+        # 旧版会等最慢的链（url）完成才返回。新版 url/info 抢答，谁先到用谁。
+        # 注：kugou 的 lyric 链依赖 info 的 duration，所以 lyric 放在 info 之后串行调用。
+        t_start = time.time()
+        pool = ThreadPoolExecutor(max_workers=2)
+        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+        f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
+        pool.shutdown(wait=False)
 
-        url, url_src = f_url.result()
-        info, info_src = f_info.result()
+        url, url_src = '', None
+        info, info_src = {}, None
+        deadline = t_start + 6.5
+        for fut in as_completed(
+            [f_url, f_info],
+            timeout=max(0.1, deadline - time.time()),
+        ):
+            try:
+                data, src = fut.result()
+            except FuturesTimeoutError:
+                logger.warning(f'[{self.platform_id}] 单链 as_completed 超时')
+                continue
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
+                continue
+            if fut is f_url:
+                url, url_src = data, src
+            elif fut is f_info:
+                info, info_src = data, src
+            # url 拿到就退出（info 后台继续跑）
+            if url and url.startswith('http') and info:
+                break
 
         if not url or not url.startswith('http'):
             return None

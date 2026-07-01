@@ -15,6 +15,7 @@
   - 通过 health() 暴露给前端做监控
 """
 import json
+import re
 import time
 import logging
 import requests
@@ -567,17 +568,22 @@ class FallbackChain:
         - _try_parallel：所有源的结果**合并去重**（仅用于 search）
         - _try_parallel_first：所有源**抢答**，第一个成功的返回（用于 url/info/lyric）
 
-        关键：第一个成功的 future 就 cancel 其余（避免浪费 CDN 流量和源配额）
+        关键：parse_url 还需要 URL 验证（403/404 算失败），
+              所以"成功"不只拿到 URL，还要 verify 出来可用。
+              验证失败不 cancel 其他源，让其他源继续抢答。
         """
         all_sources = list(sources)
         if not all_sources:
             return _default_for_op(op), None
 
-        all_results = []  # (data, source) 按完成顺序
-        winner: Tuple[Any, Optional[str]] = (_default_for_op(op), None)
+        user_quality = kwargs.get('quality', '')
+        song_id = kwargs.get('song_id') or kwargs.get('rid') or kwargs.get('mid') or kwargs.get('hash') or kwargs.get('playlist_id')
+
         # 链级超时
         chain_start = time.time()
         deadline = chain_start + self.max_chain_seconds if self.max_chain_seconds > 0 else float('inf')
+        # 已确认失败的源：URL 验证失败 / 数据无效（不再参与"抢答"取消）
+        failed_sources: set = set()  # type: ignore[var-annotated]
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             future_to_source = {
@@ -585,50 +591,72 @@ class FallbackChain:
                 for s in all_sources
             }
             try:
-                # 等待第一个成功的（带超时）
-                # 注意：as_completed 的 timeout 只在"完全没有 future 完成"时触发
-                # 内部循环也要检查链级超时（防止所有源都失败时等待到 timeout）
+                # 等待 future 完成：可能是成功、失败、URL 验证失败
                 for fut in as_completed(future_to_source, timeout=max(0.1, deadline - time.time())):
-                    # ★ 链级超时检查（每轮迭代都看）
                     if time.time() >= deadline:
                         logger.warning(
                             f'[{self.platform}.{op}] ⏱️ parallel_first 链级超时 ({time.time()-chain_start:.1f}s)'
                         )
                         break
                     source = future_to_source[fut]
+                    if source.name in failed_sources:
+                        continue
                     try:
                         data = fut.result()
                     except Exception as e:
                         source._stats['fail'] += 1
                         source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
+                        failed_sources.add(source.name)
                         continue
                     if not self._is_valid(data, op):
                         source._stats['fail'] += 1
                         source._stats['last_error'] = '数据无效（empty/parse）'
+                        failed_sources.add(source.name)
                         continue
-                    # ★ 成功：第一个返回有效结果的获胜
+                    # ★ parse_url：必须 URL 真正可用（403/404 算失败）
+                    if op == 'parse_url' and isinstance(data, str):
+                        if self._is_url_dead(data):
+                            logger.info(
+                                f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
+                            )
+                            failed_sources.add(source.name)
+                            continue
+                        # ★ 阶段 2：size check
+                        qmap = kwargs.get('quality_map') or {}
+                        expected_size = int((qmap.get(user_quality) or {}).get('size') or 0)
+                        if not self._verify_url_reachable(data, expected_min_size=expected_size):
+                            source._stats['fail'] += 1
+                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时/size 不匹配）'
+                            self.mark_url_dead(data, source.name, expire_seconds=300)
+                            logger.warning(
+                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
+                            )
+                            failed_sources.add(source.name)
+                            # ★ 不 cancel 其他源，让其他源继续"抢答"
+                            continue
+                    # ★ 成功：第一个通过所有验证的获胜
+                    self._per_rid_failed.pop((source.name, str(song_id)) if song_id else None, None)
                     source._stats['ok'] += 1
                     source._stats['last_used'] = time.time()
                     self.mark_source_success(source.name)
-                    winner = (data, source.name)
+                    url_preview = f' → {data[:80]}' if op == 'parse_url' and isinstance(data, str) else ''
                     logger.info(
-                        f'[{self.platform}.{op}] ✅ {source.name} 成功 (race-first)'
+                        f'[{self.platform}.{op}] ✅ {source.name} 成功 (race-first {time.time()-chain_start:.2f}s){url_preview}'
                     )
-                    # 取消其他 future
+                    # 取消其他 future（winner 已确定）
                     for f in future_to_source:
                         if not f.done():
                             f.cancel()
-                    return winner
+                    return data, source.name
             except TimeoutError:
                 logger.warning(
                     f'[{self.platform}.{op}] ⏱️ parallel_first 超时 ({time.time()-chain_start:.1f}s)'
                 )
             finally:
-                # 等待所有 future 收尾（最多 0.5s），清理资源
                 for f in list(future_to_source.keys()):
                     if not f.done():
                         f.cancel()
-        return winner
+        return _default_for_op(op), None
 
     def _fetch_one(self, source: ApiSource, op: str, **kwargs) -> Any:
         """执行单次 API 调用"""
@@ -767,9 +795,31 @@ class FallbackChain:
         if op == 'search':
             return isinstance(data, list) and len(data) > 0
         if op == 'parse_info':
-            return isinstance(data, dict) and bool(data.get('name') or data.get('id'))
+            # 修复：原来只检查 name OR id，但 fallback 源可能返回 {id: '...', name: ''}
+            # 这种半空对象应该跳过，要求至少 name + id 同时存在（或 name + artists）
+            if not isinstance(data, dict):
+                return False
+            has_id = bool(data.get('id') or data.get('mid') or data.get('rid') or data.get('hash'))
+            has_name = bool(data.get('name') or data.get('title') or data.get('songName'))
+            return has_id and has_name
         if op == 'parse_lyric':
-            return isinstance(data, str) and len(data.strip()) > 0
+            # 修复：原来只检查 len > 0，但 '暂无歌词' / 'no lyrics' / '纯音乐' 等占位符
+            # 长度 > 0 会被误判为有效 → 前端以为有歌词但实际是占位符
+            if not isinstance(data, str):
+                return False
+            s = data.strip()
+            if len(s) < 10:  # 真实歌词至少几十字符
+                return False
+            # 检查是否包含时间戳（真实歌词必有 [00:xx.xx] 或 LRC 头标签）
+            if not (re.search(r'\[\d{1,2}:\d{2}', s) or s.startswith('[ti:') or s.startswith('[ar:')):
+                return False
+            # 排除明显的占位符
+            placeholders = ('暂无歌词', 'no lyrics', 'no lyric', '纯音乐', 'lyric not found',
+                            'lyrics not found', '该歌曲为纯音乐', '暂未发现歌词')
+            s_lower = s.lower()
+            if any(p in s_lower for p in placeholders):
+                return False
+            return True
         if op == 'parse_playlist':
             if not (isinstance(data, dict) and (data.get('tracks') or data.get('name'))):
                 return False

@@ -3,7 +3,8 @@
 QQ 鉴权复杂，主要依赖第三方解析 API。
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -55,6 +56,9 @@ class QQClient(BaseMusicClient):
                  quality_map: dict = None) -> Optional[Dict[str, Any]]:
         """一次性获取歌曲完整信息
 
+        实现策略：3 条链并行抢答（URL/Info/Lyric 各抢答），
+        第一个完成一个就立即处理，整体响应时间 = max(3 条链最快) 而非 sum
+
         Args:
             preferred_source: 来自 search 链的源名（如 'qq_official_search'），
                 传下去给 url/info/lyric 链优先使用（避免跨源不一致）
@@ -71,16 +75,51 @@ class QQClient(BaseMusicClient):
         lyric_kwargs = dict(song_id=song_id_str,
                             preferred_source=preferred_source)
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
-            f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                                   **lyric_kwargs) if with_lyric else None)
+        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
+        # 旧版 `with` 会在退出时 wait 所有 future，导致最慢的链（lyric 5s+）
+        # 阻塞整个 /song 接口。新版 url/info/lyric 各自抢答完成即可返回。
+        t_start = time.time()
+        pool = ThreadPoolExecutor(max_workers=3)
+        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+        f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
+        f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
+                               **lyric_kwargs) if with_lyric else None)
+        # shutdown(wait=False) 不阻塞主线程，让新 future 还能继续跑
+        pool.shutdown(wait=False)
 
-        url, url_src = f_url.result()
-        info, info_src = f_info.result()
-        lyric_result = f_lyric.result() if f_lyric else ('', None)
-        lyric, lyric_src = lyric_result
+        # 用 as_completed 按需取结果，每条链最多等 max_chain_seconds (6s)
+        # URL 是关键 → 优先等 url（但同时让 info/lyric 也跑）
+        url, url_src = '', None
+        info, info_src = {}, None
+        lyric, lyric_src = '', None
+        deadline = t_start + 6.5  # 留 1.5s 余量给 JSON 解析等
+        for fut in as_completed(
+            [f for f in (f_url, f_info, f_lyric) if f is not None],
+            timeout=max(0.1, deadline - time.time()),
+        ):
+            try:
+                data, src = fut.result()
+            except FuturesTimeoutError:
+                logger.warning(f'[{self.platform_id}] 单链 as_completed 超时')
+                continue
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
+                continue
+            if fut is f_url:
+                url, url_src = data, src
+            elif fut is f_info:
+                info, info_src = data, src
+            elif fut is f_lyric:
+                lyric, lyric_src = data, src
+            # URL 拿到就退出循环（其他链后台继续跑）
+            if url and url.startswith('http'):
+                break
+
+        logger.info(
+            f'[{self.platform_id}] /song 3 链抢答完成: '
+            f'url={url_src} info={info_src} lyric={lyric_src} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         if not url or not url.startswith('http'):
             return None

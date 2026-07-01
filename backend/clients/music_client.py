@@ -146,15 +146,21 @@ class MusicClient:
 
     # ==================== 业务方法 ====================
 
-    def search(self, keyword: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
+    def search(self, keyword: str, platform: str = None, limit: int = 50) -> Dict[str, Any]:
         """搜索歌曲（永远只搜歌曲；URL 由 service 层另行解析）
 
         4 个平台 search 链都走官方 API，一次返回完整元信息
         （album / cover / qualityMap / pay），不需要后置补全
+
+        返回 dict（含 search_source），兼容 routes.py 和 service.py
         """
         client = self._get_client(platform)
         result = client.search(keyword, limit=limit)
-        return result.get('data', []) if isinstance(result, dict) else []
+        if not isinstance(result, dict):
+            return {'data': [], 'search_source': ''}
+        songs = result.get('data', [])
+        search_source = result.get('api_source', '')
+        return {'data': songs, 'search_source': search_source}
 
     def get_song(self, song_id: Any, quality: str = 'lossless',
                  platform: str = None, with_lyric: bool = True,

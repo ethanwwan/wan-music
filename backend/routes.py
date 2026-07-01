@@ -98,6 +98,13 @@ def search():
 
         result = music_service.search(keyword, platform, limit)
         logger.info(f"[搜索结果] 结果数量={len(result.get('data', []))}")
+        # ★ 关键：把 search_source 透传到每个 song（/song 用作 preferred_source）
+        # 之前只放在 result['search_source'] 顶层，/song 接口读不到
+        # 同源优先 = search 用的源 = url/info/lyric 用的源，避免跨源不一致
+        search_source = result.get('search_source', '')
+        for song in result.get('data', []):
+            if search_source and not song.get('_search_source'):
+                song['_search_source'] = search_source
         return jsonify(APIResponse.success(result, "搜索成功"))
     except Exception as e:
         logger.error(f"搜索失败: {e}")

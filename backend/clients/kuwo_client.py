@@ -3,7 +3,8 @@
 所有数据源参考 musicdl kuwo.py。
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -66,16 +67,45 @@ class KuwoClient(BaseMusicClient):
         info_kwargs = dict(rid=song_id_str, preferred_source=preferred_source)
         lyric_kwargs = dict(rid=song_id_str, preferred_source=preferred_source)
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-            f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
-            f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                                   **lyric_kwargs) if with_lyric else None)
+        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
+        t_start = time.time()
+        pool = ThreadPoolExecutor(max_workers=3)
+        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+        f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
+        f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
+                               **lyric_kwargs) if with_lyric else None)
+        pool.shutdown(wait=False)
 
-        url, url_src = f_url.result()
-        info, info_src = f_info.result()
-        lyric_result = f_lyric.result() if f_lyric else ('', None)
-        lyric, lyric_src = lyric_result
+        url, url_src = '', None
+        info, info_src = {}, None
+        lyric, lyric_src = '', None
+        deadline = t_start + 6.5
+        for fut in as_completed(
+            [f for f in (f_url, f_info, f_lyric) if f is not None],
+            timeout=max(0.1, deadline - time.time()),
+        ):
+            try:
+                data, src = fut.result()
+            except FuturesTimeoutError:
+                logger.warning(f'[{self.platform_id}] 单链 as_completed 超时')
+                continue
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
+                continue
+            if fut is f_url:
+                url, url_src = data, src
+            elif fut is f_info:
+                info, info_src = data, src
+            elif fut is f_lyric:
+                lyric, lyric_src = data, src
+            if url and url.startswith('http'):
+                break
+
+        logger.info(
+            f'[{self.platform_id}] /song 3 链抢答完成: '
+            f'url={url_src} info={info_src} lyric={lyric_src} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         if not url or not url.startswith('http'):
             return None
