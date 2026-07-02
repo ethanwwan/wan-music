@@ -159,7 +159,7 @@ class MusicClient:
         if not isinstance(result, dict):
             return {'data': [], 'search_source': ''}
         songs = result.get('data', [])
-        search_source = result.get('api_source', '')
+        search_source = result.get('search_source', '')
         return {'data': songs, 'search_source': search_source}
 
     def get_song(self, song_id: Any, quality: str = 'lossless',

@@ -7,7 +7,7 @@
 """
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -90,26 +90,25 @@ class NeteaseClient(BaseMusicClient):
         info, info_src = {}, None
         lyric, lyric_src = '', None
         deadline = t_start + 6.5
-        for fut in as_completed(
-            [f for f in (f_url, f_info, f_lyric) if f is not None],
-            timeout=max(0.1, deadline - time.time()),
-        ):
-            try:
-                data, src = fut.result()
-            except FuturesTimeoutError:
-                logger.warning(f'[{self.platform_id}] 单链 as_completed 超时')
-                continue
-            except Exception as e:
-                logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
-                continue
-            if fut is f_url:
-                url, url_src = data, src
-            elif fut is f_info:
-                info, info_src = data, src
-            elif fut is f_lyric:
-                lyric, lyric_src = data, src
-            if url and url.startswith('http'):
-                break
+        futures = [f for f in (f_url, f_info, f_lyric) if f is not None]
+        try:
+            for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
+                try:
+                    data, src = fut.result()
+                except Exception as e:
+                    logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
+                    continue
+                if fut is f_url:
+                    url, url_src = data, src
+                elif fut is f_info:
+                    info, info_src = data, src
+                elif fut is f_lyric:
+                    lyric, lyric_src = data, src
+                if url and url.startswith('http'):
+                    break
+        except TimeoutError:
+            logger.warning(f'[{self.platform_id}] 3 链并行抢答超时')
+            pass
 
         logger.info(
             f'[{self.platform_id}] /song 3 链抢答完成: '
