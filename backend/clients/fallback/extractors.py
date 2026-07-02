@@ -57,9 +57,23 @@ def extract_nested_url(d: dict, *keys: str) -> str:
 
 
 def extract_text_url(d: Any) -> str:
-    """有些 API（如 byfuns）直接返回纯文本 URL"""
+    """有些 API（如 byfuns）直接返回纯文本 URL
+
+    兼容两种情况：
+    1. d 本身就是字符串（理论情况）
+    2. d 是 dict 含 _text 字段（chain 包装非 JSON 响应的格式）
+    """
     if isinstance(d, str) and d.startswith('http'):
         return d
+    if isinstance(d, dict):
+        # chain 在 _fetch_one 中把非 JSON 响应包装成 {'_text': r.text.strip()}
+        text = d.get('_text', '')
+        if isinstance(text, str):
+            # 取第一个 http 开头的 token（处理多余空白/换行）
+            import re
+            m = re.search(r'https?://\S+', text)
+            if m:
+                return m.group(0).rstrip('",\r\n}')
     return ''
 
 

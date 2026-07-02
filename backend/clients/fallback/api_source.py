@@ -72,6 +72,12 @@ class ApiSource:
         # 签名: Callable[(url, method, headers, post_data, kwargs), dict]
         # 返回: {'url', 'method', 'headers', 'post_data', 'is_json'}
         prepare_request: Optional[Callable[..., dict]] = None
+
+        # 高级：直传模式（API URL 本身就是下载 URL）
+        # 适用场景：源 API 不返回 JSON，而是直接返回音频流（如 ccwu）
+        # 启用后，chain 会跳过实际 HTTP 请求，直接把 URL 模板（占位符已替换）当作下载 URL 返回。
+        # chain 后续会做 HEAD/Range 验证 URL 可用性。
+        passthrough: bool = False
     """
     name: str
     platform: str
@@ -126,6 +132,12 @@ class ApiSource:
     # 高级：有状态请求准备器
     # 签名: (url, method, headers, post_data, kwargs) -> dict
     prepare_request: Optional[Callable[..., dict]] = None
+
+    # 高级：直传模式（API URL 本身就是下载 URL）
+    # 适用：源 API 不返回 JSON 而是直接返音频流（如 ccwu），
+    #      chain 跳过实际 HTTP 请求，把 URL 模板（占位符已替换）当作下载 URL 返回
+    # 后续 chain 会 HEAD/Range 验证 URL 可用性
+    passthrough: bool = False
 
     # 内部统计（运行期填充）
     _stats: dict = field(default_factory=lambda: {'ok': 0, 'fail': 0, 'last_error': '', 'last_used': 0, 'total_ms': 0})

@@ -5,6 +5,8 @@
 酷我使用 MUSICRID（去掉 MUSIC_ 前缀）作为 song_id。
 第三方源质量分级：lossless < exhigh < standard；特殊品质 jymaster 走 jymaster/ff/p/h 标签。
 """
+import base64
+import random
 from ..fallback.api_source import ApiSource
 from ..fallback.extractors import (
     extract_first_url,
@@ -26,6 +28,66 @@ KUWO_LXMUSIC_HEADERS = {
     'User-Agent': 'lx-music-request/2.6.0',
     'X-Request-Key': 'share-v3',
 }
+
+
+# ==================== musicdl 兼容的解密/加密函数 ====================
+
+# yyy001 源的 ckey 池（musicdl 提供）+ 解密函数
+# 解密逻辑：跳过前 14 字符 "charlespikachu"，剩余 base64 解码得真实 key
+_YYY001_REQUEST_KEYS = [
+    'charlespikachuU2hhbmhhaS11RENkUGhoQ2xlUmd2WFh5bFFCbHFQVHMyb3RtSGNQbFJ5UWdvdlRsbW8wMDRyZko=',
+    'charlespikachuU2hhbmhhaS0yYlBxOUJFcFV5ZUtENGNESGc0MHp3Nzl6UDN1SkhqalNTS2hCekpYRVpxakdTbzE=',
+    'charlespikachuU2hhbmhhaS1XenJBNlFWS2N5RlExYk5aemRSZ1NpVHVhR1Z6N21ET29GamVEM0FvS3NGUlFtZ2M=',
+]
+
+
+def _yyy001_prepare_request(url: str, method: str, headers: dict, post_data, is_json: bool, kwargs: dict):
+    """yyy001 源 prepare_request：随机选一个 ckey 解密后注入 URL。
+
+    musicdl 的实现：
+        decrypt_func = lambda t: base64.b64decode(str(t)[14:]).decode('utf-8')
+        key = decrypt_func(random.choice(REQUEST_KEYS))
+        url = f"...?key={key}&action=music_url&music_id={song_id}&quality={quality}"
+    """
+    try:
+        ckey = base64.b64decode(random.choice(_YYY001_REQUEST_KEYS)[14:].encode('utf-8')).decode('utf-8')
+        url = url.replace('{ckey}', ckey)
+    except Exception:
+        pass
+    return {'url': url}
+
+
+# guyuei 源 final URL 解密（musicdl 实现）
+# 流程：skip 前 9 字符 + 'A' 前缀 → base64 补齐 → 解码 → 逐字节 XOR key="nsh" → "http" + ...
+def _guyuei_decrypt(encrypted_str: str, key: bytes = b'nsh') -> str:
+    try:
+        if not encrypted_str:
+            return ''
+        # 前缀补偿：跳过 9 字符，补 'A'
+        raw = 'A' + encrypted_str[9:]
+        # base64 补齐到 4 倍数
+        raw = raw + '=' * ((4 - len(raw) % 4) % 4)
+        dec_bytes = base64.b64decode(raw)
+        # 逐字节 XOR（从 i=1 开始），key 循环
+        out = 'http' + ''.join(
+            chr(dec_bytes[i] ^ key[(i - 1) % len(key)])
+            for i in range(1, len(dec_bytes))
+        )
+        return out.rstrip('\x00')
+    except Exception:
+        return ''
+
+
+def _guyuei_extract_url(d):
+    """guyuei 源：响应 JSON 含 {url: '...encrypted...'}，需解密"""
+    if not isinstance(d, dict):
+        return ''
+    enc = d.get('url', '') or ''
+    decrypted = _guyuei_decrypt(enc)
+    if decrypted and decrypted.startswith('http'):
+        return decrypted
+    # 兜底：部分接口直接返纯文本 URL
+    return extract_text_url(d) or ''
 
 
 # ==================== 搜索源 ====================
@@ -98,18 +160,22 @@ KUWO_PARSE_URL_SOURCES = [
         max_quality='lossless',
     ),
     # 2. ccwu (musicdl 列表) - 高码率 jymaster
+    # ★ 关键：ccwu 端点不返回 JSON，而是直接返回音频流，
+    #   URL 本身就是下载 URL（与 musicdl 一致）。
+    #   用 passthrough=True 让 chain 跳过 HTTP 请求，直接把 URL 模板作为下载 URL 返回。
     # max_quality='jymaster'：level=jymaster
     ApiSource(
         name='ccwu_url',
         platform='kuwo',
         priority=10,
-        description='ccwu (musicdl 列表，jymaster 码率)',
+        description='ccwu (musicdl 列表，jymaster 码率，passthrough 直返音频流)',
         can_parse_url=True,
         parse_url_url='http://kw.006lp.ccwu.cc:7119/api/song?id={rid}&level=jymaster&stream=1',
         extract_url=extract_first_url,
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
         max_quality='jymaster',
+        passthrough=True,
     ),
     # 3. liuyunidc (musicdl 列表) - 需 RC4 加密
     # max_quality='hires'：musicdl 备注支持
@@ -132,19 +198,21 @@ KUWO_PARSE_URL_SOURCES = [
         max_quality='hires',
     ),
     # 4. yyy001 (musicdl 列表) - 需 ckey
+    # ★ ckey 解密已实现（见文件顶部 _yyy001_prepare_request）
+    #   musicdl 实现：跳过前 14 字符 + base64 解码 → 注入 URL
     # max_quality='hires'：quality 参数支持
     ApiSource(
         name='yyy001_url',
         platform='kuwo',
         priority=20,
-        description='yyy001 (musicdl 列表，需 ckey 解密)',
-        enabled=False,  # 需 base64 解密 ckey
+        description='yyy001 (musicdl 列表，ckey 解密已实现)',
         can_parse_url=True,
         parse_url_url='https://apione.apibyte.cn/kwmusic?key={ckey}&action=music_url&music_id={rid}&quality={quality}',
         extract_url=lambda d: (
             (d.get('data', {}) if isinstance(d, dict) else {}).get('url', '')
             if isinstance(d, dict) else ''
         ),
+        prepare_request=_yyy001_prepare_request,
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
         max_quality='hires',
@@ -198,16 +266,17 @@ KUWO_PARSE_URL_SOURCES = [
         max_quality='lossless',
     ),
     # 8. guyuei (musicdl 列表) - 需解密 final URL
+    # ★ XOR 解密已实现（见文件顶部 _guyuei_extract_url / _guyuei_decrypt）
+    #   musicdl 实现：skip 前 9 字符 + 'A' 前缀 → base64 补齐 → XOR key="nsh"
     # max_quality='hires'：yinzhi=hns 是高品质
     ApiSource(
         name='guyuei_url',
         platform='kuwo',
         priority=40,
-        description='guyuei (musicdl 列表，需 RC4/XOR 解密 final URL)',
-        enabled=False,  # 需 RC4/XOR 解密
+        description='guyuei (musicdl 列表，XOR 解密 final URL 已实现)',
         can_parse_url=True,
         parse_url_url='https://www.guyuei.com/music/kw.php?url=https://www.kuwo.cn/play_detail/{rid}&yinzhi=hns',
-        extract_url=extract_first_url,
+        extract_url=_guyuei_extract_url,
         headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
         },

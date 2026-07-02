@@ -633,6 +633,10 @@ class BatchDownloadService:
                         pass
 
                 # 写 metadata
+                # 关键：song_id 优先用原始 item['id']（search 阶段的 file hash），
+                # song_info['id'] 可能是酷狗的 album rid，与 search 返回的 hash 不一致。
+                # 同样 name/artist/album 也优先用 item 传过来的（已是 search 阶段标准化结果），
+                # 兜底才用 song_info（parse_info 阶段可能格式不同）。
                 lyric = song_info.get('lyric', '') or ''
                 if settings.get('writeMetadata', True):
                     _write_metadata(
@@ -643,7 +647,7 @@ class BatchDownloadService:
                         lyric,
                         song_info.get('picUrl', ''),
                         platform=song_info.get('source', source or ''),
-                        song_id=song_info.get('id', song_id)
+                        song_id=str(song_id) or song_info.get('id', ''),
                     )
 
                 arcname = _sanitize_filename(

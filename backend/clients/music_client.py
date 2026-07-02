@@ -70,6 +70,8 @@ class MusicClient:
           scope='permanent'  → 强制 per-rid（4xx/empty/parse，需要 song_id）
           不传 song_id 时降级为全局（旧行为）
 
+        日志只打印 1 次（避免广播到 5 个 chain 重复 5 遍）。
+
         Args:
             platform: 4 大平台名
             source_name: 失败的 source 名
@@ -88,7 +90,7 @@ class MusicClient:
             if chain:
                 chain.mark_source_failed(
                     source_name, expire_seconds, reason,
-                    song_id=song_id, scope=scope,
+                    song_id=song_id, scope=scope, log=False,
                 )
 
     def reset_failed_sources(self, platform: str = None) -> None:
@@ -126,6 +128,8 @@ class MusicClient:
         场景：vkeys_url 成功下载某首歌 → 后续 24 小时内优先用 vkeys_url
               直到它失败（被 mark_source_failed 覆盖）
         改为 24h：API 稳定性以天为单位，避免每 10 分钟重复 try 所有 source。
+
+        日志只打印 1 次（避免广播到 5 个 chain 重复 5 遍）。
         """
         try:
             client = self._get_client(platform)
@@ -135,7 +139,7 @@ class MusicClient:
                       client.parse_lyric_chain, client.parse_playlist_chain,
                       client.search_chain):
             if chain:
-                chain.mark_source_success(source_name, expire_seconds)
+                chain.mark_source_success(source_name, expire_seconds, log=False)
 
     def _get_client(self, platform: str) -> BaseMusicClient:
         platform = platform or self.default_platform

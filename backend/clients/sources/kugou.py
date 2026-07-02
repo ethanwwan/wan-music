@@ -4,6 +4,8 @@
 
 酷狗 file_hash 模式，第三方解析 API 较少。
 """
+import base64
+import random
 from ..fallback.api_source import ApiSource
 from ..fallback.extractors import (
     extract_first_url,
@@ -28,6 +30,39 @@ KUGOU_MOBILE_HEADERS = {
                   'Mobile/15E148 Safari/604.1',
     'Referer': 'http://m.kugou.com',
 }
+
+
+# ==================== musicdl 兼容的解密函数 ====================
+
+# 317ak 源的 ckey 池（musicdl 提供）+ 解密函数（与 yyy001 同模式）
+# 解密逻辑：跳过前 14 字符 "charlespikachu"，剩余 base64 解码得真实 key
+_317AK_REQUEST_KEYS = [
+    'charlespikachuUE9WTUhLSklYOEE3SUdIMkZNMVA=',
+    'charlespikachuWE1VS0lBSjNQOExQWDNQOTcxS1U=',
+    'charlespikachuN0tUSTUyVDdWTE9EUjZTVDM3UFQ=',
+]
+
+
+def _317ak_prepare_request(url: str, method: str, headers: dict, post_data, is_json: bool, kwargs: dict):
+    """317ak 源 prepare_request：随机选一个 ckey 解密后注入 URL（同 yyy001 模式）"""
+    try:
+        ckey = base64.b64decode(random.choice(_317AK_REQUEST_KEYS)[14:].encode('utf-8')).decode('utf-8')
+        url = url.replace('{ckey}', ckey)
+    except Exception:
+        pass
+    return {'url': url}
+
+
+def _urljoin_safe(base: str, url: str) -> str:
+    """urljoin 兜底：url 为空/异常时返回空字符串。绝对路径直接返，路径用 base 拼。"""
+    if not url:
+        return ''
+    try:
+        from urllib.parse import urljoin
+        result = urljoin(base, url)
+        return result if result.startswith('http') else ''
+    except Exception:
+        return '' if not url.startswith('http') else url
 
 
 # ==================== 搜索源 ====================
@@ -111,32 +146,35 @@ KUGOU_PARSE_URL_SOURCES = [
         max_quality='lossless',
     ),
     # 4. 317ak (musicdl 列表) - 需 ckey 复杂鉴权
+    # ★ ckey 解密已实现（见文件顶部 _317ak_prepare_request，与 yyy001 同模式）
+    # max_quality='hires'：br=hires 理论支持
     ApiSource(
         name='317ak_url',
         platform='kugou',
         priority=15,
-        description='317ak (musicdl 列表，需 ckey 解密)',
-        enabled=False,  # 需 base64 解密 ckey
+        description='317ak (musicdl 列表，ckey 解密已实现)',
         can_parse_url=True,
         parse_url_url='https://api.317ak.cn/api/yinyue/kugou?ckey={ckey}&i={hash}&br={quality}&type=json&lrc=1',
         extract_url=extract_first_url,
+        prepare_request=_317ak_prepare_request,
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
         max_quality='hires',  # br=hires 理论支持
     ),
     # 5. jbsou (musicdl 列表) - POST 复杂
+    # ★ musicdl 用 urljoin 拼 base_url（jbsou API 可能返相对路径）
+    # 我们用 urljoin 兜底：相对路径自动拼 https://www.jbsou.cn/
     ApiSource(
         name='jbsou_url',
         platform='kugou',
         priority=20,
-        description='jbsou POST (musicdl 列表)',
-        enabled=False,  # 需验证 POST 数据
+        description='jbsou POST (musicdl 列表，urljoin 相对路径)',
         can_parse_url=True,
         method='POST',
         parse_url_url='https://www.jbsou.cn/',
         post_data={'input': '{hash}', 'filter': 'id', 'type': 'kugou', 'page': '1'},
         extract_url=lambda d: (
-            (d.get('data', [{}])[0] if isinstance(d.get('data'), list) and d.get('data') else {}).get('url', '')
+            _urljoin_safe('https://www.jbsou.cn/', (d.get('data', [{}])[0] if isinstance(d.get('data'), list) and d.get('data') else {}).get('url', ''))
             if isinstance(d, dict) else ''
         ),
         headers={
@@ -431,15 +469,16 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         timeout=15,
     ),
     # 3. 317ak lyric (musicdl 列表，lrc=1)
+    # ★ ckey 解密已实现，复用 _317ak_prepare_request
     ApiSource(
         name='317ak_lyric',
         platform='kugou',
         priority=20,
-        description='317ak lyric (musicdl 列表)',
-        enabled=False,  # 需 ckey
+        description='317ak lyric (musicdl 列表，ckey 解密已实现)',
         can_parse_lyric=True,
         parse_lyric_url='https://api.317ak.cn/api/yinyue/kugou?ckey={ckey}&i={hash}&br=999&type=json&lrc=1',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
+        prepare_request=_317ak_prepare_request,
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
     ),

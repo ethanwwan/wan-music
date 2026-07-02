@@ -89,7 +89,7 @@ class FallbackChain:
 
     def mark_source_failed(self, name: str, expire_seconds: int = 300,
                            reason: str = '', song_id: str = None,
-                           scope: str = 'auto') -> None:
+                           scope: str = 'auto', log: bool = True) -> None:
         """标记 source 临时失败
 
         字段约定（用户定义）：
@@ -111,6 +111,10 @@ class FallbackChain:
         旧调用方式（service.py 仍按此调用）默认 scope='auto' 走老逻辑：
           - expire_seconds=300 仍按 5 分钟兜底
           - 不传 song_id 时按 transient 处理（避免 per-rid 升级为全局时反而更宽松）
+
+        Args:
+            log: 是否打印失败日志。music_client.mark_source_failed 会一次
+                 广播到 5 个 chain，避免重复打印 5 遍。
         """
         # 自动分类
         if scope == 'auto':
@@ -123,18 +127,20 @@ class FallbackChain:
         if scope == 'transient':
             ttl = expire_seconds
             self._global_failed[name] = time.time() + ttl
-            logger.warning(
-                f'[{self.platform}] 全局禁用 source {name}（{ttl}s 内所有 song 都跳过）'
-                f' 原因: {reason[:80]}'
-            )
+            if log:
+                logger.warning(
+                    f'[{self.platform}] 全局禁用 source {name}（{ttl}s 内所有 song 都跳过）'
+                    f' 原因: {reason[:80]}'
+                )
         elif scope == 'permanent':
             if not song_id:
                 # 没传 song_id 时降级为 transient（保证旧调用不破坏）
                 ttl = expire_seconds
                 self._global_failed[name] = time.time() + ttl
-                logger.warning(
-                    f'[{self.platform}] permanent 失败未传 song_id，降级为全局 {ttl}s: {name}'
-                )
+                if log:
+                    logger.warning(
+                        f'[{self.platform}] permanent 失败未传 song_id，降级为全局 {ttl}s: {name}'
+                    )
                 return
             ttl = expire_seconds
             key = (name, str(song_id))
@@ -147,10 +153,11 @@ class FallbackChain:
                 for k, _ in oldest:
                     del self._per_rid_failed[k]
                 logger.debug(f'[{self.platform}] per-rid 失败缓存满，清理 {n_drop} 条')
-            logger.info(
-                f'[{self.platform}] per-rid 禁用 {name}（{song_id}）（{ttl}s 内跳过该 song）'
-                f' 原因: {reason[:80]}'
-            )
+            if log:
+                logger.info(
+                    f'[{self.platform}] per-rid 禁用 {name}（{song_id}）（{ttl}s 内跳过该 song）'
+                    f' 原因: {reason[:80]}'
+                )
         else:
             raise ValueError(f'mark_source_failed: unknown scope={scope!r}')
 
@@ -192,7 +199,7 @@ class FallbackChain:
         self._url_dead.clear()
 
     def mark_source_success(self, name: str, expire_seconds: int = 86400,
-                            song_id: str = None) -> None:
+                            song_id: str = None, log: bool = True) -> None:
         """标记 source 最近成功（默认 24 小时内优先使用）
 
         字段约定（用户定义）：
@@ -207,6 +214,11 @@ class FallbackChain:
         顺带：清掉 per-rid 中关于该 source 的失败记录，
               因为这个 source 现在能成功 → 之前 per-rid 标记的失败应该失效。
               （避免"江南失败后晴天明明成功还用不了"的脏状态）
+
+        Args:
+            log: 是否打印成功日志。music_client.mark_source_success 会一次
+                 广播到 5 个 chain（search/parse_url/parse_info/parse_lyric/
+                 parse_playlist），调用方传入 log=False 避免重复打印 5 遍。
         """
         self._success_recent[name] = time.time() + expire_seconds
         # 清掉该 source 在 per-rid 中的所有失败记录
@@ -223,7 +235,8 @@ class FallbackChain:
         # 同时清掉全局（如果它在失败名单里被 mark 过）
         if name in self._global_failed:
             del self._global_failed[name]
-        logger.info(f'[{self.platform}] source {name} 最近成功（{expire_seconds}s 内优先使用）')
+        if log:
+            logger.info(f'[{self.platform}] source {name} 最近成功（{expire_seconds}s 内优先使用）')
 
     def _is_source_success_recent(self, name: str) -> bool:
         """检查源是否在成功记忆内（自动清理过期项）"""
@@ -664,11 +677,20 @@ class FallbackChain:
         if not url_template:
             raise ValueError(f'源 {source.name} 未配置 {op} URL')
 
-        # 填充占位符
+        # 填充占位符（用 SafeDict 兜底未知占位符，保留为 {name} 形式给 prepare_request 解析）
         resolved = self._resolve_placeholders(source, op, kwargs)
-        url = url_template.format(**resolved)
+        url = url_template.format_map(_SafeDict(resolved))
         # 一些 URL 模板中含有 __br__ 等特殊占位符
         url = url.replace('{{', '{').replace('}}', '}')
+
+        # ★ 直传模式：源 API 不返回 JSON，直接返音频流（如 ccwu）。
+        #    跳过 HTTP 请求，把 URL 模板本身当作下载 URL 返回，
+        #    chain 后续会 HEAD/Range 验证 URL 可用性。
+        if getattr(source, 'passthrough', False):
+            logger.debug(
+                f'[{self.platform}] passthrough 源 {source.name}：直接返回 URL {url[:80]}'
+            )
+            return url
 
         # 拼接 headers
         headers = dict(source.headers)
@@ -1057,3 +1079,14 @@ _QUALITY_RANK = {
 def _quality_rank(quality: str) -> int:
     """获取音质的等级（数字越大音质越高），未知名为 -1"""
     return _QUALITY_RANK.get(quality, -1)
+
+
+class _SafeDict(dict):
+    """dict 包装，让 str.format_map 对未知占位符保留为 {name} 形式不抛 KeyError。
+
+    用途：源 URL 模板含 prepare_request 动态注入的占位符（如 {ckey}），
+    标准 format() 会因 KeyError 抛错导致整源静默失败；
+    用 format_map(SafeDict) 保留占位符，prepare_request 后续替换。
+    """
+    def __missing__(self, key: str) -> str:
+        return '{' + key + '}'
