@@ -55,12 +55,21 @@ class KugouClient(BaseMusicClient):
 
     def get_song(self, song_id, quality: str = QualityLevel.LOSSLESS.value,
                  with_lyric: bool = True, preferred_source: str = '',
-                 quality_map: dict = None) -> Optional[Dict[str, Any]]:
+                 quality_map: dict = None,
+                 _cached_info: dict = None) -> Optional[Dict[str, Any]]:
         """一次性获取歌曲完整信息（酷狗用 hash 标识）
+
+        跨源一致性策略：
+        - 若传入了 _cached_info（来自 search 阶段 song_info_cache），
+          **直接使用**作为 name/artist/album/cover/duration，
+          不再抢答 parse_info_chain（避免 url/info 跨源不一致）
+        - 若 _cached_info 缺失（URL 解析/歌单导入等无 search 上下文），
+          回退到 parse_info_chain 兜底拿 info
 
         Args:
             preferred_source: 来自 search 的源名，传下去给 url/info/lyric 链优先使用
             quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
+            _cached_info: search 阶段缓存的完整 song info
         """
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
@@ -74,21 +83,25 @@ class KugouClient(BaseMusicClient):
         parse_hash = song_id_str
         url_kwargs = dict(hash=parse_hash, quality=quality,
                           preferred_source=preferred_source, quality_map=quality_map or {})
-        info_kwargs = dict(hash=parse_hash, preferred_source=preferred_source)
 
         # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
         # 旧版会等最慢的链（url）完成才返回。新版 url/info 抢答，谁先到用谁。
         # 注：kugou 的 lyric 链依赖 info 的 duration，所以 lyric 放在 info 之后串行调用。
+        # parse_info_chain 仅在 _cached_info 缺失时才跑（兜底）
         t_start = time.time()
-        pool = ThreadPoolExecutor(max_workers=2)
+        use_info_fallback = not _cached_info
+        max_workers = 2 if use_info_fallback else 1
+        pool = ThreadPoolExecutor(max_workers=max_workers)
         f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-        f_info = pool.submit(self.parse_info_chain.try_fetch, 'parse_info', **info_kwargs)
+        f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
+                              hash=parse_hash, preferred_source=preferred_source)
+                  if use_info_fallback else None)
         pool.shutdown(wait=False)
 
         url, url_src = '', None
-        info, info_src = {}, None
+        info, info_src = None, None
         deadline = t_start + 6.5
-        futures = [f_url, f_info]
+        futures = [f for f in (f_url, f_info) if f is not None]
         try:
             for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
                 try:
@@ -100,17 +113,21 @@ class KugouClient(BaseMusicClient):
                     url, url_src = data, src
                 elif fut is f_info:
                     info, info_src = data, src
-                # url 拿到就退出（info 后台继续跑）
-                if url and url.startswith('http') and info:
+                # url 拿到就退出（info 后台继续跑；cached_info 视为 info 已就绪）
+                if url and url.startswith('http') and (info or _cached_info):
                     break
         except TimeoutError:
-            logger.warning(f'[{self.platform_id}] 2 链并行抢答超时')
+            logger.warning(f'[{self.platform_id}] {"2" if use_info_fallback else "1"} 链并行抢答超时')
             pass
 
         if not url or not url.startswith('http'):
             return None
 
-        if info and info.get('name'):
+        # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
+        if _cached_info and _cached_info.get('name'):
+            base = normalize_kugou_song(_cached_info)
+            info_src_name = _cached_info.get('_search_source', 'cached')
+        elif info and info.get('name'):
             base = normalize_kugou_song(info)
             info_src_name = info_src
         else:
@@ -126,6 +143,7 @@ class KugouClient(BaseMusicClient):
 
         # 歌词链（酷狗官方两步：krcs.search + lyrics.download KRC 解密）
         # 必须用 info.duration（ms）当 search 的 duration 参数，所以 lyric 在 info 后再调
+        # ★ duration 来自 base（_cached_info 优先），保证歌词版本和 audio 一致
         lyric = ''
         lyric_src = None
         if with_lyric:
@@ -137,6 +155,12 @@ class KugouClient(BaseMusicClient):
                 )
             except Exception as e:
                 logger.warning(f'[kugou.get_song] 取歌词失败: {e}')
+
+        logger.info(
+            f'[{self.platform_id}] /song {"2" if use_info_fallback else "1"} 链抢答完成: '
+            f'url={url_src} info={info_src or "cached"} lyric={lyric_src} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         return {
             **base,

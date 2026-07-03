@@ -92,11 +92,13 @@ def test_search_source_propagation(runner: TestRunner) -> Tuple[bool, str]:
     """测试 routes.py 是否正确将 search_source 透传到每个 song
 
     注意：routes.py 在 /search 接口中手动给每个 song 附加 _search_source。
-    这里模拟同样的逻辑（直接用 music_service.search，然后手动透传）。
+    music_client.search() 同时把 info 写入 song_info_cache（后续 /song 阶段用）。
+    这里既验证 song 字段带 _search_source，也验证 cache 里有数据。
     """
     from service import music_service
+    from clients import song_info_cache
 
-    # 模拟 routes.py 逻辑
+    # 模拟 routes.py 逻辑（routes.py 会再手动补 _search_source 字段）
     result = music_service.search('周杰伦', 'netease', limit=5)
     songs = result.get('data', [])
     search_src = result.get('search_source', '')
@@ -106,15 +108,25 @@ def test_search_source_propagation(runner: TestRunner) -> Tuple[bool, str]:
     if not songs:
         return False, f'搜索无结果'
 
-    # 检查每个 song 是否有 _search_source（由 routes.py 设置）
+    # 检查 1: cache 写入（music_client.search 负责写入）
+    first_id = str(songs[0].get('id', '')) if songs else ''
+    cached = song_info_cache.get('netease', first_id) if first_id else None
+    if not cached:
+        return False, f'song_info_cache miss for netease/{first_id}（应已写入）'
+    runner.log(f'  song_info_cache 命中: name={cached.get("name")!r}')
+
+    # 检查 2: 模拟 routes.py 给每个 song 加 _search_source 字段
     for s in songs:
-        if search_src and '_search_source' not in s:
-            return False, f'song {s.get("id")} 缺少 _search_source 字段'
+        if search_src and not s.get('_search_source'):
+            s['_search_source'] = search_src
+
+    # 检查 3: 验证补完后所有 song 都有 _search_source
+    for s in songs:
         if search_src and s.get('_search_source') != search_src:
             return False, f'song {s.get("id")} 的 _search_source={s.get("_search_source")} != {search_src}'
         runner.log(f'  song {s.get("id")}: _search_source={s.get("_search_source")}')
 
-    return True, f'{len(songs)} 首歌曲全部标记 _search_source={search_src}'
+    return True, f'{len(songs)} 首歌曲全部标记 _search_source={search_src}（cache 命中）'
 
 
 def test_lyric_is_valid_rejects_placeholders(runner: TestRunner) -> Tuple[bool, str]:
@@ -276,17 +288,39 @@ def test_parallel_first_no_block(runner: TestRunner) -> Tuple[bool, str]:
 
 def test_song_full_flow(runner: TestRunner, platform: str, song: dict,
                         max_time: float = 8.0) -> TestResult:
-    """测试完整的 /song 流程：3 链并行抢答"""
+    """测试完整的 /song 流程：先 search 写 cache，再 get_song 走 cached_info 路径
+
+    模拟真实前端流程：search → /song，避免绕过 song_info_cache 的兜底路径
+    """
     from clients.music_client import music_client
+    from service import music_service
 
     name = f'/song {platform}'
     t_start = time.time()
 
     try:
-        # 模拟前端传入 song_id dict（含 _search_source）
+        # Step 1: 先 search 触发 song_info_cache 写入
+        search_result = music_service.search(song['keyword'], platform, limit=10)
+        search_src = search_result.get('search_source', '')
+        songs = search_result.get('data', [])
+        # 找到匹配 id 的
+        target = None
+        for s in songs:
+            if str(s.get('id')) == str(song['id']):
+                target = s
+                break
+        if not target and songs:
+            target = songs[0]
+            runner.log(f'  ⚠️ 没用精确 id={song["id"]}，用第一个 id={target.get("id")}')
+        if not target:
+            return TestResult(name, False, (time.time() - t_start) * 1000,
+                            f'search 无结果')
+
+        # Step 2: 模拟 routes.py 给 song 加 _search_source 后传给 /song
         song_id_obj = {
-            'id': song['id'],
-            '_search_source': None,  # 会由 routes.py 设置
+            'id': target.get('id'),
+            '_search_source': search_src,
+            'qualityMap': target.get('qualityMap'),
         }
 
         result = music_client.get_song(

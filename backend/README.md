@@ -192,6 +192,65 @@ curl http://localhost:5002/platforms
 
 `available=false` 表示该歌曲因版权问题无法播放。
 
+#### 4.1 完整响应字段
+
+实际后端返回的字段比上面的简版示例更多，常见字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` / `name` / `artists` / `album` / `picUrl` / `duration` | 基础 | 来自 search 阶段（歌名/歌手/专辑/封面/时长，ms） |
+| `url` | string | 可下载的音频 URL |
+| `level` | string | **实际**拿到的音质（可能与请求音质不同） |
+| `level_name` / `level_format` | string | 音质的展示名和格式描述（前端展示用） |
+| `requested_quality` | string | 仅当降级/升级时存在，等于用户请求的音质 |
+| `level_fallback` | bool | 仅当降级时为 true（实际音质 < 请求音质） |
+| `level_upgrade` | bool | 仅当升级时为 true（实际音质 > 请求音质） |
+| `lyric` | string | LRC 歌词 |
+| `qualityMap` | object | **精简版**音质映射（见下） |
+| `api_source` | object | 各字段来自哪个数据源 `{url, info, lyric}`（调试用） |
+| `mismatch_warning` | string | 仅当 lyric 与 audio 版本不一致时存在（见下） |
+
+#### 4.2 qualityMap 精简格式
+
+后端**不再**传完整 qualityMap（hires/lossless/exhigh/standard 全部音质 + size）。
+只传 `requested`（用户请求的音质）和 `actual`（实际拿到的音质）两项：
+
+```json
+{
+  "qualityMap": {
+    "requested": {
+      "quality": "hires",
+      "size": 90000000,
+      "br": 9000
+    },
+    "actual": {
+      "quality": "lossless",
+      "size": 30000000,
+      "br": 1411
+    }
+  }
+}
+```
+
+- `requested.quality` 等于请求参数里的 `level`
+- `actual.quality` 等于响应里的 `level`（降级/升级时不同）
+- `size` 单位字节，`br` 单位 kbps
+- 前端展示 "用户选了 hires，实际给了 lossless" 时直接对比这两个字段
+
+#### 4.3 mismatch_warning（跨源版本错配提示）
+
+当 lyric（歌词末时间戳）和 audio（duration）时长差异 > 5s 时，后端会在响应中加 `mismatch_warning` 字段提示该歌曲**音频和歌词版本可能不一致**（常见于 Live 版 vs 录音室版）。
+
+```json
+{
+  "mismatch_warning": "lyric_version_mismatch: 差 12.7s (info=263.2s, lyric_max=250.6s)"
+}
+```
+
+- 仅作提示，不阻断播放
+- 前端可选择性展示（"歌词可能与音频不匹配"）或静默忽略
+- 后端不会自动换源（避免无限重试）
+
 ### 5. 获取歌单详情
 
 **`POST /playlist`**

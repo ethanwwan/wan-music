@@ -17,8 +17,124 @@ from .netease_client import NeteaseClient, netease_client
 from .qq_client import QQClient, qq_client
 from .kugou_client import KugouClient, kugou_client
 from .kuwo_client import KuwoClient, kuwo_client
+from . import song_info_cache
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== 跨源防错：duration 交叉验证 ====================
+
+import re as _re
+# LRC 末行时间戳：[mm:ss.xx] 或 [mm:ss.xxx]
+_LRC_LAST_TS_RE = _re.compile(r'\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]')
+
+
+def _extract_lrc_max_ts(lrc_text: str) -> int:
+    """从 LRC 文本中提取最大时间戳（毫秒）。返回 0 表示无歌词或无有效时间戳。"""
+    if not lrc_text or not isinstance(lrc_text, str):
+        return 0
+    max_ms = 0
+    for m in _LRC_LAST_TS_RE.finditer(lrc_text):
+        mm = int(m.group(1) or 0)
+        ss = int(m.group(2) or 0)
+        # 处理 .xx / .xxx 两种格式
+        frac = m.group(3)
+        if frac is None:
+            ms = 0
+        elif len(frac) == 2:
+            ms = int(frac) * 10
+        else:
+            ms = int(frac[:3].ljust(3, '0'))
+        total = (mm * 60 + ss) * 1000 + ms
+        if total > max_ms:
+            max_ms = total
+    return max_ms
+
+
+def _check_lyric_duration_mismatch(result: dict, platform: str, song_id: str) -> None:
+    """检测歌词版本是否与音频版本错配
+
+    触发条件：info.duration > 0 && lyric 有内容 && 末时间戳 vs duration 差 > 5s
+    标记：result['mismatch_warning'] = 'lyric_version_mismatch: 差 Xs'
+    注意：只标记，不阻断（前端可决定是否提示用户）
+    """
+    if not isinstance(result, dict):
+        return
+    lyric = result.get('lyric') or ''
+    if not lyric:
+        return
+    duration = result.get('duration')
+    try:
+        duration = int(duration or 0)
+    except (TypeError, ValueError):
+        return
+    if duration <= 0:
+        return
+    # duration 来自 search 阶段（_cached_info），单位 ms
+    max_ts = _extract_lrc_max_ts(lyric)
+    if max_ts <= 0:
+        return
+    # 差值：duration - max_ts（正数表示歌词在音频结束前就完了）
+    delta_ms = duration - max_ts
+    delta_s = delta_ms / 1000
+    # 阈值 5s（>5s 视为明显错配；intro/outro 静音造成的误差在 ±3s 内）
+    if abs(delta_s) > 5:
+        warning = f'lyric_version_mismatch: 差 {delta_s:.1f}s (info={duration/1000:.1f}s, lyric_max={max_ts/1000:.1f}s)'
+        result['mismatch_warning'] = warning
+        logger.warning(
+            f'[{platform}/{song_id}] {warning}'
+        )
+
+
+def _pick_quality_info(quality_map: dict, quality: str) -> dict:
+    """从 qualityMap 中取指定音质的 {br, size}；找不到返回空 dict。"""
+    if not isinstance(quality_map, dict) or not quality:
+        return {}
+    qinfo = quality_map.get(quality) or {}
+    if not isinstance(qinfo, dict):
+        return {}
+    # 兼容 size/br 直接是数字的情况
+    out = {}
+    if 'size' in qinfo:
+        out['size'] = qinfo['size']
+    if 'br' in qinfo:
+        out['br'] = qinfo['br']
+    elif isinstance(qinfo.get('bitrate'), (int, float)):
+        out['br'] = qinfo['bitrate']
+    return out
+
+
+def _prune_quality_map(result: dict, requested_quality: str, actual_quality: str) -> None:
+    """精简 result['qualityMap'] 为前端最小可见集
+
+    旧格式（search 阶段原始 qualityMap，可能含 hires/lossless/exhigh/standard 全套）：
+        {'hires': {'br': ..., 'size': ...}, 'lossless': {...}, ...}
+
+    新格式（C2 方案：替换精简版）：
+        {
+            'requested': {'quality': <str>, ...info},   # 用户请求的音质
+            'actual':    {'quality': <str>, ...info},   # 实际拿到的音质（可能降级或升级）
+        }
+
+    设计理由：
+    - 前端只关心"请求的音质是什么"和"实际拿到的音质是什么"
+    - 不再传整个 qualityMap（避免后端 4 平台 + 多音质的几十个字段冗余）
+    - 实际音质字段放在 .actual（前端直接读取展示）
+    - 请求音质字段放在 .requested（前端展示"用户选了 X，实际给了 Y"的对比）
+    """
+    if not isinstance(result, dict):
+        return
+    full = result.get('qualityMap')
+    if not isinstance(full, dict):
+        return
+    req_info = _pick_quality_info(full, requested_quality)
+    act_info = _pick_quality_info(full, actual_quality)
+
+    new_map = {
+        'requested': {'quality': requested_quality, **req_info},
+        'actual': {'quality': actual_quality, **act_info},
+    }
+    result['qualityMap'] = new_map
 
 
 class MusicClient:
@@ -164,6 +280,22 @@ class MusicClient:
             return {'data': [], 'search_source': ''}
         songs = result.get('data', [])
         search_source = result.get('search_source', '')
+
+        # ★ 关键：把每条 search_result 写入 song_info_cache
+        # 这样后续 /song 阶段可以直接复用，**避免去 parse_info_chain
+        # 拿不同源 info** 导致的"音频/歌词/元信息跨源不一致"问题。
+        for s in songs:
+            if not isinstance(s, dict):
+                continue
+            sid = s.get('id')
+            if not sid:
+                continue
+            # 复制一份避免外部修改污染缓存
+            payload = dict(s)
+            if search_source and not payload.get('_search_source'):
+                payload['_search_source'] = search_source
+            song_info_cache.put(platform or self.default_platform, str(sid), payload)
+
         return {'data': songs, 'search_source': search_source}
 
     def get_song(self, song_id: Any, quality: str = 'lossless',
@@ -185,6 +317,14 @@ class MusicClient:
         - 来自 search 结果，可让降级更精准
         - 优先级：search 时的 qualityMap > 平台 fallback_chain 默认行为
 
+        ★ 跨源一致性策略：
+        1. 优先从 song_info_cache 读取 search 阶段写下的 info
+           （**避免** /song 阶段去 parse_info_chain 拿不同源的 info）
+        2. cache miss 时（URL 解析/歌单导入等无 search 上下文的场景），
+           降级走 parse_info_chain 拿 info
+        3. 最终返回的 info 永远来自 search 阶段或 parse_info_chain 兜底，
+           不会和 url/lyric 跨源拼接
+
         Returns:
             None 表示完全失败
         """
@@ -199,17 +339,38 @@ class MusicClient:
             from app_config import get_platform_quality_chain
 
         client = self._get_client(platform)
+        plat = platform or self.default_platform
 
         # song_id 可能是 dict（包含多 hash 信息）
         mp3_hash = ''
+        cached_info = None
+        preferred = ''
         if isinstance(song_id, dict):
             mp3_hash = str(song_id.get('mp3_hash') or '')
             song_id_str = str(song_id.get('id') or song_id.get('hash') or '')
             # 兼容：dict 中也带 qualityMap
             if not quality_map:
                 quality_map = song_id.get('qualityMap')
+            preferred = song_id.get('_search_source', '') or song_id.get('api_source', '')
         else:
             song_id_str = str(song_id)
+
+        # ★ 关键：从 song_info_cache 读取 search 阶段写下的 info
+        # 命中后**用 cache 的 qualityMap 覆盖**入参 quality_map
+        # （cache 里的 qualityMap 是 search 阶段权威源，更准确）
+        cached_info = song_info_cache.get(plat, song_id_str)
+        if cached_info:
+            if not quality_map and isinstance(cached_info.get('qualityMap'), dict):
+                quality_map = cached_info['qualityMap']
+            if not preferred and isinstance(cached_info.get('_search_source'), str):
+                preferred = cached_info['_search_source']
+            logger.debug(
+                f'[{plat}/{song_id_str}] song_info_cache 命中 '
+                f'(name={cached_info.get("name", "")!r}, '
+                f'duration={cached_info.get("duration", 0)})'
+            )
+        else:
+            logger.debug(f'[{plat}/{song_id_str}] song_info_cache miss，将走 parse_info 兜底')
 
         # 关键：基于 qualityMap + 平台能力，获取该歌曲实际可用的降级链
         # 例：用户请求 jymaster，qualityMap 只有 exhigh → 链是 [exhigh, standard]
@@ -248,10 +409,6 @@ class MusicClient:
             # 不传 quality_map 给子类：quality_map 只在 MusicClient 层用于降级链过滤
             # （get_platform_quality_chain），子类的 get_song 不需要这个参数
             # 否则会触发 TypeError: get_song() got an unexpected keyword argument 'quality_map'
-            # 透传 search 阶段记录的 _search_source（来自 _source 字段或 search_source）
-            preferred = ''
-            if isinstance(song_id, dict):
-                preferred = song_id.get('_search_source', '') or song_id.get('api_source', '')
             # 从 qualityMap 提取当前 try_quality 的 size（用于 URL size 验证）
             qmap_for_url = {}
             if quality_map and isinstance(quality_map, dict):
@@ -261,8 +418,20 @@ class MusicClient:
             result = client.get_song(
                 parse_id, try_quality, with_lyric=with_lyric,
                 preferred_source=preferred, quality_map=qmap_for_url or None,
+                _cached_info=cached_info,  # ★ 新增：把 search info 传给 client，client 不再抢答 parse_info
             )
             if result and result.get('url'):
+                # ★ 把 cached_info（name/artist/album/cover/duration/qualityMap）
+                # **优先**应用到 result（解决跨源不一致问题）
+                if cached_info:
+                    for k in ('name', 'artists', 'album', 'picUrl', 'duration'):
+                        cv = cached_info.get(k)
+                        if cv and not result.get(k):
+                            result[k] = cv
+                    # qualityMap 用 search 阶段的版本（更准确）
+                    if isinstance(cached_info.get('qualityMap'), dict):
+                        result['qualityMap'] = cached_info['qualityMap']
+
                 # 标记实际拿到的音质（用于前端展示 + fallback 对比）
                 result['level'] = try_quality
                 # 附加前端展示字段（label 显示名、format 描述）
@@ -298,6 +467,12 @@ class MusicClient:
                             f"音质升级: {platform}/{song_id_str} "
                             f"{quality} → {try_quality} (数据源给得更好)"
                         )
+                # ★ 跨源版本错配检测（B2 方案：duration 交叉验证）
+                # 如果有歌词，取歌词最后时间戳与 info.duration 比对；
+                # 差异 > 5s 视为 lyric 和 audio 版本不一致（Live vs Studio 错配）
+                _check_lyric_duration_mismatch(result, platform, song_id_str)
+                # ★ 精简 qualityMap：前端只关心"请求音质 + 实际音质"两项
+                _prune_quality_map(result, quality, try_quality)
                 return result
             last_result = result
 
