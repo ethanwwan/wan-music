@@ -250,6 +250,33 @@ QQ_SEARCH_SOURCES = [
 
 
 # ==================== 下载 URL 源 ====================
+# 前2（保留）：qq_official_vkey(需cookie) → vkeys_url
+
+def _vkeys_multi_extract(d: dict, song_id: str = None, **kwargs) -> str:
+    """vkeys API 多质量降级提取器
+
+    兼容 v1.1.3 逻辑：先试 quality=13（FLAC），不行就 11→10→8。
+    """
+    import requests as _requests
+    if not isinstance(d, dict):
+        return ''
+    url = d.get('data', {}).get('url', '') if isinstance(d.get('data'), dict) else ''
+    if url and url.startswith('http') and len(url) > 50:
+        return url
+    # 质量降级（v1.1.3 同款 requests.get，支持 SSL）
+    headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'}
+    for q in [11, 10, 8]:
+        try:
+            api_url = f'https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality={q}'
+            resp = _requests.get(api_url, headers=headers, timeout=8)
+            data = resp.json()
+            u = data.get('data', {}).get('url', '') if isinstance(data.get('data'), dict) else ''
+            if u and u.startswith('http') and len(u) > 50:
+                return u
+        except Exception:
+            continue
+    return ''
+
 
 QQ_PARSE_URL_SOURCES = [
     # 1. xunhuisi - musicdl 列表 (无 br 参数)
@@ -277,13 +304,11 @@ QQ_PARSE_URL_SOURCES = [
         name='vkeys_url',
         platform='qq',
         priority=5,
-        description='vkeys (实测可用，quality=13 拿 FLAC)',
+        description='vkeys (多质量降级: 13→11→10→8，返 FLAC)',
         family='vkeys',
         can_parse_url=True,
         parse_url_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=13',
-        extract_url=lambda d: (
-            d.get('data', {}).get('url', '') if isinstance(d, dict) else ''
-        ),
+        extract_url=_vkeys_multi_extract,
         headers=QQ_COMMON_HEADERS,
         timeout=15,
         max_quality='lossless',
@@ -318,14 +343,15 @@ QQ_PARSE_URL_SOURCES = [
         timeout=15,
         max_quality='lossless',
     ),
-    # 5. lxmusic - musicdl 列表（flac24bit > hires > flac > 320k）
-    # max_quality='hires'：flac24bit 是 24bit FLAC
+    # 5. lxmusic - 只返 MP3 320kbps，无无损，已禁用
+    # max_quality='hires'：模板写的是 flac24bit，实测只返普通 MP3
     # 注：lxmusic_lyric 已禁用（API 不存在），不设 family，避免误导
     ApiSource(
         name='lxmusic_url',
         platform='qq',
         priority=40,
-        description='lxmusic (musicdl 列表, flac24bit)',
+        description='lxmusic (测试只返 MP3，无无损)',
+        enabled=False,  # 实测只返 MP3 320kbps，无无损
         can_parse_url=True,
         parse_url_url='https://lxmusicapi.onrender.com/url/tx/{song_id}/flac24bit',
         extract_url=extract_first_url,
@@ -360,7 +386,7 @@ QQ_PARSE_URL_SOURCES = [
         platform='qq',
         priority=60,
         description='tang.s01s (musicdl 列表，实测返 FLAC，保留前3已满)',
-        enabled=False,  # 保留前3: qq_official_vkey → vkeys_url → lxmusic_url
+        enabled=False,  # 保留前2: qq_official_vkey → vkeys_url (lxmusic 实测只返 MP3 已禁用)
         can_parse_url=True,
         parse_url_url='https://tang.api.s01s.cn/music_open_api.php?mid={song_id}',
         extract_url=lambda d: (

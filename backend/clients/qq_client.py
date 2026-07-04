@@ -22,6 +22,35 @@ from .sources.qq import (
 logger = logging.getLogger(__name__)
 
 
+def _detect_actual_quality_from_url(url: str, default: str) -> str:
+    """从 QQ CDN URL 推断实际音质
+
+    QQ CDN URL 格式: http://ws.stream.qqmusic.qq.com/{PREFIX}{songmid}.{ext}
+    - F000 = FLAC (lossless)
+    - M800 = MP3 320kbps (exhigh)
+    - M500 = MP3 128kbps (standard)
+    - C200/C100 = low
+    - A000 = AAC lossless
+    """
+    if not url:
+        return default
+    fname = url.split('/')[-1].split('?')[0]
+    ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
+    prefix = fname[:4].upper() if len(fname) >= 4 else ''
+
+    if prefix == 'F000' or prefix == 'A000' or ext in ('flac', 'ape', 'wav'):
+        return 'lossless'
+    if prefix == 'M800':
+        return 'exhigh'
+    if prefix == 'M500':
+        return 'standard'
+    if prefix in ('C200', 'C100'):
+        return 'standard'
+    if ext == 'mp3':
+        return 'exhigh'
+    return default
+
+
 class QQClient(BaseMusicClient):
     """QQ 音乐客户端 - 数据驱动版"""
 
@@ -154,7 +183,7 @@ class QQClient(BaseMusicClient):
         return {
             **base,
             'url': url,
-            'level': quality,                  # 前端用 'level' 字段
+            'level': _detect_actual_quality_from_url(url, quality),  # 从 URL 推断实际音质
             'lyric': lyric or '',
             'source': self.platform_id,
             'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},

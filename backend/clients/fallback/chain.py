@@ -84,10 +84,6 @@ class FallbackChain:
         #    容量上限 _max_per_rid_cache 防内存爆。
         self._per_rid_failed: dict = {}  # {(name, song_id): expire_timestamp}
         self._max_per_rid_cache = 1000
-        # 3. 死 URL 列表（per-URL，URL HEAD 验证失败时记录）
-        #    旧设计把"URL 404"算作"源失败"，会误伤其他 URL。
-        #    现在只死该 URL，TTL 5min。
-        self._url_dead: dict = {}  # {url: expire_timestamp}
         # ============================================
         # 成功记忆：mark_source_success() 记录成功时间，过期后回归 priority
         # 场景：vkeys_url 成功下载后，5 分钟内其他歌曲优先用 vkeys_url（直到它失败）
@@ -177,42 +173,16 @@ class FallbackChain:
         else:
             raise ValueError(f'mark_source_failed: unknown scope={scope!r}')
 
-    def mark_url_dead(self, url: str, source_name: str = '',
-                      expire_seconds: int = 300) -> None:
-        """标记某个 URL 不可用（5min 内同 URL 跳过）
-
-        场景：parse_url 拿到 URL 后 HEAD 验证 4xx/超时 → 标记该 URL 死，
-        避免下次同 URL 再次触发 HEAD 探测浪费 5s 超时。
-        不会影响该 source 对其他 song 的工作（与旧 mark_source_failed 关键区别）。
-        """
-        self._url_dead[url] = time.time() + expire_seconds
-        logger.debug(
-            f'[{self.platform}] 标记死 URL ({source_name}, {expire_seconds}s): {url[:80]}'
-        )
-
-    def _is_url_dead(self, url: str) -> bool:
-        """检查 URL 是否在死链列表中（自动清理过期项）"""
-        expire_at = self._url_dead.get(url)
-        if expire_at is None:
-            return False
-        if time.time() > expire_at:
-            del self._url_dead[url]
-            return False
-        return True
-
     def reset_failed_sources(self) -> None:
         """清空失败名单（通常在 task 启动时调用）"""
         items = list(self._global_failed.keys())
         per_rid_count = len(self._per_rid_failed)
-        url_count = len(self._url_dead)
-        if items or per_rid_count or url_count:
+        if items or per_rid_count:
             logger.info(
-                f'[{self.platform}] 重置失败名单: global={items}, '
-                f'per_rid={per_rid_count}, url_dead={url_count}'
+                f'[{self.platform}] 重置失败名单: global={items}, per_rid={per_rid_count}'
             )
         self._global_failed.clear()
         self._per_rid_failed.clear()
-        self._url_dead.clear()
 
     def mark_source_success(self, name: str, expire_seconds: int = 86400,
                             song_id: str = None, log: bool = True) -> None:
@@ -504,18 +474,12 @@ class FallbackChain:
 
                 # parse_url 额外：URL 验证
                 if op == 'parse_url' and isinstance(data, str):
-                    if self._is_url_dead(data):
-                        logger.info(
-                            f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
-                        )
-                        continue
                     if not self._verify_url_reachable(data):
                         source._stats['fail'] += 1
                         source._stats['last_error'] = 'URL 验证失败'
                         source._stats['total_ms'] += elapsed_ms
-                        self.mark_url_dead(data, source.name, expire_seconds=300)
                         logger.warning(
-                            f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
+                            f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用: {data[:80]}'
                         )
                         continue
 
