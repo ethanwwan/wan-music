@@ -12,6 +12,7 @@ from ..fallback.extractors import (
     extract_first_url,
     extract_text_url,
 )
+from . import _jbsou
 from ._playlist_extractors import (
     extract_kuwo_playlist as _extract_kuwo_playlist,
     extract_gdstudio_playlist as _extract_gdstudio_playlist,
@@ -111,6 +112,7 @@ KUWO_SEARCH_SOURCES = [
         platform='kuwo',
         priority=10,
         description='酷我移动端 m.kuwo.cn newh5app 搜索 (musicdl 列表)',
+        enabled=False,  # 搜索返回空
         can_search=True,
         search_url='https://m.kuwo.cn/newh5app/wapi/api/www/search/searchMusicBykeyWord?key={keyword_encoded}&pn=0&rn={limit}',
         extract_search=lambda d: (
@@ -130,11 +132,28 @@ KUWO_SEARCH_SOURCES = [
         platform='kuwo',
         priority=20,
         description='gdstudio (跨平台源，kuwo)',
+        enabled=False,  # 搜索返回空
+        family='gdstudio',
         can_search=True,
         search_url='https://music-api.gdstudio.xyz/api.php?types=search&source=kuwo&name={keyword_encoded}&count={limit}',
         extract_search=lambda d: d.get('data', []) if isinstance(d, dict) else [],
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+    ),
+    # 3. JBSou 跨平台搜索
+    ApiSource(
+        name='jbsou_search',
+        platform='kuwo',
+        priority=20,
+        description='JBSou (jbsou.cn 跨平台搜索)',
+        family='jbsou',
+        can_search=True,
+        method='POST',
+        search_url='https://www.jbsou.cn/',
+        post_data={'input': '{keyword_encoded}', 'filter': 'name', 'type': 'kuwo', 'page': '1'},
+        extract_search=_jbsou.jbsou_extract_search('kuwo'),
+        headers=_jbsou.JBSOU_HEADERS,
+        timeout=8,
     ),
 ]
 
@@ -149,6 +168,7 @@ KUWO_PARSE_URL_SOURCES = [
         platform='kuwo',
         priority=0,
         description='cenguigui (musicdl 列表，level=lossless)',
+        family='cenguigui',  # ★ cenguigui 家族：同源时优先 cgg_info/cgg_lyric
         can_parse_url=True,
         parse_url_url='https://kw-api.cenguigui.cn/?id={rid}&type=song&level=lossless&format=json',
         extract_url=lambda d: (
@@ -255,6 +275,7 @@ KUWO_PARSE_URL_SOURCES = [
         platform='kuwo',
         priority=35,
         description='haitanw (musicdl 列表，kw.php level=lossless/exhigh/standard)',
+        family='haitanw',  # ★ haitanw 家族：同源时优先 haitanw_lyric
         can_parse_url=True,
         parse_url_url='https://musicapi.haitangw.net/music/kw.php?id={rid}&level={quality}&type=json',
         extract_url=lambda d: (
@@ -283,13 +304,14 @@ KUWO_PARSE_URL_SOURCES = [
         timeout=15,
         max_quality='hires',
     ),
-    # 9. ceseet (musicdl 列表) - lx-music
+    # 9. ceseet (musicdl 列表) - lx-music（HTTP 403，需有效 key）
     # max_quality='lossless'：/flac
     ApiSource(
         name='ceseet_url',
         platform='kuwo',
         priority=45,
-        description='ceseet (musicdl 列表，lx-music-request)',
+        description='ceseet (musicdl 列表，HTTP 403)',
+        enabled=False,  # HTTP 403
         can_parse_url=True,
         parse_url_url='https://m-api.ceseet.me/url/kw/{rid}/flac',
         extract_url=lambda d: d.get('data', '') if isinstance(d, dict) else '',
@@ -336,18 +358,36 @@ KUWO_PARSE_URL_SOURCES = [
         timeout=15,
         max_quality='hires',
     ),
-    # 12. gdstudio 跨平台 URL
+    # 12. gdstudio 跨平台 URL（对于 kuwo 返回空）
     # max_quality='lossless'：gdstudio br 最高 lossless
     ApiSource(
         name='gdstudio_url',
         platform='kuwo',
         priority=60,
-        description='gdstudio URL (跨平台源，kuwo)',
+        description='gdstudio URL (跨平台源，kuwo，返回空)',
+        enabled=False,  # kuwo 无数据
+        family='gdstudio',
         can_parse_url=True,
         parse_url_url='https://music-api.gdstudio.xyz/api.php?types=url&id={rid}&source=kuwo&br={__br__}',
         extract_url=extract_first_url,
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+        max_quality='lossless',
+    ),
+    # 12. JBSou 跨平台 URL
+    ApiSource(
+        name='jbsou_url',
+        platform='kuwo',
+        priority=65,
+        description='JBSou (jbsou.cn 跨平台 URL)',
+        family='jbsou',
+        can_parse_url=True,
+        method='POST',
+        parse_url_url='https://www.jbsou.cn/',
+        post_data={'input': '{rid}', 'filter': 'id', 'type': 'kuwo', 'page': '1'},
+        extract_url=_jbsou.jbsou_extract_url,
+        headers=_jbsou.JBSOU_HEADERS,
+        timeout=8,
         max_quality='lossless',
     ),
 ]
@@ -362,6 +402,7 @@ KUWO_PARSE_INFO_SOURCES = [
         platform='kuwo',
         priority=0,
         description='酷我官方 m.kuwo.cn newh5 singles (musicdl 列表)',
+        enabled=False,  # API 返回 null/301，改用 cgg_info
         can_parse_info=True,
         parse_info_url='https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId={rid}',
         # 酷我官方响应：{"data": {"songinfo": {"id", "songName", "artist", "album", "pic"}}}
@@ -424,6 +465,7 @@ KUWO_PARSE_INFO_SOURCES = [
         platform='kuwo',
         priority=30,
         description='haitanw info (musicdl 列表)',
+        enabled=False,  # 只返回 URL，无元数据
         can_parse_info=True,
         parse_info_url='https://musicapi.haitangw.net/music/kw.php?id={rid}&level=lossless&type=json',
         extract_info=lambda d: (
@@ -438,12 +480,14 @@ KUWO_PARSE_INFO_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
     ),
-    # 5. gdstudio info (跨平台)
+    # 5. gdstudio info (跨平台，HTTP 400)
     ApiSource(
         name='gdstudio_info',
         platform='kuwo',
         priority=40,
-        description='gdstudio info (跨平台源，kuwo)',
+        description='gdstudio info (跨平台源，kuwo，HTTP 400)',
+        enabled=False,  # HTTP 400
+        family='gdstudio',
         can_parse_info=True,
         parse_info_url='https://music-api.gdstudio.xyz/api.php?types=info&id={rid}&source=kuwo',
         extract_info=lambda d: (
@@ -505,6 +549,7 @@ KUWO_PARSE_LYRIC_SOURCES = [
         platform='kuwo',
         priority=0,
         description='酷我官方 m.kuwo.cn/newh5 lyric (legacy JSON)',
+        enabled=False,  # API 返回 null/301，改用 cgg_lyric
         can_parse_lyric=True,
         parse_lyric_url=(
             'http://m.kuwo.cn/newh5/singles/songinfoandlrc'
@@ -543,6 +588,7 @@ KUWO_PARSE_LYRIC_SOURCES = [
         platform='kuwo',
         priority=20,
         description='cenguigui lyric (musicdl 列表，data.lyric 字段)',
+        family='cenguigui',  # ★ cenguigui 家族
         can_parse_lyric=True,
         parse_lyric_url='https://kw-api.cenguigui.cn/?id={rid}&type=song&level=lossless&format=json',
         extract_lyric=lambda d: (
@@ -558,6 +604,8 @@ KUWO_PARSE_LYRIC_SOURCES = [
         platform='kuwo',
         priority=30,
         description='haitanw lyric (musicdl 列表，data.lyric 字段)',
+        enabled=False,  # 歌词为空
+        family='haitanw',  # ★ haitanw 家族：URL 抢答后优先选此源
         can_parse_lyric=True,
         parse_lyric_url='https://musicapi.haitangw.net/music/kw.php?id={rid}&level=lossless&type=json',
         extract_lyric=lambda d: (
@@ -573,11 +621,27 @@ KUWO_PARSE_LYRIC_SOURCES = [
         platform='kuwo',
         priority=40,
         description='gdstudio lyric (跨平台源，kuwo)',
+        family='gdstudio',
         can_parse_lyric=True,
         parse_lyric_url='https://music-api.gdstudio.xyz/api.php?types=lyric&id={rid}&source=kuwo',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
+    ),
+    # 6. JBSou 跨平台歌词
+    ApiSource(
+        name='jbsou_lyric',
+        platform='kuwo',
+        priority=25,
+        description='JBSou (jbsou.cn 跨平台歌词)',
+        family='jbsou',
+        can_parse_lyric=True,
+        method='POST',
+        parse_lyric_url='https://www.jbsou.cn/',
+        post_data={'input': '{rid}', 'filter': 'id', 'type': 'kuwo', 'page': '1'},
+        extract_lyric=_jbsou.jbsou_extract_lyric,
+        headers=_jbsou.JBSOU_HEADERS,
+        timeout=8,
     ),
 ]
 
@@ -609,6 +673,7 @@ KUWO_PARSE_PLAYLIST_SOURCES = [
         platform='kuwo',
         priority=20,
         description='gdstudio 跨平台歌单（兜底，gdstudio 实际固定返回网易云格式）',
+        family='gdstudio',
         can_parse_playlist=True,
         parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=kuwo',
         extract_playlist=_extract_gdstudio_playlist,

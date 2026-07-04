@@ -17,6 +17,7 @@
 import json
 import re
 import time
+import threading
 import logging
 import requests
 from typing import List, Optional, Any, Tuple, Callable
@@ -27,6 +28,16 @@ from .api_source import ApiSource
 from .extractors import quality_to_br
 
 logger = logging.getLogger(__name__)
+
+# 全局 HTTP 信号量：限制对外部 API 的并发请求数
+# 每首歌 URL 抢答阶段占 4 个（parallel-first × 4 源），后续 lyric/info 占 1-2 个
+# 8 = 允许 2 首歌 URL 抢答同时进行，兼顾并发和限流
+# 防止：外网限流、连接池耗尽、TCP 拥塞导致的链超时
+_http_semaphore = threading.Semaphore(8)
+
+# 全局 Source 注册表：name → family
+# 用来跨链查找 same_source 的 family（parse_url 成功源名 → 找同 family 的 parse_lyric 源）
+_SOURCE_REGISTRY: dict[str, ApiSource] = {}
 
 
 class FallbackChain:
@@ -55,6 +66,9 @@ class FallbackChain:
         # 按 priority 排序
         self.sources = sorted([s for s in sources if s.platform == platform or platform == ''],
                               key=lambda s: s.priority)
+        # 注册到全局表（跨链查找 family 用）
+        for s in self.sources:
+            _SOURCE_REGISTRY[s.name] = s
         # 共享的 session（连接复用）
         self._session = requests.Session()
         # 统计
@@ -78,6 +92,8 @@ class FallbackChain:
         # 成功记忆：mark_source_success() 记录成功时间，过期后回归 priority
         # 场景：vkeys_url 成功下载后，5 分钟内其他歌曲优先用 vkeys_url（直到它失败）
         self._success_recent: dict = {}  # {name: success_at_timestamp}
+        # Cookie 文件缓存：避免同进程内每次请求都重新读文件
+        self._cookie_cache: dict = {}  # {cookie_file_path: dict}
 
     def set_source_enabled(self, name: str, enabled: bool) -> bool:
         """动态启用/禁用某个源"""
@@ -264,31 +280,35 @@ class FallbackChain:
                 - 例：qualityMap 说 FLAC=50MB，HEAD 返回 Content-Length=5MB → 验证失败
                 - 容差：实际 ≥ 预期 × 0.5 才认为合理（CDN 偶发不准）
         """
+        _http_semaphore.acquire()
         try:
-            resp = requests.head(url, timeout=timeout, allow_redirects=True)
-            if resp.status_code in (200, 206):
-                # ★ size check：避免小源顶替大源（不同 CDN 给的资源 bitrate 不一样）
-                if expected_min_size > 0:
-                    cl = int(resp.headers.get('Content-Length', 0) or 0)
-                    if cl > 0 and cl < expected_min_size * 0.5:
-                        logger.debug(
-                            f'[verify_url] {url[:60]}... size 不匹配: '
-                            f'cl={cl} < expected={expected_min_size}×0.5'
-                        )
-                        return False
-                return True
-            if resp.status_code == 405:  # HEAD 不支持
-                # Range GET 1KB 探测
-                r2 = requests.get(url, headers={'Range': 'bytes=0-1023'},
-                                  timeout=timeout, stream=True)
-                try:
-                    return r2.status_code in (200, 206)
-                finally:
-                    r2.close()
-            return False
-        except Exception as e:
-            logger.debug(f'[verify_url] {url[:60]}... 验证失败: {type(e).__name__}: {str(e)[:60]}')
-            return False
+            try:
+                resp = requests.head(url, timeout=timeout, allow_redirects=True)
+                if resp.status_code in (200, 206):
+                    # ★ size check：避免小源顶替大源（不同 CDN 给的资源 bitrate 不一样）
+                    if expected_min_size > 0:
+                        cl = int(resp.headers.get('Content-Length', 0) or 0)
+                        if cl > 0 and cl < expected_min_size * 0.5:
+                            logger.debug(
+                                f'[verify_url] {url[:60]}... size 不匹配: '
+                                f'cl={cl} < expected={expected_min_size}×0.5'
+                            )
+                            return False
+                    return True
+                if resp.status_code == 405:  # HEAD 不支持
+                    # Range GET 1KB 探测
+                    r2 = requests.get(url, headers={'Range': 'bytes=0-1023'},
+                                      timeout=timeout, stream=True)
+                    try:
+                        return r2.status_code in (200, 206)
+                    finally:
+                        r2.close()
+                return False
+            except Exception as e:
+                logger.debug(f'[verify_url] {url[:60]}... 验证失败: {type(e).__name__}: {str(e)[:60]}')
+                return False
+        finally:
+            _http_semaphore.release()
 
     def _is_source_failed(self, name: str, song_id: str = None) -> bool:
         """检查源是否在失败名单中（自动清理过期项）
@@ -332,6 +352,12 @@ class FallbackChain:
         Args:
             op: 'search' | 'parse_url' | 'parse_info' | 'parse_lyric'
             **kwargs: 替换 URL 模板中的占位符，如 song_id='123', quality='lossless'
+                特殊 kwarg:
+                  - preferred_source: str  优先用这个 source
+                  - same_source: str  ★ 同源优先：必须先用这个 source，
+                    它不能 provide 当前 op 时才降级到其他源。
+                    用于"url 抢答成功后告诉 lyric 链用同一个源"，
+                    避免 url 和 lyric 跨源版本错配。
 
         Returns:
             (data, source_name) 或 (None/empty_default, None)
@@ -342,50 +368,110 @@ class FallbackChain:
             logger.debug(f'[{self.platform}.{op}] 无可用源')
             return _default_for_op(op), None
 
-        if self.strategy == 'parallel' and op == 'search':
-            return self._try_parallel(candidates, op, **kwargs)
-        if self.strategy == 'parallel_first':
-            # 并行首胜：所有源同时跑，第一个成功的返回
-            return self._try_parallel_first(candidates, op, **kwargs)
+        # ★ 同源优先：same_source 不为空时，把这个源（或同 family 的源）放在第一位
+        # 1. 先按 source name 匹配：same_source=haitanw，lyric 链有 haitanw_lyric → 优先用
+        # 2. name 没匹配但 family 匹配：url=gdstudio_url，lyric 链有 gdstudio_lyric (family=gdstudio) → 优先用
+        # 3. 都未匹配：降级到其他能 provide 该能力的源
+        #
+        # ★ 关键：same_s 在 self.sources（而非 candidates）中查找
+        # 原因：URL 源（如 gdstudio_url）通常不支持 parse_lyric，会被 candidates 过滤掉
+        #      但 family 匹配需要拿到 URL 源的 family 字段（gdstudio）去 lyric 链里找同 family 源
+        #      所以必须查 self.sources 拿 family
+        #
+        # ★ 关键：把 family_match 注入到 kwargs['_family_preferred']
+        # 原因：_try_serial 内部会按 priority 重新排序，family_match 的 reorder 会被覆盖
+        #      通过 _family_preferred 机制让 _try_serial 把 family_match 排在最前
+        #      （用 _ 前缀避免与业务参数冲突）
+        same_source = kwargs.pop('same_source', None) or ''
+        if same_source:
+            cap = 'lyric' if op == 'parse_lyric' else ('url' if op == 'parse_url' else op.replace('parse_', ''))
+            # 优先在当前链的 sources 中查找 same_source
+            same_s = next((s for s in self.sources if s.name == same_source), None)
+            # 当前链找不到则从全局注册表查找（跨链匹配，如 URL 源名 → 歌词链内同 family）
+            if not same_s:
+                same_s = _SOURCE_REGISTRY.get(same_source)
+                if same_s:
+                    logger.debug(
+                        f'[{self.platform}.{op}] same_source={same_source} '
+                        f'从全局注册表查到 family={same_s.family!r}'
+                    )
+            target_family = same_s.family if same_s else ''
+            # 1) 名字匹配：source 自身就能 provide 该能力 → 优先用
+            if same_s and same_s.has(cap) and same_s in candidates:
+                kwargs['_family_preferred'] = same_source
+                logger.info(
+                    f'[{self.platform}.{op}] 🎯 同源优先: {same_source} (自身支持 {cap})'
+                )
+            # 2) family 匹配：候选中有同 family 且能 provide cap 的源
+            elif target_family:
+                family_match = next(
+                    (s for s in candidates if s.family == target_family and s.has(cap)),
+                    None,
+                )
+                if family_match:
+                    kwargs['_family_preferred'] = family_match.name
+                    logger.info(
+                        f'[{self.platform}.{op}] 🎯 同 family 优先: '
+                        f'{same_source}({target_family}) → {family_match.name}'
+                    )
+                else:
+                    logger.debug(
+                        f'[{self.platform}.{op}] same_source={same_source} family={target_family} '
+                        f'无 {cap} 源，降级到其他源'
+                    )
+            # 3) source 自身不能 provide cap，且无 family 标识
+            elif same_s:
+                logger.debug(
+                    f'[{self.platform}.{op}] same_source={same_source} '
+                    f'不提供 {cap}，降级到其他源'
+                )
+            # 4) same_source 在当前链的 candidates 中找不到
+            else:
+                logger.debug(
+                    f'[{self.platform}.{op}] same_source={same_source} '
+                    f'不在当前 {op} 链的候选中，降级到其他源'
+                )
+
         return self._try_serial(candidates, op, **kwargs)
 
     def _try_serial(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
-        """串行：找到第一个成功的源就返回
+        """串行：按 priority 依次尝试各源，第一个成功的返回
 
-        关键优化：按 quality 过滤源
-        - 如果 source.max_quality 不为空，且 source.max_quality < 用户请求的 quality
-        - 则跳过这个源（它永远拿不到目标音质）
-        - 例：用户请求 lossless，xunhuisi_url (max_quality=exhigh) 应该跳过
+        适用所有 ops（search / parse_url / parse_lyric / parse_info）：
+          - search：第一个返回有效数据的源即成功
+          - parse_url：拿到 URL 后还要 HEAD 验证，验证通过才算成功
+
+        关键优化：
+          - max_quality 过滤（跳过无法提供目标音质的源）
+          - 链级超时（max_chain_seconds）
+          - 成功记忆（_sort_key 把最近成功的源排前面）
         """
         user_quality = kwargs.get('quality', '')
-        # 取 song_id（per-rid 失败检查用）
         song_id = kwargs.get('song_id') or kwargs.get('rid') or kwargs.get('mid') or kwargs.get('hash') or kwargs.get('playlist_id')
 
         # ★ 按成功记忆重排：最近成功的源排前面（24 小时内）
-        # 稳定排序：保留 priority 顺序，只把成功过的源前置
-        # 第一优先级：preferred_source（来自上游链：search→info→url 保持一致）
-        # 第二优先级：最近成功过的源
-        # 第三优先级：priority
         preferred = kwargs.pop('preferred_source', None) or ''
+        family_preferred = kwargs.pop('_family_preferred', None) or ''
         def _sort_key(s):
+            if family_preferred and s.name == family_preferred:
+                return (0, 0, 0, s.priority)
             if preferred and s.name == preferred:
-                return (0, 0, s.priority)
+                return (0, 0, 1, s.priority)
             if self._is_source_success_recent(s.name):
-                return (0, 1, s.priority)
-            return (1, 0, s.priority)
+                return (0, 1, 0, s.priority)
+            return (1, 0, 0, s.priority)
         sources = sorted(sources, key=_sort_key)
-        # 调试：打印重排后的顺序
+        if family_preferred:
+            logger.debug(f'[{self.platform}.{op}] 家族匹配优先: {family_preferred}')
         if any(self._is_source_success_recent(s.name) for s in sources):
             recent = [s.name for s in sources if self._is_source_success_recent(s.name)]
             logger.debug(f'[{self.platform}.{op}] 优先使用最近成功源: {recent}')
         if preferred:
             logger.debug(f'[{self.platform}.{op}] 同源优先: {preferred}')
 
-        # ★ 链级超时：避免链中多个源依次超时导致总耗时超过前端 timeout
         chain_start = time.time()
-
         for source in sources:
-            # ★ 链级超时检查：超过 max_chain_seconds 立即放弃
+            # 链级超时
             if self.max_chain_seconds > 0:
                 elapsed_chain = time.time() - chain_start
                 if elapsed_chain >= self.max_chain_seconds:
@@ -393,15 +479,15 @@ class FallbackChain:
                         f'[{self.platform}.{op}] ⏱️ 链超时 ({elapsed_chain:.1f}s >= {self.max_chain_seconds}s)，'
                         f'放弃剩余 {len(sources) - sources.index(source)} 个源（{source.name} 起）'
                     )
-                    return _default_for_op(op), None
-            # ★ 跳过失败名单（两段式：global + per-rid）
+                    break
+            # 失败名单
             if self._is_source_failed(source.name, song_id):
                 reason = '全局' if source.name in self._global_failed else f'per-rid({song_id})'
                 logger.info(
                     f'[{self.platform}.{op}] 跳过 {source.name}（{reason} 失败名单中）'
                 )
                 continue
-            # 关键：按 max_quality 过滤
+            # max_quality 过滤
             if source.max_quality and user_quality:
                 if _quality_rank(source.max_quality) < _quality_rank(user_quality):
                     logger.info(
@@ -409,7 +495,7 @@ class FallbackChain:
                         f'(max_quality={source.max_quality} < user_quality={user_quality})'
                     )
                     continue
-            # ★ 跳过需要 cookie 但 cookie 文件不存在的源
+            # cookie 检查
             if source.needs_cookie and source.cookie_file:
                 cookies = self._load_cookie(source.cookie_file)
                 if not cookies:
@@ -426,249 +512,56 @@ class FallbackChain:
             try:
                 data = self._fetch_one(source, op, **kwargs)
                 elapsed_ms = int((time.time() - t0) * 1000)
-                if self._is_valid(data, op):
-                    # ★ parse_url：拿到 URL 后立刻验证可用性（避免下载时才发现 4xx）
-                    if op == 'parse_url' and isinstance(data, str):
-                        if self._is_url_dead(data):
-                            # 之前已验证过该 URL 不可用 → 直接跳过该源（不动 source 状态）
-                            logger.info(
-                                f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
-                            )
-                            continue
-                        # ★ 阶段 2：size check
-                        # 期望大小从 kwargs['quality_map'] 取（调用方传入，来自 search/info）
-                        qmap = kwargs.get('quality_map') or {}
-                        user_q = user_quality
-                        expected_size = int((qmap.get(user_q) or {}).get('size') or 0)
-                        if not self._verify_url_reachable(data, expected_min_size=expected_size):
-                            source._stats['fail'] += 1
-                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时/size 不匹配）'
-                            source._stats['total_ms'] += elapsed_ms
-                            # ★ 改造：只标记这个 URL 死，不影响 source 对其他 song 的工作
-                            # 旧版会全局禁用 source 5min（误伤其他 song）
-                            self.mark_url_dead(data, source.name, expire_seconds=300)
-                            logger.warning(
-                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
-                            )
-                            continue
-                    # 成功：清理该 source 的 per-rid 失败记录 + 全局失败
-                    self._per_rid_failed.pop((source.name, str(song_id)) if song_id else None, None)
-                    source._stats['ok'] += 1
-                    source._stats['last_used'] = time.time()
+                if not self._is_valid(data, op):
+                    source._stats['fail'] += 1
+                    source._stats['last_error'] = '数据无效（empty/parse）'
                     source._stats['total_ms'] += elapsed_ms
-                    url_preview = ''
-                    if op == 'parse_url' and isinstance(data, str):
-                        url_preview = f' → {data[:80]}'
                     logger.info(
-                        f'[{self.platform}.{op}] ✅ {source.name} 成功 ({elapsed_ms}ms){url_preview}'
+                        f'[{self.platform}.{op}] ⚠️ {source.name} 返空数据 ({elapsed_ms}ms)'
                     )
-                    return data, source.name
-                # 拿到数据但无效（如 url 为空 / lyric 为空）→ permanent 失败（per-rid）
-                source._stats['fail'] += 1
-                source._stats['last_error'] = '数据无效（empty/parse）'
+                    continue
+
+                # parse_url 额外：URL 验证
+                if op == 'parse_url' and isinstance(data, str):
+                    if self._is_url_dead(data):
+                        logger.info(
+                            f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
+                        )
+                        continue
+                    qmap = kwargs.get('quality_map') or {}
+                    user_q = user_quality
+                    expected_size = int((qmap.get(user_q) or {}).get('size') or 0)
+                    if not self._verify_url_reachable(data, expected_min_size=expected_size):
+                        source._stats['fail'] += 1
+                        source._stats['last_error'] = 'URL 验证失败'
+                        source._stats['total_ms'] += elapsed_ms
+                        self.mark_url_dead(data, source.name, expire_seconds=300)
+                        logger.warning(
+                            f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
+                        )
+                        continue
+
+                # 成功：立即返回
+                source._stats['ok'] += 1
+                source._stats['last_used'] = time.time()
                 source._stats['total_ms'] += elapsed_ms
-                if song_id:
-                    self.mark_source_failed(
-                        source.name, expire_seconds=1800,  # 30 分钟
-                        reason='empty result / parse error', song_id=song_id, scope='permanent',
-                    )
-                else:
-                    # 没有 song_id 时降级为 transient
-                    self.mark_source_failed(
-                        source.name, expire_seconds=300, reason='empty result (no song_id)', scope='transient',
-                    )
+                self._per_rid_failed.pop((source.name, str(song_id)) if song_id else None, None)
+                url_preview = ''
+                if op == 'parse_url' and isinstance(data, str):
+                    url_preview = f' → {data[:80]}'
                 logger.info(
-                    f'[{self.platform}.{op}] ⚠️ {source.name} 返空数据 ({elapsed_ms}ms)'
+                    f'[{self.platform}.{op}] ✅ {source.name} 成功 ({elapsed_ms}ms){url_preview}'
                 )
+                return data, source.name
             except Exception as e:
                 source._stats['fail'] += 1
                 source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
                 source._stats['total_ms'] += elapsed_ms
-                # 分类：5xx/timeout → transient（global）；4xx → permanent（per-rid）
-                status_code = getattr(e, 'status_code', None)
-                err_msg = f'{type(e).__name__}: {str(e)[:80]}'
-                if status_code and status_code >= 500:
-                    # 5xx → 全局临时
-                    self.mark_source_failed(
-                        source.name, expire_seconds=120, reason=err_msg, scope='transient',
-                    )
-                elif status_code and 400 <= status_code < 500:
-                    # 4xx → per-rid permanent
-                    if song_id:
-                        self.mark_source_failed(
-                            source.name, expire_seconds=1800, reason=err_msg,
-                            song_id=song_id, scope='permanent',
-                        )
-                    else:
-                        self.mark_source_failed(
-                            source.name, expire_seconds=300, reason=err_msg, scope='transient',
-                        )
-                elif isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
-                    # 网络层 transient
-                    self.mark_source_failed(
-                        source.name, expire_seconds=120, reason=err_msg, scope='transient',
-                    )
-                else:
-                    # 其他异常（parse / extractor 错误）→ per-rid permanent
-                    if song_id:
-                        self.mark_source_failed(
-                            source.name, expire_seconds=1800, reason=err_msg,
-                            song_id=song_id, scope='permanent',
-                        )
-                    else:
-                        self.mark_source_failed(
-                            source.name, expire_seconds=300, reason=err_msg, scope='transient',
-                        )
-                logger.info(f'[{self.platform}.{op}] ❌ {source.name} 失败: {err_msg}')
-        return _default_for_op(op), None
-
-    def _try_parallel(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
-        """并行：所有源同时请求，结果去重合并（仅用于 search）"""
-        all_results: List[dict] = []
-        first_source: Optional[str] = None
-        seen_ids: set = set()
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = {pool.submit(self._fetch_one, s, op, **kwargs): s for s in sources}
-            for fut in as_completed(futures):
-                source = futures[fut]
-                try:
-                    data = fut.result()
-                except Exception as e:
-                    source._stats['fail'] += 1
-                    source._stats['last_error'] = str(e)[:80]
-                    continue
-                if not self._is_valid(data, op):
-                    source._stats['fail'] += 1
-                    continue
-                source._stats['ok'] += 1
-                source._stats['last_used'] = time.time()
-                if first_source is None:
-                    first_source = source.name
-                # 合并去重（按 id）
-                if isinstance(data, list):
-                    for item in data:
-                        if isinstance(item, dict):
-                            item_id = str(
-                                item.get('id')
-                                or item.get('rid')
-                                or item.get('mid')
-                                or item.get('FileHash')
-                                or item.get('hash')
-                                or item.get('MUSICRID')
-                                or item.get('musicrid')
-                                or ''
-                            ).removeprefix('MUSIC_')
-                            if item_id and item_id not in seen_ids:
-                                seen_ids.add(item_id)
-                                item['_source'] = source.name
-                                all_results.append(item)
-                            elif not item_id:
-                                # 没有 ID 字段也保留（如搜索结果只有 hash）
-                                item['_source'] = source.name
-                                all_results.append(item)
-                else:
-                    all_results.append(data)
-        return all_results, first_source
-
-    def _try_parallel_first(self, sources: List[ApiSource], op: str, **kwargs) -> Tuple[Any, Optional[str]]:
-        """并行：同时请求多个源，**取第一个成功**的（race-style）
-
-        与 _try_serial 对比：
-        - 串行：source1 超时 5s → 试 source2 (再 5s) → 共 10s+
-        - 并行首胜：所有源同时跑，1s 内出结果就停 → 通常 1-3s
-
-        与 _try_parallel 对比：
-        - _try_parallel：所有源的结果**合并去重**（仅用于 search）
-        - _try_parallel_first：所有源**抢答**，第一个成功的返回（用于 url/info/lyric）
-
-        关键：parse_url 还需要 URL 验证（403/404 算失败），
-              所以"成功"不只拿到 URL，还要 verify 出来可用。
-              验证失败不 cancel 其他源，让其他源继续抢答。
-        """
-        all_sources = list(sources)
-        if not all_sources:
-            return _default_for_op(op), None
-
-        user_quality = kwargs.get('quality', '')
-        song_id = kwargs.get('song_id') or kwargs.get('rid') or kwargs.get('mid') or kwargs.get('hash') or kwargs.get('playlist_id')
-
-        # 链级超时
-        chain_start = time.time()
-        deadline = chain_start + self.max_chain_seconds if self.max_chain_seconds > 0 else float('inf')
-        # 已确认失败的源：URL 验证失败 / 数据无效（不再参与"抢答"取消）
-        failed_sources: set = set()  # type: ignore[var-annotated]
-
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            future_to_source = {
-                pool.submit(self._fetch_one, s, op, **kwargs): s
-                for s in all_sources
-            }
-            try:
-                # 等待 future 完成：可能是成功、失败、URL 验证失败
-                for fut in as_completed(future_to_source, timeout=max(0.1, deadline - time.time())):
-                    if time.time() >= deadline:
-                        logger.warning(
-                            f'[{self.platform}.{op}] ⏱️ parallel_first 链级超时 ({time.time()-chain_start:.1f}s)'
-                        )
-                        break
-                    source = future_to_source[fut]
-                    if source.name in failed_sources:
-                        continue
-                    try:
-                        data = fut.result()
-                    except Exception as e:
-                        source._stats['fail'] += 1
-                        source._stats['last_error'] = f'{type(e).__name__}: {str(e)[:80]}'
-                        failed_sources.add(source.name)
-                        continue
-                    if not self._is_valid(data, op):
-                        source._stats['fail'] += 1
-                        source._stats['last_error'] = '数据无效（empty/parse）'
-                        failed_sources.add(source.name)
-                        continue
-                    # ★ parse_url：必须 URL 真正可用（403/404 算失败）
-                    if op == 'parse_url' and isinstance(data, str):
-                        if self._is_url_dead(data):
-                            logger.info(
-                                f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
-                            )
-                            failed_sources.add(source.name)
-                            continue
-                        # ★ 阶段 2：size check
-                        qmap = kwargs.get('quality_map') or {}
-                        expected_size = int((qmap.get(user_quality) or {}).get('size') or 0)
-                        if not self._verify_url_reachable(data, expected_min_size=expected_size):
-                            source._stats['fail'] += 1
-                            source._stats['last_error'] = 'URL 验证失败（HEAD/RANGE 4xx/超时/size 不匹配）'
-                            self.mark_url_dead(data, source.name, expire_seconds=300)
-                            logger.warning(
-                                f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用（已标死链 5 分钟）: {data[:80]}'
-                            )
-                            failed_sources.add(source.name)
-                            # ★ 不 cancel 其他源，让其他源继续"抢答"
-                            continue
-                    # ★ 成功：第一个通过所有验证的获胜
-                    self._per_rid_failed.pop((source.name, str(song_id)) if song_id else None, None)
-                    source._stats['ok'] += 1
-                    source._stats['last_used'] = time.time()
-                    self.mark_source_success(source.name)
-                    url_preview = f' → {data[:80]}' if op == 'parse_url' and isinstance(data, str) else ''
-                    logger.info(
-                        f'[{self.platform}.{op}] ✅ {source.name} 成功 (race-first {time.time()-chain_start:.2f}s){url_preview}'
-                    )
-                    # 取消其他 future（winner 已确定）
-                    for f in future_to_source:
-                        if not f.done():
-                            f.cancel()
-                    return data, source.name
-            except TimeoutError:
-                logger.warning(
-                    f'[{self.platform}.{op}] ⏱️ parallel_first 超时 ({time.time()-chain_start:.1f}s)'
+                logger.info(
+                    f'[{self.platform}.{op}] ❌ {source.name} 失败: '
+                    f'{type(e).__name__}: {str(e)[:80]}'
                 )
-            finally:
-                for f in list(future_to_source.keys()):
-                    if not f.done():
-                        f.cancel()
+
         return _default_for_op(op), None
 
     def _fetch_one(self, source: ApiSource, op: str, **kwargs) -> Any:
@@ -727,7 +620,7 @@ class FallbackChain:
             method = source.method
             is_json = source.is_json
 
-        # 发起请求
+        # 发起请求（受全局信号量限制，避免并发过多触发外网限流）
         # ★ 关键：源 timeout 上限 = 链 timeout - 1s 余量
         # 例：源 timeout=15, 链 timeout=6 → 该源会跑 15s，链超时失去意义
         # 这里取 min(源, 链-余量)，让单源不会撑爆链
@@ -736,20 +629,24 @@ class FallbackChain:
         if self.max_chain_seconds > 0 and eff_timeout > 5:
             eff_timeout = min(eff_timeout, max(2, int(self.max_chain_seconds - 1)))
 
-        if method.upper() == 'POST':
-            # 网易云 eapi 端点：先用 AES-ECB 加密 payload，再以 form-encoded "params=..." 发送
-            if source.is_eapi:
-                encrypted = _eapi_encrypt(url, post_data)
-                body = f'params={encrypted}'
-                # 强制 form-urlencoded Content-Type
-                headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        _http_semaphore.acquire()
+        try:
+            if method.upper() == 'POST':
+                # 网易云 eapi 端点：先用 AES-ECB 加密 payload，再以 form-encoded "params=..." 发送
+                if source.is_eapi:
+                    encrypted = _eapi_encrypt(url, post_data)
+                    body = f'params={encrypted}'
+                    # 强制 form-urlencoded Content-Type
+                    headers['Content-Type'] = 'application/x-www-form-urlencoded'
+                else:
+                    body = json.dumps(post_data) if is_json else post_data
+                r = self._session.post(url, data=body, headers=headers, cookies=cookies,
+                                       timeout=eff_timeout)
             else:
-                body = json.dumps(post_data) if is_json else post_data
-            r = self._session.post(url, data=body, headers=headers, cookies=cookies,
-                                   timeout=eff_timeout)
-        else:
-            r = self._session.get(url, headers=headers, cookies=cookies,
-                                  timeout=eff_timeout)
+                r = self._session.get(url, headers=headers, cookies=cookies,
+                                      timeout=eff_timeout)
+        finally:
+            _http_semaphore.release()
 
         # 解析
         if r.status_code >= 400:
@@ -858,7 +755,7 @@ class FallbackChain:
         return bool(data)
 
     def _load_cookie(self, cookie_file: str) -> dict:
-        """从 cookie 文件加载（netease 专用）
+        """从 cookie 文件加载（netease 专用），结果缓存在 _cookie_cache 中
 
         支持两种格式：
           1. Netscape 7-tab 格式（标准）：
@@ -881,6 +778,13 @@ class FallbackChain:
             Path('/app/cookie') / Path(cookie_file).name,               # docker 根
             Path('/app/clients/cookie') / Path(cookie_file).name,       # docker 源码路径
         ]
+        # 先查缓存（用第一个存在的文件路径做 key）
+        for p in candidates:
+            if p.exists():
+                cache_key = str(p)
+                if cache_key in self._cookie_cache:
+                    return self._cookie_cache[cache_key]
+                break
         for p in candidates:
             if p.exists():
                 try:
@@ -908,6 +812,7 @@ class FallbackChain:
                         logger.info(
                             f'[{self.platform}] 加载 cookie {p}（{len(cookies)} 个字段）'
                         )
+                        self._cookie_cache[str(p)] = cookies
                         return cookies
                 except Exception as e:
                     logger.debug(f'加载 cookie 失败 {p}: {e}')

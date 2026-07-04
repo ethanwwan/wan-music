@@ -88,7 +88,7 @@ const setCachedSearch = (keyword, source, data) => {
 // 但这是**网络层**错误（fetch 主动取消），**不是**后端错误，用户理解成本更低。
 // =====================================================================================
 
-const DEFAULT_TIMEOUT_MS = 8000  // 8s：搜索/解析的最大合理等待时间
+const DEFAULT_TIMEOUT_MS = 15000  // 15s：搜索/解析的最大合理等待时间（后端某些平台响应较慢）
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) => {
   const controller = new AbortController()
@@ -106,9 +106,12 @@ const get = async (url) => {
     return safeJson(response)
   } catch (e) {
     if (e.name === 'AbortError') {
-      return { success: false, error: '请求超时（8s），后端可能较慢', message: 'timeout' }
+      return { success: false, error: '请求超时（15s），后端可能较慢', message: 'timeout' }
     }
-    throw e
+    const hint = e.message?.includes('Failed to fetch')
+      ? '后端服务未启动或连接被重置，请检查后端是否运行'
+      : `网络请求失败: ${e.message || '未知错误'}`
+    return { success: false, error: hint, message: e.message || 'network error' }
   }
 }
 
@@ -122,9 +125,13 @@ const postJson = async (url, data) => {
     return safeJson(response)
   } catch (e) {
     if (e.name === 'AbortError') {
-      return { success: false, error: '请求超时（8s），后端可能较慢', message: 'timeout' }
+      return { success: false, error: '请求超时（15s），后端可能较慢', message: 'timeout' }
     }
-    throw e
+    // 捕获网络错误（ERR_EMPTY_RESPONSE / ECONNREFUSED / ECONNRESET 等）
+    const hint = e.message?.includes('Failed to fetch')
+      ? '后端服务未启动或连接被重置，请检查后端是否运行'
+      : `网络请求失败: ${e.message || '未知错误'}`
+    return { success: false, error: hint, message: e.message || 'network error' }
   }
 }
 
@@ -191,7 +198,7 @@ export const parseMusicInfo = async (track, quality = 'lossless') => {
     source: platform,
     qualityMap: qualityMap || undefined
   })
-  if (!result?.success) throw new Error(result?.message || '获取歌曲信息失败')
+  if (!result?.success) throw new Error(result?.error || result?.message || '获取歌曲信息失败')
   if (!result.data) throw new Error('未找到歌曲详情')
 
   const s = result.data

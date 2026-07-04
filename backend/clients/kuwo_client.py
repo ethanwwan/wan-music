@@ -29,10 +29,10 @@ class KuwoClient(BaseMusicClient):
         super().__init__()
         self.platform_id = 'kuwo'
         self.platform_name = '酷我音乐'
-        self.search_chain = FallbackChain(KUWO_SEARCH_SOURCES, platform='kuwo', strategy='parallel')
-        self.parse_url_chain = FallbackChain(KUWO_PARSE_URL_SOURCES, platform='kuwo', strategy='parallel_first')
-        self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='parallel_first')
-        self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='parallel_first')
+        self.search_chain = FallbackChain(KUWO_SEARCH_SOURCES, platform='kuwo', strategy='serial')
+        self.parse_url_chain = FallbackChain(KUWO_PARSE_URL_SOURCES, platform='kuwo', strategy='serial')
+        self.parse_info_chain = FallbackChain(KUWO_PARSE_INFO_SOURCES, platform='kuwo', strategy='serial')
+        self.parse_lyric_chain = FallbackChain(KUWO_PARSE_LYRIC_SOURCES, platform='kuwo', strategy='serial')
         self.parse_playlist_chain = FallbackChain(KUWO_PARSE_PLAYLIST_SOURCES, platform='kuwo', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -64,36 +64,36 @@ class KuwoClient(BaseMusicClient):
         - 若 _cached_info 缺失（URL 解析/歌单导入等无 search 上下文），
           回退到 parse_info_chain 兜底拿 info
 
+        url/lyric 同源策略：
+        - 先抢答 url，**成功后立刻用 url 选中的源**抢答 lyric
+        - 避免 url 来自 A 源、lyric 来自 B 源导致的"音频/歌词版本错配"
+
         Args:
             preferred_source: 来自 search 的源名，传下去给 url/lyric 链优先使用
             quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
-            _cached_info: search 阶段缓存的完整 song info（包含 name/artist/album 等）
+            _cached_info: search 阶段缓存的完整 song info
         """
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
         url_kwargs = dict(rid=song_id_str, quality=quality,
                           preferred_source=preferred_source, quality_map=quality_map or {})
-        lyric_kwargs = dict(rid=song_id_str, preferred_source=preferred_source)
 
-        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
+        # ★ 关键：先抢答 url，**先不并行 lyric**
+        # url 抢答成功后再用 same_source 让 lyric 链优先选 url 的源
         t_start = time.time()
-        # parse_info_chain 仅在 _cached_info 缺失时才跑（兜底）
         use_info_fallback = not _cached_info
-        max_workers = 3 if use_info_fallback else 2
+        max_workers = 2 if use_info_fallback else 1
         pool = ThreadPoolExecutor(max_workers=max_workers)
         f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
         f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
                               rid=song_id_str, preferred_source=preferred_source)
                   if use_info_fallback else None)
-        f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                               **lyric_kwargs) if with_lyric else None)
         pool.shutdown(wait=False)
 
         url, url_src = '', None
         info, info_src = None, None
-        lyric, lyric_src = '', None
-        deadline = t_start + 6.5
-        futures = [f for f in (f_url, f_info, f_lyric) if f is not None]
+        deadline = t_start + 5.0  # url 抢答硬切：5s 内必须拿到
+        futures = [f for f in (f_url, f_info) if f is not None]
         try:
             for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
                 try:
@@ -105,25 +105,29 @@ class KuwoClient(BaseMusicClient):
                     url, url_src = data, src
                 elif fut is f_info:
                     info, info_src = data, src
-                elif fut is f_lyric:
-                    lyric, lyric_src = data, src
-                if url and url.startswith('http'):
+                # url 拿到就退出（info 后台继续跑；cached_info 视为 info 已就绪）
+                if url and url.startswith('http') and (info or _cached_info):
                     break
         except TimeoutError:
-            logger.warning(f'[{self.platform_id}] {"3" if use_info_fallback else "2"} 链并行抢答超时')
+            logger.warning(f'[{self.platform_id}] {"2" if use_info_fallback else "1"} 链 url 抢答超时')
             pass
-
-        logger.info(
-            f'[{self.platform_id}] /song {"3" if use_info_fallback else "2"} 链抢答完成: '
-            f'url={url_src} info={info_src or "cached"} lyric={lyric_src} '
-            f'耗时={time.time()-t_start:.2f}s'
-        )
 
         if not url or not url.startswith('http'):
             return None
 
-        # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
-        # _cached_info 来自 search 阶段，权威；parse_info_chain 仅兜底
+        # ★ 关键：lyric 抢答 — 传 same_source 让 lyric 链优先用 url 选中的源
+        # 如果 url_src 不提供 lyric（直传模式如 ccwu），same_source 会被 chain 忽略
+        # 正常降级到其他能 provide lyric 的源
+        lyric, lyric_src = '', None
+        if with_lyric:
+            lyric_kwargs = dict(rid=song_id_str, preferred_source=preferred_source,
+                                same_source=url_src or '')
+            try:
+                lyric, lyric_src = self.parse_lyric_chain.try_fetch('parse_lyric', **lyric_kwargs)
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] lyric 抢答异常: {e}')
+
+        # 关键：info 拼接优先级 _cached_info > parse_info_chain
         if _cached_info and _cached_info.get('name'):
             base = normalize_kuwo_song(_cached_info)
             info_src_name = _cached_info.get('_search_source', 'cached')
@@ -140,6 +144,12 @@ class KuwoClient(BaseMusicClient):
                 'duration': 0,
             }
             info_src_name = 'unknown'
+
+        logger.info(
+            f'[{self.platform_id}] /song 同源抢答: '
+            f'url={url_src} lyric={lyric_src} info={info_src or "cached"} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         return {
             **base,

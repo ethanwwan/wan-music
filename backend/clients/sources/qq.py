@@ -200,6 +200,7 @@ QQ_SEARCH_SOURCES = [
         platform='qq',
         priority=10,
         description='xunhuisi (name 搜索兜底)',
+        family='xunhuisi',
         can_search=True,
         search_url='https://api.xunhuisi.store/API/QQMusic/Song.php?name={keyword_encoded}&type=json',
         extract_search=lambda d: d.get('data', []) if isinstance(d, dict) else [],
@@ -258,6 +259,7 @@ QQ_PARSE_URL_SOURCES = [
         platform='qq',
         priority=20,
         description='xunhuisi (musicdl 列表, 只能 M4A 256k)',
+        family='xunhuisi',  # ★ xunhuisi 家族
         can_parse_url=True,
         parse_url_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
         extract_url=lambda d: (
@@ -279,6 +281,7 @@ QQ_PARSE_URL_SOURCES = [
         platform='qq',
         priority=5,
         description='vkeys (v1.1.3 真实可用, quality=13 拿 FLAC)',
+        family='vkeys',  # ★ vkeys 家族：同源时优先 vkeys_lyric
         can_parse_url=True,
         parse_url_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=13',
         extract_url=lambda d: (
@@ -320,6 +323,7 @@ QQ_PARSE_URL_SOURCES = [
     ),
     # 5. lxmusic - musicdl 列表（flac24bit > hires > flac > 320k）
     # max_quality='hires'：flac24bit 是 24bit FLAC
+    # 注：lxmusic_lyric 已禁用（API 不存在），不设 family，避免误导
     ApiSource(
         name='lxmusic_url',
         platform='qq',
@@ -332,13 +336,14 @@ QQ_PARSE_URL_SOURCES = [
         timeout=8,  # onrender.com 冷启动慢，但有其他源兜底时不必等
         max_quality='hires',
     ),
-    # 6. nki - musicdl 列表
+    # 6. nki - musicdl 列表（需解密 apikey，HTTP 403）
     # max_quality='lossless'：song_play_url_sq 是 FLAC
     ApiSource(
         name='nki_url',
         platform='qq',
         priority=50,
-        description='nki (musicdl 列表)',
+        description='nki (musicdl 列表，需解密 apikey)',
+        enabled=False,  # HTTP 403，无有效 apikey
         can_parse_url=True,
         parse_url_url='https://api.nki.pw/API/music_open_api.php?mid={song_id}&apikey=placeholder',
         extract_url=lambda d: (
@@ -553,29 +558,39 @@ QQ_PARSE_INFO_SOURCES = [
         timeout=10,
     ),
     # 2. xunhuisi_info（兜底，priority 10）
+    # ★ musicdl 参考：xunhuisi 响应 code=0 表示成功，data 字段含 title/singer/cover
+    #   code=200 是旧版，新版统一用 code=0
     ApiSource(
         name='xunhuisi_info',
         platform='qq',
         priority=10,
         description='xunhuisi (mid 解析，title/singer/cover)',
+        family='xunhuisi',  # ★ xunhuisi 家族
         can_parse_info=True,
         parse_info_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
-        extract_info=lambda d, song_id='': {
-            'id': song_id,
-            'name': d.get('title', ''),
-            'artists': d.get('singer', ''),
-            'album': '',
-            'picUrl': d.get('cover', ''),
-        } if isinstance(d, dict) and d.get('code') == 200 else {},
+        extract_info=lambda d, song_id='': (
+            {
+                'id': song_id,
+                'name': (d.get('data') or {}).get('title', '') or d.get('title', ''),
+                'artists': (d.get('data') or {}).get('singer', '') or d.get('singer', ''),
+                'album': (d.get('data') or {}).get('album', '') or d.get('album', ''),
+                'picUrl': (d.get('data') or {}).get('cover', '') or d.get('cover', ''),
+            }
+            if isinstance(d, dict) and (d.get('code') in (0, 200) or d.get('data'))
+            else {}
+        ),
         headers=QQ_COMMON_HEADERS,
         timeout=15,
     ),
-    # 3. vkeys info - musicdl 列表
+    # 3. vkeys info - musicdl 列表（只返回 URL/quality 信息，无歌曲元数据）
+    # vkeys 没有独立的 info 接口，URL 端点返回的是 songID/songMID/kbps/url，不含 name/title
+    # 禁用，交由 qq_official_info 和 xunhuisi_info 处理
     ApiSource(
         name='vkeys_info',
         platform='qq',
         priority=20,
-        description='vkeys info (musicdl 列表)',
+        description='vkeys info (只返回 URL 信息，无元数据)',
+        enabled=False,
         can_parse_info=True,
         parse_info_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=999',
         extract_info=lambda d: d.get('data', {}) if isinstance(d, dict) else {},
@@ -604,27 +619,37 @@ QQ_PARSE_LYRIC_SOURCES = [
         headers=QQ_COMMON_HEADERS,
         timeout=5,  # c.y.qq.com 有时 ReadTimeout，缩短超时避免 8s 前端超时
     ),
-    # 1. xunhuisi 提供 LRC 歌词（在 lyric 字段）
+    # 1. xunhuisi 提供 LRC 歌词（在 lyric 字段，可能嵌套在 data 里）
+    # ★ musicdl 参考：xunhuisi 响应 code=0 表示成功，lyric 可能在 data.lyric 或顶层 lyric
     ApiSource(
         name='xunhuisi_lyric',
         platform='qq',
         priority=10,
         description='xunhuisi (LRC 歌词)',
+        family='xunhuisi',  # ★ xunhuisi 家族
         can_parse_lyric=True,
         parse_lyric_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
-        extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
+        extract_lyric=lambda d: (
+            (d.get('data') or {}).get('lyric', '') or d.get('lyric', '')
+        ) if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=15,
     ),
     # 2. vkeys 提供 LRC 歌词
+    # ★ musicdl 参考：vkeys 响应 data 可能是 dict 或 list，lrc 在 data.lrc 或 data[0].lrc
     ApiSource(
         name='vkeys_lyric',
         platform='qq',
         priority=10,
         description='vkeys (musicdl 列表，LRC 歌词)',
+        family='vkeys',  # ★ vkeys 家族：vkeys_url 抢答后优先用这个 lyric
         can_parse_lyric=True,
         parse_lyric_url='https://api.vkeys.cn/v2/music/tencent/lyric?mid={song_id}',
-        extract_lyric=lambda d: d.get('data', {}).get('lrc', '') if isinstance(d, dict) else '',
+        extract_lyric=lambda d: (
+            (d.get('data', {}) or {}).get('lrc', '')
+            if isinstance(d.get('data'), dict)
+            else (d.get('data', [{}])[0].get('lrc', '') if isinstance(d.get('data'), list) and d['data'] else '')
+        ) if isinstance(d, dict) else '',
         headers=QQ_COMMON_HEADERS,
         timeout=10,
     ),
@@ -695,6 +720,7 @@ QQ_PARSE_PLAYLIST_SOURCES = [
         platform='qq',
         priority=20,
         description='gdstudio 跨平台歌单（兜底，只接受 source=netease/kuwo/joox，固定返回网易云格式）',
+        family='gdstudio',
         can_parse_playlist=True,
         parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
         extract_playlist=_extract_netease_playlist,

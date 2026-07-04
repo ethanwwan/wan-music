@@ -22,69 +22,7 @@ from . import song_info_cache
 logger = logging.getLogger(__name__)
 
 
-# ==================== 跨源防错：duration 交叉验证 ====================
-
-import re as _re
-# LRC 末行时间戳：[mm:ss.xx] 或 [mm:ss.xxx]
-_LRC_LAST_TS_RE = _re.compile(r'\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]')
-
-
-def _extract_lrc_max_ts(lrc_text: str) -> int:
-    """从 LRC 文本中提取最大时间戳（毫秒）。返回 0 表示无歌词或无有效时间戳。"""
-    if not lrc_text or not isinstance(lrc_text, str):
-        return 0
-    max_ms = 0
-    for m in _LRC_LAST_TS_RE.finditer(lrc_text):
-        mm = int(m.group(1) or 0)
-        ss = int(m.group(2) or 0)
-        # 处理 .xx / .xxx 两种格式
-        frac = m.group(3)
-        if frac is None:
-            ms = 0
-        elif len(frac) == 2:
-            ms = int(frac) * 10
-        else:
-            ms = int(frac[:3].ljust(3, '0'))
-        total = (mm * 60 + ss) * 1000 + ms
-        if total > max_ms:
-            max_ms = total
-    return max_ms
-
-
-def _check_lyric_duration_mismatch(result: dict, platform: str, song_id: str) -> None:
-    """检测歌词版本是否与音频版本错配
-
-    触发条件：info.duration > 0 && lyric 有内容 && 末时间戳 vs duration 差 > 5s
-    标记：result['mismatch_warning'] = 'lyric_version_mismatch: 差 Xs'
-    注意：只标记，不阻断（前端可决定是否提示用户）
-    """
-    if not isinstance(result, dict):
-        return
-    lyric = result.get('lyric') or ''
-    if not lyric:
-        return
-    duration = result.get('duration')
-    try:
-        duration = int(duration or 0)
-    except (TypeError, ValueError):
-        return
-    if duration <= 0:
-        return
-    # duration 来自 search 阶段（_cached_info），单位 ms
-    max_ts = _extract_lrc_max_ts(lyric)
-    if max_ts <= 0:
-        return
-    # 差值：duration - max_ts（正数表示歌词在音频结束前就完了）
-    delta_ms = duration - max_ts
-    delta_s = delta_ms / 1000
-    # 阈值 5s（>5s 视为明显错配；intro/outro 静音造成的误差在 ±3s 内）
-    if abs(delta_s) > 5:
-        warning = f'lyric_version_mismatch: 差 {delta_s:.1f}s (info={duration/1000:.1f}s, lyric_max={max_ts/1000:.1f}s)'
-        result['mismatch_warning'] = warning
-        logger.warning(
-            f'[{platform}/{song_id}] {warning}'
-        )
-
+# ==================== qualityMap 精简（C2 方案） ====================
 
 def _pick_quality_info(quality_map: dict, quality: str) -> dict:
     """从 qualityMap 中取指定音质的 {br, size}；找不到返回空 dict。"""
@@ -467,10 +405,6 @@ class MusicClient:
                             f"音质升级: {platform}/{song_id_str} "
                             f"{quality} → {try_quality} (数据源给得更好)"
                         )
-                # ★ 跨源版本错配检测（B2 方案：duration 交叉验证）
-                # 如果有歌词，取歌词最后时间戳与 info.duration 比对；
-                # 差异 > 5s 视为 lyric 和 audio 版本不一致（Live vs Studio 错配）
-                _check_lyric_duration_mismatch(result, platform, song_id_str)
                 # ★ 精简 qualityMap：前端只关心"请求音质 + 实际音质"两项
                 _prune_quality_map(result, quality, try_quality)
                 return result

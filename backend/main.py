@@ -70,6 +70,11 @@ def _extract_request_context(path: str) -> str:
         pid = body.get('id', '')[:30]
         src = body.get('source', 'auto')
         return f'/playlist id={pid} src={src}'
+    if path == '/download/batch/start':
+        body = request.get_json(silent=True) or {}
+        items = body.get('items', [])
+        quality = body.get('settings', {}).get('selectedQuality', 'lossless')
+        return f'/download/batch/start 歌曲数={len(items)} quality={quality}'
     if path.startswith('/download/batch/progress/'):
         task_id = path.rsplit('/', 1)[-1][:30]
         return f'/download/batch/progress task={task_id}'

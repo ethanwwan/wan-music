@@ -64,6 +64,7 @@ NETEASE_SEARCH_SOURCES = [
         platform='netease',
         priority=10,
         description='gdstudio (musicdl 验证)',
+        family='gdstudio',
         can_search=True,
         search_url='https://music-api.gdstudio.xyz/api.php?types=search&source=netease&name={keyword_encoded}&count={limit}',
         extract_search=lambda d: d.get('data', []) if isinstance(d, dict) else [],
@@ -123,6 +124,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=10,
         description='cenguigui (musicdl 验证可用)',
+        family='cenguigui',
         can_parse_url=True,
         parse_url_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level={quality}',
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
@@ -164,6 +166,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=30,
         description='bileizhen (musicdl 验证)',
+        enabled=False,  # HTTP 401
         can_parse_url=True,
         parse_url_url='https://api.bileizhen.top/api/netease?id={song_id}&level={quality}',
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
@@ -178,6 +181,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=40,
         description='gdstudio (musicdl 验证)',
+        family='gdstudio',
         can_parse_url=True,
         parse_url_url='https://music-api.gdstudio.xyz/api.php?types=url&id={song_id}&source=netease&br={__br__}',
         extract_url=extract_first_url,
@@ -243,6 +247,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=90,
         description='rrvenn (musicdl 列表)',
+        enabled=False,  # HTTP 500
         can_parse_url=True,
         method='POST',
         parse_url_url='https://music.rrvenn.cn/Song_V1',
@@ -297,6 +302,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=125,
         description='lblb (musicdl 列表)',
+        enabled=False,  # SSLError
         can_parse_url=True,
         method='POST',
         parse_url_url='https://music163.lblb.eu/Song_V1',
@@ -311,6 +317,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=127,
         description='manshuo (musicdl 列表)',
+        enabled=False,  # HTTP 403
         can_parse_url=True,
         method='POST',
         parse_url_url='https://api.manshuo.ink/wyy/Song_V1',
@@ -402,6 +409,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=165,
         description='ceseet (musicdl 列表)',
+        enabled=False,  # HTTP 403
         can_parse_url=True,
         parse_url_url='https://m-api.ceseet.me/url/wy/{song_id}/hires',
         extract_url=extract_first_url,
@@ -451,6 +459,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=185,
         description='nanorocky (musicdl 列表，URL 形直返)',
+        enabled=False,  # HTTP 418
         can_parse_url=True,
         parse_url_url='https://metingapi.nanorocky.top/?server=netease&type=url&id={song_id}&br=2000',
         extract_url=extract_text_url,
@@ -537,6 +546,7 @@ NETEASE_PARSE_INFO_SOURCES = [
         platform='netease',
         priority=20,
         description='gdstudio info (实测 types=info 不支持)',
+        family='gdstudio',
         enabled=False,  # API 不支持 types=info
         can_parse_info=True,
         parse_info_url='https://music-api.gdstudio.xyz/api.php?types=info&id={song_id}&source=netease',
@@ -570,6 +580,7 @@ NETEASE_PARSE_INFO_SOURCES = [
         platform='netease',
         priority=40,
         description='cenguigui 解析响应（包含完整元信息）',
+        family='cenguigui',
         can_parse_info=True,
         parse_info_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level=lossless',
         extract_info=lambda d: {
@@ -607,6 +618,7 @@ NETEASE_PARSE_LYRIC_SOURCES = [
         platform='netease',
         priority=10,
         description='gdstudio lyric',
+        family='gdstudio',
         can_parse_lyric=True,
         parse_lyric_url='https://music-api.gdstudio.xyz/api.php?types=lyric&id={song_id}&source=netease',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
@@ -619,6 +631,7 @@ NETEASE_PARSE_LYRIC_SOURCES = [
         platform='netease',
         priority=20,
         description='cenguigui 解析响应（data.lyric 字段）',
+        family='cenguigui',
         can_parse_lyric=True,
         parse_lyric_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level=lossless',
         extract_lyric=lambda d: d.get('data', {}).get('lyric', '') if isinstance(d, dict) else '',
@@ -664,6 +677,7 @@ NETEASE_PARSE_PLAYLIST_SOURCES = [
         platform='netease',
         priority=20,
         description='gdstudio 跨平台歌单（兜底，固定返回网易云格式）',
+        family='gdstudio',
         can_parse_playlist=True,
         parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
         extract_playlist=_extract_netease_playlist,  # 网易云格式

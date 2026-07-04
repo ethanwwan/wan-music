@@ -91,13 +91,17 @@ def search():
         platform = data.get('source')
         limit = data.get('limit', 50)
 
-        logger.info(f"[搜索请求] keyword={keyword!r}, source={platform}, limit={limit}")
+        logger.info(f"/search 请求: keyword={keyword!r}, source={platform}, limit={limit}")
 
         if not keyword:
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
         result = music_service.search(keyword, platform, limit)
-        logger.info(f"[搜索结果] 结果数量={len(result.get('data', []))}")
+        results_count = len(result.get('data', []))
+        logger.info(
+            f"/search 结果: 数量={results_count}, "
+            f"源={result.get('search_source', 'unknown')}"
+        )
         # ★ 关键：把 search_source 透传到每个 song（/song 用作 preferred_source）
         # 之前只放在 result['search_source'] 顶层，/song 接口读不到
         # 同源优先 = search 用的源 = url/info/lyric 用的源，避免跨源不一致
@@ -107,7 +111,7 @@ def search():
                 song['_search_source'] = search_source
         return jsonify(APIResponse.success(result, "搜索成功"))
     except Exception as e:
-        logger.error(f"搜索失败: {e}")
+        logger.error(f"/search 失败: {e}")
         return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))
 
 
@@ -257,6 +261,12 @@ def download_batch_start():
     items = data.get('items', [])
     zip_name = _sanitize_filename(data.get('name', 'playlist') or 'playlist')
     settings = data.get('settings', {})
+
+    logger.info(
+        f"/download/batch/start 请求: 歌曲数={len(items)}, "
+        f"quality={settings.get('selectedQuality', 'lossless')}, "
+        f"包名={zip_name}"
+    )
 
     try:
         result = batch_download_service.start(items, zip_name, settings)

@@ -27,8 +27,9 @@ from typing import Any, Dict, Optional, Tuple
 
 # ==================== 配置 ====================
 
-# 5 分钟：单次搜索后到 /song 调用通常几秒内完成，5min 足够
-DEFAULT_TTL_SECONDS = 300
+# 1 小时：确保批量下载场景下搜索到下载之间的缓存有效性
+# 单次搜索后到 /song 调用通常几秒内完成，1h 足够覆盖整轮下载
+DEFAULT_TTL_SECONDS = 3600
 
 # 最大缓存条数（避免长时间运行内存膨胀）
 MAX_ENTRIES = 2000

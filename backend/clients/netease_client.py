@@ -4,10 +4,16 @@
   - 协调多个 Chain（search / parse_url / parse_info / parse_lyric）
   - 标准化响应
   - 暴露 search / get_song 业务方法
+
+设计原则：串行 fallback + 成功记忆。
+  - parse_url / parse_lyric / parse_info 都使用 serial 策略
+  - 按 priority 依次尝试各源，成功后 mark_source_success 记录
+  - 下一次请求优先使用最近成功的源（_try_serial 的 _sort_key）
+  - 失败后自动降级到下一个源（mark_source_failed）
+  - 无需 parallel-first 抢答，节省 API 配额、降低并发压力
 """
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -32,10 +38,10 @@ class NeteaseClient(BaseMusicClient):
         super().__init__()
         self.platform_id = 'netease'
         self.platform_name = '网易云音乐'
-        self.search_chain = FallbackChain(NETEASE_SEARCH_SOURCES, platform='netease', strategy='parallel')
-        self.parse_url_chain = FallbackChain(NETEASE_PARSE_URL_SOURCES, platform='netease', strategy='parallel_first')
-        self.parse_info_chain = FallbackChain(NETEASE_PARSE_INFO_SOURCES, platform='netease', strategy='parallel_first')
-        self.parse_lyric_chain = FallbackChain(NETEASE_PARSE_LYRIC_SOURCES, platform='netease', strategy='parallel_first')
+        self.search_chain = FallbackChain(NETEASE_SEARCH_SOURCES, platform='netease', strategy='serial')
+        self.parse_url_chain = FallbackChain(NETEASE_PARSE_URL_SOURCES, platform='netease', strategy='serial')
+        self.parse_info_chain = FallbackChain(NETEASE_PARSE_INFO_SOURCES, platform='netease', strategy='serial')
+        self.parse_lyric_chain = FallbackChain(NETEASE_PARSE_LYRIC_SOURCES, platform='netease', strategy='serial')
         self.parse_playlist_chain = FallbackChain(NETEASE_PARSE_PLAYLIST_SOURCES, platform='netease', strategy='serial')
 
     # ==================== 业务方法 ====================
@@ -62,16 +68,16 @@ class NeteaseClient(BaseMusicClient):
                  with_lyric: bool = True, preferred_source: str = '',
                  quality_map: dict = None,
                  _cached_info: dict = None) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息：URL + (元信息优先复用 search) + (可选) 歌词
+        """一次性获取歌曲完整信息：URL + (元信息复用 search) + (可选) 歌词
 
-        实现策略：URL/Lyric 双链并行抢答（parse_info 仅兜底用）
+        串行流程（serial fallback）：
+          1. parse_url_chain → 串行尝试各 URL 源，第一个成功即返回
+          2. parse_lyric_chain → 串行尝试各歌词源，携带 same_source 同源优先
+          3. 元信息直接使用 _cached_info（search 阶段写入，几乎总是存在）
 
-        跨源一致性策略：
-        - 若传入了 _cached_info（来自 search 阶段 song_info_cache），
-          **直接使用**作为 name/artist/album/cover/duration，
-          不再抢答 parse_info_chain（避免 url/info 跨源不一致）
-        - 若 _cached_info 缺失（URL 解析/歌单导入等无 search 上下文），
-          回退到 parse_info_chain 兜底拿 info
+        成功记忆：
+          - URL 成功后 `mark_source_success`，下次该源排最前
+          - URL 失败后 `mark_source_failed`，下次跳过该源
 
         Args:
             preferred_source: 来自 search 的源名，传下去给 url/lyric 链优先使用
@@ -82,62 +88,36 @@ class NeteaseClient(BaseMusicClient):
         song_id_str = str(song_id)
         url_kwargs = dict(song_id=song_id_str, quality=quality,
                           preferred_source=preferred_source, quality_map=quality_map or {})
-        lyric_kwargs = dict(song_id=song_id_str, preferred_source=preferred_source)
 
-        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
         t_start = time.time()
-        use_info_fallback = not _cached_info
-        max_workers = 3 if use_info_fallback else 2
-        pool = ThreadPoolExecutor(max_workers=max_workers)
-        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-        f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                              song_id=song_id_str, preferred_source=preferred_source)
-                  if use_info_fallback else None)
-        f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                               **lyric_kwargs) if with_lyric else None)
-        pool.shutdown(wait=False)
 
-        url, url_src = '', None
-        info, info_src = None, None
-        lyric, lyric_src = '', None
-        deadline = t_start + 6.5
-        futures = [f for f in (f_url, f_info, f_lyric) if f is not None]
-        try:
-            for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
-                try:
-                    data, src = fut.result()
-                except Exception as e:
-                    logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
-                    continue
-                if fut is f_url:
-                    url, url_src = data, src
-                elif fut is f_info:
-                    info, info_src = data, src
-                elif fut is f_lyric:
-                    lyric, lyric_src = data, src
-                if url and url.startswith('http'):
-                    break
-        except TimeoutError:
-            logger.warning(f'[{self.platform_id}] {"3" if use_info_fallback else "2"} 链并行抢答超时')
-            pass
-
-        logger.info(
-            f'[{self.platform_id}] /song {"3" if use_info_fallback else "2"} 链抢答完成: '
-            f'url={url_src} info={info_src or "cached"} lyric={lyric_src} '
-            f'耗时={time.time()-t_start:.2f}s'
-        )
-
-        # URL 是关键，没有 URL 视为失败
+        # Step 1: 串行获取 URL（按 priority 依次尝试各源）
+        url, url_src = self.parse_url_chain.try_fetch('parse_url', **url_kwargs)
         if not url or not url.startswith('http'):
             return None
 
-        # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
+        # Step 2: 串行获取歌词（带上 same_source 优先用 URL 同源）
+        lyric, lyric_src = '', None
+        if with_lyric:
+            try:
+                lyric, lyric_src = self.parse_lyric_chain.try_fetch(
+                    'parse_lyric', song_id=song_id_str,
+                    preferred_source=preferred_source,
+                    same_source=url_src or '',
+                )
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] lyric 获取异常: {e}')
+
+        logger.info(
+            f'[{self.platform_id}] /song 串行完成: '
+            f'url={url_src} lyric={lyric_src} info={"cached" if _cached_info else "none"} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
+
+        # Step 3: 元信息直接复用 _cached_info
         if _cached_info and _cached_info.get('name'):
             base = normalize_netease_song(_cached_info)
             info_src_name = _cached_info.get('_search_source', 'cached')
-        elif info and info.get('name'):
-            base = normalize_netease_song(info)
-            info_src_name = info_src
         else:
             base = {
                 'id': song_id_str,
@@ -152,7 +132,7 @@ class NeteaseClient(BaseMusicClient):
         return {
             **base,
             'url': url,
-            'level': quality,                  # 前端用 'level' 字段
+            'level': quality,
             'lyric': lyric or '',
             'source': self.platform_id,
             'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},

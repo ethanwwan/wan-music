@@ -31,10 +31,10 @@ class KugouClient(BaseMusicClient):
         super().__init__()
         self.platform_id = 'kugou'
         self.platform_name = '酷狗音乐'
-        self.search_chain = FallbackChain(KUGOU_SEARCH_SOURCES, platform='kugou', strategy='parallel')
-        self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='parallel_first')
-        self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='parallel_first')
-        self.parse_lyric_chain = FallbackChain(KUGOU_PARSE_LYRIC_SOURCES, platform='kugou', strategy='parallel_first')
+        self.search_chain = FallbackChain(KUGOU_SEARCH_SOURCES, platform='kugou', strategy='serial')
+        self.parse_url_chain = FallbackChain(KUGOU_PARSE_URL_SOURCES, platform='kugou', strategy='serial')
+        self.parse_info_chain = FallbackChain(KUGOU_PARSE_INFO_SOURCES, platform='kugou', strategy='serial')
+        self.parse_lyric_chain = FallbackChain(KUGOU_PARSE_LYRIC_SOURCES, platform='kugou', strategy='serial')
         self.parse_playlist_chain = FallbackChain(KUGOU_PARSE_PLAYLIST_SOURCES, platform='kugou', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -144,6 +144,7 @@ class KugouClient(BaseMusicClient):
         # 歌词链（酷狗官方两步：krcs.search + lyrics.download KRC 解密）
         # 必须用 info.duration（ms）当 search 的 duration 参数，所以 lyric 在 info 后再调
         # ★ duration 来自 base（_cached_info 优先），保证歌词版本和 audio 一致
+        # ★ same_source=url_src：让 lyric 链优先用 url 选中的源，避免跨源版本错配
         lyric = ''
         lyric_src = None
         if with_lyric:
@@ -152,13 +153,14 @@ class KugouClient(BaseMusicClient):
                 lyric, lyric_src = self.parse_lyric_chain.try_fetch(
                     'parse_lyric', song_id=parse_hash, duration=duration_ms,
                     preferred_source=preferred_source,
+                    same_source=url_src or '',
                 )
             except Exception as e:
                 logger.warning(f'[kugou.get_song] 取歌词失败: {e}')
 
         logger.info(
-            f'[{self.platform_id}] /song {"2" if use_info_fallback else "1"} 链抢答完成: '
-            f'url={url_src} info={info_src or "cached"} lyric={lyric_src} '
+            f'[{self.platform_id}] /song 同源抢答: '
+            f'url={url_src} lyric={lyric_src} info={info_src or "cached"} '
             f'耗时={time.time()-t_start:.2f}s'
         )
 

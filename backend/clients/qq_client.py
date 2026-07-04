@@ -29,10 +29,10 @@ class QQClient(BaseMusicClient):
         super().__init__()
         self.platform_id = 'qq'
         self.platform_name = 'QQ音乐'
-        self.search_chain = FallbackChain(QQ_SEARCH_SOURCES, platform='qq', strategy='parallel')
-        self.parse_url_chain = FallbackChain(QQ_PARSE_URL_SOURCES, platform='qq', strategy='parallel_first')
-        self.parse_info_chain = FallbackChain(QQ_PARSE_INFO_SOURCES, platform='qq', strategy='parallel_first')
-        self.parse_lyric_chain = FallbackChain(QQ_PARSE_LYRIC_SOURCES, platform='qq', strategy='parallel_first')
+        self.search_chain = FallbackChain(QQ_SEARCH_SOURCES, platform='qq', strategy='serial')
+        self.parse_url_chain = FallbackChain(QQ_PARSE_URL_SOURCES, platform='qq', strategy='serial')
+        self.parse_info_chain = FallbackChain(QQ_PARSE_INFO_SOURCES, platform='qq', strategy='serial')
+        self.parse_lyric_chain = FallbackChain(QQ_PARSE_LYRIC_SOURCES, platform='qq', strategy='serial')
         self.parse_playlist_chain = FallbackChain(QQ_PARSE_PLAYLIST_SOURCES, platform='qq', strategy='serial')
 
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
@@ -57,14 +57,16 @@ class QQClient(BaseMusicClient):
                  _cached_info: dict = None) -> Optional[Dict[str, Any]]:
         """一次性获取歌曲完整信息
 
-        实现策略：URL/Lyric 双链并行抢答（parse_info 仅兜底用）
-
         跨源一致性策略：
         - 若传入了 _cached_info（来自 search 阶段 song_info_cache），
           **直接使用**作为 name/artist/album/cover/duration，
           不再抢答 parse_info_chain（避免 url/info 跨源不一致）
         - 若 _cached_info 缺失（URL 解析/歌单导入等无 search 上下文），
           回退到 parse_info_chain 兜底拿 info
+
+        url/lyric 同源策略：
+        - 先抢答 url，**成功后立刻用 url 选中的源**抢答 lyric
+        - 避免 url 来自 A 源、lyric 来自 B 源导致的"音频/歌词版本错配"
 
         Args:
             preferred_source: 来自 search 链的源名（如 'qq_official_search'），
@@ -75,33 +77,24 @@ class QQClient(BaseMusicClient):
         """
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
-        # 透传给 try_fetch（chain 内部按 preferred_source 排序）
         url_kwargs = dict(song_id=song_id_str, quality=quality,
                           preferred_source=preferred_source, quality_map=quality_map or {})
-        lyric_kwargs = dict(song_id=song_id_str,
-                            preferred_source=preferred_source)
 
-        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
+        # ★ 关键：先抢答 url，**先不并行 lyric**
         t_start = time.time()
         use_info_fallback = not _cached_info
-        max_workers = 3 if use_info_fallback else 2
+        max_workers = 2 if use_info_fallback else 1
         pool = ThreadPoolExecutor(max_workers=max_workers)
         f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
         f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
                               song_id=song_id_str, preferred_source=preferred_source)
                   if use_info_fallback else None)
-        f_lyric = (pool.submit(self.parse_lyric_chain.try_fetch, 'parse_lyric',
-                               **lyric_kwargs) if with_lyric else None)
-        # shutdown(wait=False) 不阻塞主线程，让新 future 还能继续跑
         pool.shutdown(wait=False)
 
-        # 用 as_completed 按需取结果，每条链最多等 max_chain_seconds (6s)
-        # URL 是关键 → 优先等 url（但同时让 info/lyric 也跑）
         url, url_src = '', None
         info, info_src = None, None
-        lyric, lyric_src = '', None
-        deadline = t_start + 6.5  # 留 1.5s 余量给 JSON 解析等
-        futures = [f for f in (f_url, f_info, f_lyric) if f is not None]
+        deadline = t_start + 5.0
+        futures = [f for f in (f_url, f_info) if f is not None]
         try:
             for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
                 try:
@@ -113,23 +106,31 @@ class QQClient(BaseMusicClient):
                     url, url_src = data, src
                 elif fut is f_info:
                     info, info_src = data, src
-                elif fut is f_lyric:
-                    lyric, lyric_src = data, src
-                # URL 拿到就退出循环（其他链后台继续跑）
-                if url and url.startswith('http'):
+                if url and url.startswith('http') and (info or _cached_info):
                     break
         except TimeoutError:
-            logger.warning(f'[{self.platform_id}] {"3" if use_info_fallback else "2"} 链并行抢答超时')
+            logger.warning(f'[{self.platform_id}] {"2" if use_info_fallback else "1"} 链 url 抢答超时')
             pass
-
-        logger.info(
-            f'[{self.platform_id}] /song {"3" if use_info_fallback else "2"} 链抢答完成: '
-            f'url={url_src} info={info_src or "cached"} lyric={lyric_src} '
-            f'耗时={time.time()-t_start:.2f}s'
-        )
 
         if not url or not url.startswith('http'):
             return None
+
+        # ★ 关键：lyric 抢答 — 传 same_source 让 lyric 链优先用 url 选中的源
+        lyric, lyric_src = '', None
+        if with_lyric:
+            lyric_kwargs = dict(song_id=song_id_str,
+                                preferred_source=preferred_source,
+                                same_source=url_src or '')
+            try:
+                lyric, lyric_src = self.parse_lyric_chain.try_fetch('parse_lyric', **lyric_kwargs)
+            except Exception as e:
+                logger.warning(f'[{self.platform_id}] lyric 抢答异常: {e}')
+
+        logger.info(
+            f'[{self.platform_id}] /song 同源抢答: '
+            f'url={url_src} lyric={lyric_src} info={info_src or "cached"} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
         if _cached_info and _cached_info.get('name'):

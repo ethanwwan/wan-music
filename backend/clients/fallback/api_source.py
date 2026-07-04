@@ -139,6 +139,46 @@ class ApiSource:
     # 后续 chain 会 HEAD/Range 验证 URL 可用性
     passthrough: bool = False
 
+    # 能力集合（set 形式），由 post_init 从 can_* 字段自动推导
+    # 例：{'url', 'lyric', 'info'} 表示该源能同时提供这三种能力
+    # 用于 chain 选源时**优先选能同时满足 url + lyric 的源**，
+    # 避免 url 来自 A 源、lyric 来自 B 源导致的"音频/歌词版本错配"
+    # 注意：直传模式（passthrough）的源**不算** provide lyric
+    #     （它只返 URL，不返歌词数据）
+    provides: frozenset = field(default_factory=frozenset)
+
+    # 同源族（family）：标识该源属于哪个第三方服务（如 'gdstudio'、'cenguigui'）
+    # 用于 chain 跨能力选源时优先选**同 family** 的源（即便名字不同）
+    # 例：gdstudio_url 和 gdstudio_lyric 是不同 ApiSource 但同 family，
+    #     url 选到 gdstudio_url 后，lyric 链会优先选 gdstudio_lyric
+    # 为空表示无 family 限制
+    family: str = ''
+
+    def __post_init__(self):
+        # 自动从 can_* 推导 provides 集合
+        if not self.provides:
+            caps = set()
+            if self.can_search:
+                caps.add('search')
+            if self.can_parse_url:
+                caps.add('url')
+            if self.can_parse_info:
+                caps.add('info')
+            if self.can_parse_lyric:
+                caps.add('lyric')
+            if self.can_parse_playlist:
+                caps.add('playlist')
+            # 直传模式：源不返 JSON，所以不算 provide lyric
+            # （即使它有 extract_lyric 也不会被调用）
+            if self.passthrough:
+                caps.discard('lyric')
+                caps.discard('info')
+            self.provides = frozenset(caps)
+
+    def has(self, capability: str) -> bool:
+        """检查是否提供某能力：'url' | 'info' | 'lyric' | 'search' | 'playlist'"""
+        return capability in self.provides
+
     # 内部统计（运行期填充）
     _stats: dict = field(default_factory=lambda: {'ok': 0, 'fail': 0, 'last_error': '', 'last_used': 0, 'total_ms': 0})
 

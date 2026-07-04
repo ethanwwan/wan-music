@@ -53,7 +53,7 @@ export default defineConfig(({ mode }) => {
   // 代理路径列表（server 和 preview 复用）
   // SSE 长连接路径（/download/batch/progress）单独配：proxyTimeout=0 不过期
   const ssePaths = ['/download/batch/progress']   // SSE 长连接
-  const normalPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms']
+  const normalPaths = ['/search', '/song', '/playlist', '/download', '/image', '/api', '/health', '/platforms', '/config']
 
   const buildProxy = () => {
     const buildOpts = (isSSE) => ({
@@ -64,10 +64,13 @@ export default defineConfig(({ mode }) => {
       // 显示 ERR_EMPTY_RESPONSE（Chrome DevTools 网络层错误，JS 无法拦截）
       // 让前端 silentFetch 自己做 retry（应用层），vite 不再 retry
       retry: 0,                  // 关键：不重试，避免重复 ERR_EMPTY_RESPONSE
-      timeout: isSSE ? 0 : 3000,
+      // 超时设为 30s，远大于前端 fetchWithTimeout（15s）
+      // 这样前端 AbortController 先触发，返回 AbortError（友好提示）
+      // 否则代理提前超时截断连接 → 浏览器 ERR_EMPTY_RESPONSE（TypeError，无法友好提示）
+      timeout: isSSE ? 0 : 30000,
       // SSE 长连接：proxyTimeout 必须 = 0（不过期），否则 vite 3 秒切断连接
       // → 浏览器报 ERR_INCOMPLETE_CHUNKED_ENCODING（chunked transfer 被打断）
-      proxyTimeout: isSSE ? 0 : 3000,
+      proxyTimeout: isSSE ? 0 : 30000,
       // ECONNREFUSED 是后端未启动导致，频繁刷屏会干扰开发
       // 用 configure 钩子自定义错误处理
       configure: (proxy) => {

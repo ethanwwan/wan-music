@@ -44,13 +44,13 @@ _317AK_REQUEST_KEYS = [
 
 
 def _317ak_prepare_request(url: str, method: str, headers: dict, post_data, is_json: bool, kwargs: dict):
-    """317ak 源 prepare_request：随机选一个 ckey 解密后注入 URL（同 yyy001 模式）"""
+    """317ak 源 prepare_request：随机选一个 ckey 解密后注入 URL（同 yyy001 模式），SSL 证书无效需 verify=False"""
     try:
         ckey = base64.b64decode(random.choice(_317AK_REQUEST_KEYS)[14:].encode('utf-8')).decode('utf-8')
         url = url.replace('{ckey}', ckey)
     except Exception:
         pass
-    return {'url': url}
+    return {'url': url, 'verify': False}
 
 
 def _urljoin_safe(base: str, url: str) -> str:
@@ -86,6 +86,8 @@ KUGOU_SEARCH_SOURCES = [
         platform='kugou',
         priority=10,
         description='gdstudio (跨平台源，kugou)',
+        enabled=False,  # HTTP 503
+        family='gdstudio',
         can_search=True,
         search_url='https://music-api.gdstudio.xyz/api.php?types=search&source=kugou&name={keyword_encoded}&count={limit}',
         extract_search=lambda d: d.get('data', []) if isinstance(d, dict) else [],
@@ -104,6 +106,7 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=0,
         description='haitanw kg.php（musicdl 列表，level=hires/lossless/exhigh）',
+        family='haitanw',
         can_parse_url=True,
         parse_url_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level={quality}',
         extract_url=lambda d: (
@@ -121,6 +124,8 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=5,
         description='haitanw kg.php 备用域名（music.haitangw.cc）',
+        enabled=False,  # 备用域名超时
+        family='haitanw',
         can_parse_url=True,
         parse_url_url='https://music.haitangw.cc/kgqq/kg.php?type=json&id={hash}&level={quality}',
         extract_url=lambda d: (
@@ -138,6 +143,7 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=10,
         description='cocodownloader (musicdl 验证可用)',
+        enabled=False,  # HTTP 500
         can_parse_url=True,
         parse_url_url='https://cocodownloader.markqq.com/api/url?id={hash}&provider=kugou',
         extract_url=extract_first_url,
@@ -152,7 +158,9 @@ KUGOU_PARSE_URL_SOURCES = [
         name='317ak_url',
         platform='kugou',
         priority=15,
-        description='317ak (musicdl 列表，ckey 解密已实现)',
+        description='317ak (musicdl 列表，ckey 解密已实现，SSL 彻底不可用)',
+        enabled=False,  # SSL UNEXPECTED_EOF，服务器已失效
+        family='317ak',
         can_parse_url=True,
         parse_url_url='https://api.317ak.cn/api/yinyue/kugou?ckey={ckey}&i={hash}&br={quality}&type=json&lrc=1',
         extract_url=extract_first_url,
@@ -164,30 +172,6 @@ KUGOU_PARSE_URL_SOURCES = [
     # 5. jbsou (musicdl 列表) - POST 复杂
     # ★ musicdl 用 urljoin 拼 base_url（jbsou API 可能返相对路径）
     # 我们用 urljoin 兜底：相对路径自动拼 https://www.jbsou.cn/
-    ApiSource(
-        name='jbsou_url',
-        platform='kugou',
-        priority=20,
-        description='jbsou POST (musicdl 列表，urljoin 相对路径)',
-        can_parse_url=True,
-        method='POST',
-        parse_url_url='https://www.jbsou.cn/',
-        post_data={'input': '{hash}', 'filter': 'id', 'type': 'kugou', 'page': '1'},
-        extract_url=lambda d: (
-            _urljoin_safe('https://www.jbsou.cn/', (d.get('data', [{}])[0] if isinstance(d.get('data'), list) and d.get('data') else {}).get('url', ''))
-            if isinstance(d, dict) else ''
-        ),
-        headers={
-            'accept': 'application/json, text/javascript, */*; q=0.01',
-            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'origin': 'https://www.jbsou.cn',
-            'referer': 'https://www.jbsou.cn/',
-            'x-requested-with': 'XMLHttpRequest',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-        },
-        timeout=15,
-        max_quality='lossless',
-    ),
     # 6. 酷狗官方 playInfo (需先获取 hash key 才能用)
     ApiSource(
         name='kugou_official_url',
@@ -222,6 +206,8 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=40,
         description='gdstudio URL (跨平台源，kugou)',
+        enabled=False,  # HTTP 400
+        family='gdstudio',
         can_parse_url=True,
         parse_url_url='https://music-api.gdstudio.xyz/api.php?types=url&id={hash}&source=kugou&br={__br__}',
         extract_url=extract_first_url,
@@ -267,6 +253,8 @@ KUGOU_PARSE_INFO_SOURCES = [
         platform='kugou',
         priority=10,
         description='gdstudio info (跨平台)',
+        enabled=False,  # HTTP 400
+        family='gdstudio',
         can_parse_info=True,
         parse_info_url='https://music-api.gdstudio.xyz/api.php?types=info&id={hash}&source=kugou',
         extract_info=lambda d: (
@@ -286,6 +274,7 @@ KUGOU_PARSE_INFO_SOURCES = [
         platform='kugou',
         priority=20,
         description='haitanw info (元信息)',
+        family='haitanw',
         can_parse_info=True,
         parse_info_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level=lossless',
         extract_info=lambda d: (
@@ -447,6 +436,7 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         platform='kugou',
         priority=0,
         description='酷狗官方 krcs+lyrics.kugou.com (两步 KRC 解密)',
+        family='kugou_official',
         can_parse_lyric=True,
         parse_lyric_url='http://krcs.kugou.com/search?ver=1&client=mobi&duration={duration}&hash={song_id}&album_audio_id=',
         extract_lyric=_kugou_two_step_lyric,  # (d) 一个参数，duration 已在 Step1 URL
@@ -459,6 +449,7 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         platform='kugou',
         priority=10,
         description='haitanw lyric (musicdl 列表，data.lyric 字段)',
+        family='haitanw',
         can_parse_lyric=True,
         parse_lyric_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level=lossless',
         extract_lyric=lambda d: (
@@ -474,7 +465,9 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         name='317ak_lyric',
         platform='kugou',
         priority=20,
-        description='317ak lyric (musicdl 列表，ckey 解密已实现)',
+        description='317ak lyric (musicdl 列表，ckey 解密已实现，SSL 彻底不可用)',
+        enabled=False,  # SSL UNEXPECTED_EOF，服务器已失效
+        family='317ak',
         can_parse_lyric=True,
         parse_lyric_url='https://api.317ak.cn/api/yinyue/kugou?ckey={ckey}&i={hash}&br=999&type=json&lrc=1',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
@@ -488,6 +481,8 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         platform='kugou',
         priority=30,
         description='gdstudio lyric (跨平台)',
+        enabled=False,  # HTTP 400
+        family='gdstudio',
         can_parse_lyric=True,
         parse_lyric_url='https://music-api.gdstudio.xyz/api.php?types=lyric&id={hash}&source=kugou',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
@@ -522,6 +517,7 @@ KUGOU_PARSE_PLAYLIST_SOURCES = [
         platform='kugou',
         priority=20,
         description='gdstudio 跨平台歌单（兜底，只接受 source=netease/kuwo/joox，固定返回网易云格式）',
+        family='gdstudio',
         can_parse_playlist=True,
         parse_playlist_url='https://music-api.gdstudio.xyz/api.php?types=playlist&id={playlist_id}&source=netease',
         extract_playlist=_extract_netease_playlist,

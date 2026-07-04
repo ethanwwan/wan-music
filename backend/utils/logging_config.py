@@ -64,3 +64,13 @@ def setup_logging(level: int = logging.INFO) -> None:
     # werkzeug 自带 access log 与 __main__.after_request 双行重复，静默 werkzeug
     # （我们自己的 _log_request 已经记录 API 请求）
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
+    # 6. clients 子系统开启 DEBUG（缓存命中/源排序等内部细节）
+    #    在根 logger 之上增加独立的流 handler，避免将根设为 DEBUG 导致其他模块刷屏
+    clients_logger = logging.getLogger('clients')
+    clients_logger.setLevel(logging.DEBUG)
+    clients_logger.propagate = False  # 不传到根 handler（根为 INFO，会过滤掉 DEBUG）
+    clients_ch = logging.StreamHandler(sys.stderr)
+    clients_ch.setLevel(logging.DEBUG)
+    clients_ch.setFormatter(logging.Formatter(CONSOLE_FORMAT, datefmt='%Y-%m-%d %H:%M:%S'))
+    clients_logger.addHandler(clients_ch)
