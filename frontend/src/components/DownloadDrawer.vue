@@ -445,9 +445,10 @@ const handleDownload = async (task) => {
 
 const handleRemove = async (task) => {
   try {
-    await store.removeTask(task.task_id)
+    await store.cancelTask(task.task_id)
   } catch (e) {
-    // 忽略
+    // 后端删除失败，至少移除本地
+    store.removeTask(task.task_id)
   }
 }
 
