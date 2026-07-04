@@ -35,7 +35,7 @@ class NeteaseClient(BaseMusicClient):
     """网易云音乐客户端 - 数据驱动版"""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(cookie_file='netease_cookie.txt')
         self.platform_id = 'netease'
         self.platform_name = '网易云音乐'
         self.search_chain = FallbackChain(NETEASE_SEARCH_SOURCES, platform='netease', strategy='serial')
@@ -92,7 +92,7 @@ class NeteaseClient(BaseMusicClient):
         t_start = time.time()
 
         # Step 1: 串行获取 URL（按 priority 依次尝试各源）
-        url, url_src = self.parse_url_chain.try_fetch('parse_url', **url_kwargs)
+        url, url_src = self.parse_url_chain.try_fetch('parse_url', cookies=self.cookies, **url_kwargs)
         if not url or not url.startswith('http'):
             return None
 
@@ -104,6 +104,7 @@ class NeteaseClient(BaseMusicClient):
                     'parse_lyric', song_id=song_id_str,
                     preferred_source=preferred_source,
                     same_source=url_src or '',
+                    cookies=self.cookies,
                 )
             except Exception as e:
                 logger.warning(f'[{self.platform_id}] lyric 获取异常: {e}')

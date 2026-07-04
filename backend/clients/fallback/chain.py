@@ -92,8 +92,8 @@ class FallbackChain:
         # 成功记忆：mark_source_success() 记录成功时间，过期后回归 priority
         # 场景：vkeys_url 成功下载后，5 分钟内其他歌曲优先用 vkeys_url（直到它失败）
         self._success_recent: dict = {}  # {name: success_at_timestamp}
-        # Cookie 文件缓存：避免同进程内每次请求都重新读文件
-        self._cookie_cache: dict = {}  # {cookie_file_path: dict}
+        # Cookie 加载由各平台客户端负责（BaseMusicClient.__init__），
+        # 通过 try_fetch(..., cookies=...) 传入，链本身不读文件。
 
     def set_source_enabled(self, name: str, enabled: bool) -> bool:
         """动态启用/禁用某个源"""
@@ -264,36 +264,18 @@ class FallbackChain:
             return False
         return True
 
-    def _verify_url_reachable(self, url: str, timeout: int = 5,
-                              expected_min_size: int = 0) -> bool:
+    def _verify_url_reachable(self, url: str, timeout: int = 5) -> bool:
         """验证 URL 是否可访问（HEAD 探测，HEAD 405 时 fallback Range GET）
 
         用途：chain 拿到下载 URL 后，立刻验证 URL 是否真能用。
               拿到 URL 不代表能用（CDN 可能 403/404/token 过期），
               验证失败 → mark_source_failed 换源（不浪费真正下载时间）。
-
-        Args:
-            url: 待验证的 URL
-            timeout: 超时秒数
-            expected_min_size: 预期最小字节数（来自 qualityMap），0 表示不检查
-                - 用于发现"用低码率顶替高码率"的情况
-                - 例：qualityMap 说 FLAC=50MB，HEAD 返回 Content-Length=5MB → 验证失败
-                - 容差：实际 ≥ 预期 × 0.5 才认为合理（CDN 偶发不准）
         """
         _http_semaphore.acquire()
         try:
             try:
                 resp = requests.head(url, timeout=timeout, allow_redirects=True)
                 if resp.status_code in (200, 206):
-                    # ★ size check：避免小源顶替大源（不同 CDN 给的资源 bitrate 不一样）
-                    if expected_min_size > 0:
-                        cl = int(resp.headers.get('Content-Length', 0) or 0)
-                        if cl > 0 and cl < expected_min_size * 0.5:
-                            logger.debug(
-                                f'[verify_url] {url[:60]}... size 不匹配: '
-                                f'cl={cl} < expected={expected_min_size}×0.5'
-                            )
-                            return False
                     return True
                 if resp.status_code == 405:  # HEAD 不支持
                     # Range GET 1KB 探测
@@ -495,15 +477,14 @@ class FallbackChain:
                         f'(max_quality={source.max_quality} < user_quality={user_quality})'
                     )
                     continue
-            # cookie 检查
-            if source.needs_cookie and source.cookie_file:
-                cookies = self._load_cookie(source.cookie_file)
-                if not cookies:
-                    logger.info(
-                        f'[{self.platform}.{op}] 跳过 {source.name} '
-                        f'(无 cookie file: {source.cookie_file})'
-                    )
-                    continue
+            # cookie 检查（cookies 由客户端通过 try_fetch(cookies=...) 传入）
+            cookies = kwargs.get('cookies')
+            if source.needs_cookie and not cookies:
+                logger.info(
+                    f'[{self.platform}.{op}] 跳过 {source.name} '
+                    f'({source.name} 需要 cookie，但未提供)'
+                )
+                continue
 
             logger.info(f'[{self.platform}.{op}] 尝试 {source.name} (P={source.priority})...')
             t0 = time.time()
@@ -528,10 +509,7 @@ class FallbackChain:
                             f'[{self.platform}.{op}] 跳过 {source.name}（URL 在死链列表中）: {data[:60]}'
                         )
                         continue
-                    qmap = kwargs.get('quality_map') or {}
-                    user_q = user_quality
-                    expected_size = int((qmap.get(user_q) or {}).get('size') or 0)
-                    if not self._verify_url_reachable(data, expected_min_size=expected_size):
+                    if not self._verify_url_reachable(data):
                         source._stats['fail'] += 1
                         source._stats['last_error'] = 'URL 验证失败'
                         source._stats['total_ms'] += elapsed_ms
@@ -590,10 +568,8 @@ class FallbackChain:
         # 默认 UA
         headers.setdefault('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36')
 
-        # Cookie（如需要）
-        cookies = None
-        if source.needs_cookie and source.cookie_file:
-            cookies = self._load_cookie(source.cookie_file)
+        # Cookie（从 try_fetch 传入，已缓存，避免重复加载）
+        cookies = kwargs.get('cookies')
 
         # POST 数据（支持占位符替换）
         post_data = source.post_data
@@ -755,67 +731,7 @@ class FallbackChain:
         return bool(data)
 
     def _load_cookie(self, cookie_file: str) -> dict:
-        """从 cookie 文件加载（netease 专用），结果缓存在 _cookie_cache 中
-
-        支持两种格式：
-          1. Netscape 7-tab 格式（标准）：
-                # Netscape HTTP Cookie File
-                domain	flag	path	secure	expiration	name	value
-          2. 单行 key=value 格式（Cookie header 风格，用 ; 分隔）：
-                _ntes_nnid=xxx; _ntes_nuid=xxx; MUSIC_U=xxx; ...
-
-        候选路径（CWD 启动 vs docker 部署）：
-          backend/netease_cookie.txt           ← 相对 CWD
-          backend/clients/cookie/...           ← 实际项目结构
-          /app/cookie/...                      ← docker 镜像根
-          /app/clients/cookie/...              ← docker 镜像源码路径
-        """
-        from pathlib import Path
-        candidates = [
-            Path(cookie_file),                                          # CWD 相对
-            Path('clients/cookie') / Path(cookie_file).name,            # 项目内 (CWD=backend/)
-            Path('backend/clients/cookie') / Path(cookie_file).name,    # 项目内 (CWD=root/)
-            Path('/app/cookie') / Path(cookie_file).name,               # docker 根
-            Path('/app/clients/cookie') / Path(cookie_file).name,       # docker 源码路径
-        ]
-        # 先查缓存（用第一个存在的文件路径做 key）
-        for p in candidates:
-            if p.exists():
-                cache_key = str(p)
-                if cache_key in self._cookie_cache:
-                    return self._cookie_cache[cache_key]
-                break
-        for p in candidates:
-            if p.exists():
-                try:
-                    content = p.read_text(encoding='utf-8', errors='ignore').strip()
-                    if not content:
-                        continue
-                    cookies = {}
-                    # 格式探测：是否含 \t → Netscape 格式；否则 → 单行 key=value
-                    if '\t' in content:
-                        # Netscape 7-tab 格式
-                        for line in content.splitlines():
-                            if not line.strip() or line.startswith('#'):
-                                continue
-                            parts = line.split('\t')
-                            if len(parts) >= 7:
-                                cookies[parts[5]] = parts[6]
-                    else:
-                        # 单行 key=value 格式（Cookie header 风格，; 分隔）
-                        for pair in content.split(';'):
-                            pair = pair.strip()
-                            if '=' in pair:
-                                k, v = pair.split('=', 1)
-                                cookies[k.strip()] = v.strip()
-                    if cookies:
-                        logger.info(
-                            f'[{self.platform}] 加载 cookie {p}（{len(cookies)} 个字段）'
-                        )
-                        self._cookie_cache[str(p)] = cookies
-                        return cookies
-                except Exception as e:
-                    logger.debug(f'加载 cookie 失败 {p}: {e}')
+        """（废弃）由客户端层接管 cookie 加载，链内不再读写 cookie 文件"""
         return {}
 
 

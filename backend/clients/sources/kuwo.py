@@ -140,14 +140,14 @@ KUWO_SEARCH_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
     ),
-    # 3. JBSou 跨平台搜索
+    # 3. JBSou 跨平台搜索（实测搜索不准确，返回非目标歌曲）
     ApiSource(
         name='jbsou_search',
         platform='kuwo',
         priority=20,
-        description='JBSou (jbsou.cn 跨平台搜索)',
+        description='JBSou (jbsou.cn 跨平台搜索，实测搜索结果不准确)',
+        enabled=False,  # 搜索不准确+超时
         family='jbsou',
-        can_search=True,
         method='POST',
         search_url='https://www.jbsou.cn/',
         post_data={'input': '{keyword_encoded}', 'filter': 'name', 'type': 'kuwo', 'page': '1'},
@@ -169,6 +169,7 @@ KUWO_PARSE_URL_SOURCES = [
         priority=0,
         description='cenguigui (musicdl 列表，level=lossless)',
         family='cenguigui',  # ★ cenguigui 家族：同源时优先 cgg_info/cgg_lyric
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://kw-api.cenguigui.cn/?id={rid}&type=song&level=lossless&format=json',
         extract_url=lambda d: (
@@ -189,6 +190,7 @@ KUWO_PARSE_URL_SOURCES = [
         platform='kuwo',
         priority=10,
         description='ccwu (musicdl 列表，jymaster 码率，passthrough 直返音频流)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='http://kw.006lp.ccwu.cc:7119/api/song?id={rid}&level=jymaster&stream=1',
         extract_url=extract_first_url,
@@ -226,6 +228,7 @@ KUWO_PARSE_URL_SOURCES = [
         platform='kuwo',
         priority=20,
         description='yyy001 (musicdl 列表，ckey 解密已实现)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://apione.apibyte.cn/kwmusic?key={ckey}&action=music_url&music_id={rid}&quality={quality}',
         extract_url=lambda d: (
@@ -251,13 +254,13 @@ KUWO_PARSE_URL_SOURCES = [
         timeout=8,  # onrender.com 冷启动慢，有其他源兜底不必等
         max_quality='lossless',
     ),
-    # 6. nxinxz (musicdl 列表) - 西柚
+    # 5. nxinxz (musicdl 列表) - 实测可用 ✅ 保留为第2兜底
     # max_quality='hires'：level 参数支持
     ApiSource(
         name='nxinxz_url',
         platform='kuwo',
         priority=30,
-        description='nxinxz (musicdl 列表，西柚)',
+        description='nxinxz (musicdl 列表，实测可用)',
         can_parse_url=True,
         parse_url_url='http://music.nxinxz.com/kw.php?id={rid}&level={quality}&type=json',
         extract_url=lambda d: (
@@ -276,6 +279,7 @@ KUWO_PARSE_URL_SOURCES = [
         priority=35,
         description='haitanw (musicdl 列表，kw.php level=lossless/exhigh/standard)',
         family='haitanw',  # ★ haitanw 家族：同源时优先 haitanw_lyric
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://musicapi.haitangw.net/music/kw.php?id={rid}&level={quality}&type=json',
         extract_url=lambda d: (
@@ -295,6 +299,7 @@ KUWO_PARSE_URL_SOURCES = [
         platform='kuwo',
         priority=40,
         description='guyuei (musicdl 列表，XOR 解密 final URL 已实现)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://www.guyuei.com/music/kw.php?url=https://www.kuwo.cn/play_detail/{rid}&yinzhi=hns',
         extract_url=_guyuei_extract_url,
@@ -381,6 +386,7 @@ KUWO_PARSE_URL_SOURCES = [
         priority=65,
         description='JBSou (jbsou.cn 跨平台 URL)',
         family='jbsou',
+        enabled=False,
         can_parse_url=True,
         method='POST',
         parse_url_url='https://www.jbsou.cn/',
@@ -541,15 +547,14 @@ def _extract_kuwo_lyric_from_lrclist(d: dict) -> str:
 
 
 KUWO_PARSE_LYRIC_SOURCES = [
-    # 0. 酷我官方 m.kuwo.cn 移动端歌词（实测可用，无需 cookie）
+    # 0. 酷我官方 m.kuwo.cn 移动端歌词（实测可用 ✅ 1st 优先级）
     # 参考 https://github.com/guohuiyuan/music-lib/blob/main/kuwo/lyric.go (legacy fallback)
     # 响应 data.lrclist[] = [{"time": "0.0", "lineLyric": "..."}]
     ApiSource(
         name='kuwo_official_lyric',
         platform='kuwo',
         priority=0,
-        description='酷我官方 m.kuwo.cn/newh5 lyric (legacy JSON)',
-        enabled=False,  # API 返回 null/301，改用 cgg_lyric
+        description='酷我官方 m.kuwo.cn/newh5 lyric (实测可用)',
         can_parse_lyric=True,
         parse_lyric_url=(
             'http://m.kuwo.cn/newh5/singles/songinfoandlrc'
@@ -615,14 +620,14 @@ KUWO_PARSE_LYRIC_SOURCES = [
         headers=KUWO_COMMON_HEADERS,
         timeout=15,
     ),
-    # 4. gdstudio lyric
+    # 4. gdstudio lyric (保留参考，保留前3已满)
     ApiSource(
         name='gdstudio_lyric',
         platform='kuwo',
         priority=40,
-        description='gdstudio lyric (跨平台源，kuwo)',
+        description='gdstudio lyric (跨平台源，保留参考)',
+        enabled=False,  # 保留前3已满: kuwo_official_lyric → cgg_lyric → jbsou_lyric
         family='gdstudio',
-        can_parse_lyric=True,
         parse_lyric_url='https://music-api.gdstudio.xyz/api.php?types=lyric&id={rid}&source=kuwo',
         extract_lyric=lambda d: d.get('lyric', '') if isinstance(d, dict) else '',
         headers=KUWO_COMMON_HEADERS,

@@ -107,6 +107,7 @@ KUGOU_PARSE_URL_SOURCES = [
         priority=0,
         description='haitanw kg.php（musicdl 列表，level=hires/lossless/exhigh）',
         family='haitanw',
+        enabled=True,
         can_parse_url=True,
         parse_url_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level={quality}',
         extract_url=lambda d: (
@@ -124,7 +125,7 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=5,
         description='haitanw kg.php 备用域名（music.haitangw.cc）',
-        enabled=False,  # 备用域名超时
+        enabled=True,
         family='haitanw',
         can_parse_url=True,
         parse_url_url='https://music.haitangw.cc/kgqq/kg.php?type=json&id={hash}&level={quality}',
@@ -143,7 +144,7 @@ KUGOU_PARSE_URL_SOURCES = [
         platform='kugou',
         priority=10,
         description='cocodownloader (musicdl 验证可用)',
-        enabled=False,  # HTTP 500
+        enabled=True,
         can_parse_url=True,
         parse_url_url='https://cocodownloader.markqq.com/api/url?id={hash}&provider=kugou',
         extract_url=extract_first_url,
@@ -268,14 +269,13 @@ KUGOU_PARSE_INFO_SOURCES = [
         headers=KUGOU_COMMON_HEADERS,
         timeout=15,
     ),
-    # 3. haitanw info (元信息，但 musicdl 备注 url 也在 data)
+    # 3. haitanw info (元信息，实测超时不可用)
     ApiSource(
         name='haitanw_info',
         platform='kugou',
         priority=20,
-        description='haitanw info (元信息)',
-        family='haitanw',
-        can_parse_info=True,
+        description='haitanw info (元信息，实测超时)',
+        enabled=False,  # 实测超时不可用
         parse_info_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level=lossless',
         extract_info=lambda d: (
             {'id': str(d.get('data', {}).get('rid', '')) if isinstance(d, dict) else '',
@@ -443,14 +443,14 @@ KUGOU_PARSE_LYRIC_SOURCES = [
         headers=KUGOU_COMMON_HEADERS,
         timeout=10,
     ),
-    # 2. haitanw lyric (data.lyric 字段)
+    # 2. haitanw lyric (data.lyric 字段，实测返回空)
     ApiSource(
         name='haitanw_lyric',
         platform='kugou',
         priority=10,
-        description='haitanw lyric (musicdl 列表，data.lyric 字段)',
+        description='haitanw lyric (musicdl 列表，实测歌词为空)',
+        enabled=False,  # 实测歌词为空
         family='haitanw',
-        can_parse_lyric=True,
         parse_lyric_url='https://musicapi.haitangw.net/kgqq/kg.php?type=json&id={hash}&level=lossless',
         extract_lyric=lambda d: (
             (d.get('data', {}) if isinstance(d, dict) else {}).get('lyric', '')

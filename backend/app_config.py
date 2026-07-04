@@ -41,28 +41,28 @@ PLATFORMS: List[Dict[str, str]] = [
 QUALITY_LEVELS: Dict[str, Dict[str, Any]] = {
     'standard': {
         'value': 'standard',
-        'label': '标准音质',
+        'label': '标准',
         'description': '128kbps',
         'priority': 9,
         'format': 'MP3',
     },
     'exhigh': {
         'value': 'exhigh',
-        'label': '极高音质',
+        'label': '极高',
         'description': '320kbps',
         'priority': 8,
         'format': 'MP3/AAC',
     },
     'lossless': {
         'value': 'lossless',
-        'label': '无损音质',
+        'label': '无损',
         'description': 'FLAC',
         'priority': 7,
         'format': 'FLAC',
     },
     'hires': {
         'value': 'hires',
-        'label': 'Hi-Res音质',
+        'label': 'Hi-Res',
         'description': 'FLAC 24bit',
         'priority': 6,
         'format': 'FLAC 24bit',

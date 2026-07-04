@@ -246,7 +246,8 @@ def proxy_image():
         # 仅放行图片
         if not content_type.startswith('image/') or r.status_code != 200:
             return Response(_FALLBACK_PNG, mimetype='image/png', status=200)
-        return Response(r.content, mimetype=content_type, status=200)
+        headers = {'Cache-Control': 'public, max-age=86400'}  # 浏览器缓存 1 天，减少 abort
+        return Response(r.content, mimetype=content_type, headers=headers, status=200)
     except Exception as e:
         logger.debug(f'proxy_image: {url} failed: {e}')
         return Response(_FALLBACK_PNG, mimetype='image/png', status=200)

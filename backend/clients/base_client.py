@@ -18,10 +18,56 @@ from .quality_config import get_default_quality, is_valid_quality
 class BaseMusicClient(ABC):
     """音乐客户端抽象基类"""
 
-    def __init__(self):
+    def __init__(self, cookie_file: str = ''):
         self.session = requests.Session()
         self.platform_name = "base"
         self.platform_id = "base"
+        self.cookie_file = cookie_file
+        self.cookies = self._load_cookie()
+
+    def _load_cookie(self) -> dict:
+        """从 cookie 文件加载，结果缓存在 self.cookies 中（仅初始化时读一次文件）"""
+        if not self.cookie_file:
+            return {}
+        from pathlib import Path
+        candidates = [
+            Path(self.cookie_file),
+            Path('clients/cookie') / Path(self.cookie_file).name,
+            Path('backend/clients/cookie') / Path(self.cookie_file).name,
+            Path('/app/cookie') / Path(self.cookie_file).name,
+            Path('/app/clients/cookie') / Path(self.cookie_file).name,
+        ]
+        for p in candidates:
+            if p.exists():
+                try:
+                    content = p.read_text(encoding='utf-8', errors='ignore').strip()
+                    if not content:
+                        continue
+                    cookies = {}
+                    if '\t' in content:
+                        for line in content.splitlines():
+                            if not line.strip() or line.startswith('#'):
+                                continue
+                            parts = line.split('\t')
+                            if len(parts) >= 7:
+                                cookies[parts[5]] = parts[6]
+                    else:
+                        for pair in content.split(';'):
+                            pair = pair.strip()
+                            if '=' in pair:
+                                k, v = pair.split('=', 1)
+                                cookies[k.strip()] = v.strip()
+                    if cookies:
+                        import logging
+                        logging.getLogger(__name__).info(
+                            f'[{self.platform_id}] 加载 cookie {p}（{len(cookies)} 个字段）'
+                        )
+                        return cookies
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).debug(f'加载 cookie 失败 {p}: {e}')
+                break
+        return {}
 
     @abstractmethod
     def search(self, keyword: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:

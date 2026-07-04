@@ -260,6 +260,7 @@ QQ_PARSE_URL_SOURCES = [
         priority=20,
         description='xunhuisi (musicdl 列表, 只能 M4A 256k)',
         family='xunhuisi',  # ★ xunhuisi 家族
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://api.xunhuisi.store/API/QQMusic/Song.php?mid={song_id}&type=json',
         extract_url=lambda d: (
@@ -270,18 +271,14 @@ QQ_PARSE_URL_SOURCES = [
         max_quality='exhigh',
     ),
     # 2. vkeys - v1.1.3 实测能拿 FLAC！quality=13 是关键 (SR_MASTER)
-    # v1.1.3 实测: [vkeys quality=13] 成功返 http://ws.stream.qqmusic.qq.com/Q000003Yzd2v2ADSOO.flac 25.3MB
-    # quality 数值参考 musicdl ThirdPartVKeysAPISongFileType:
-    #   10 = SQ_LOSSLESS, 11 = HI_RES, 12 = DOLBY, 13 = SPATIAL_AUDIO, 14 = MASTER
-    # 13 是 vkeys 实际能返 FLAC 的关键值
-    # priority=5: 最高优先级，FLAC 优先
-    # max_quality='lossless'：vkeys 总能返 FLAC (25MB+，Q000 prefix)
+    # v1.1.3 实测: [vkeys quality=13] 成功返 FLAC
+    # 实测 ✅ 可用，保留为第2兜底
     ApiSource(
         name='vkeys_url',
         platform='qq',
         priority=5,
-        description='vkeys (v1.1.3 真实可用, quality=13 拿 FLAC)',
-        family='vkeys',  # ★ vkeys 家族：同源时优先 vkeys_lyric
+        description='vkeys (实测可用，quality=13 拿 FLAC)',
+        family='vkeys',
         can_parse_url=True,
         parse_url_url='https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality=13',
         extract_url=lambda d: (
@@ -357,14 +354,13 @@ QQ_PARSE_URL_SOURCES = [
         timeout=20,
         max_quality='lossless',
     ),
-    # 7. tang (s01s) - musicdl 列表（已死，保留作参考）
-    # max_quality='lossless'：song_play_url_sq 是 FLAC
+    # 7. tang (s01s) - musicdl 列表（P=60 低优先级，可用但不保留）
     ApiSource(
         name='tang_url',
         platform='qq',
         priority=60,
-        description='tang.s01s (musicdl 列表，已死)',
-        enabled=False,  # 站点不存在
+        description='tang.s01s (musicdl 列表，实测返 FLAC，保留前3已满)',
+        enabled=False,  # 保留前3: qq_official_vkey → vkeys_url → lxmusic_url
         can_parse_url=True,
         parse_url_url='https://tang.api.s01s.cn/music_open_api.php?mid={song_id}',
         extract_url=lambda d: (
@@ -400,6 +396,7 @@ QQ_PARSE_URL_SOURCES = [
         platform='qq',
         priority=80,
         description='lpz (musicdl 列表, br=1 实际只返 320k)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://lpz.chatc.vip/apiqq.php?songmid={song_id}&type=json&br=1',
         extract_url=extract_first_url,

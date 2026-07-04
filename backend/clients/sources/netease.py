@@ -63,7 +63,8 @@ NETEASE_SEARCH_SOURCES = [
         name='gdstudio_search',
         platform='netease',
         priority=10,
-        description='gdstudio (musicdl 验证)',
+        description='gdstudio (musicdl 验证，实测返回空列表)',
+        enabled=False,
         family='gdstudio',
         can_search=True,
         search_url='https://music-api.gdstudio.xyz/api.php?types=search&source=netease&name={keyword_encoded}&count={limit}',
@@ -117,13 +118,13 @@ NETEASE_PARSE_URL_SOURCES = [
         cookie_file='netease_cookie.txt',
         max_quality='hires',
     ),
-    # 2. cenguigui (cgg) - musicdl 验证可用
-    # max_quality='hires'：实测能拿 HiRes
+    # 2. cenguigui (跑路了)
     ApiSource(
         name='cenguigui',
         platform='netease',
         priority=10,
-        description='cenguigui (musicdl 验证可用)',
+        description='cenguigui (musicdl 验证可用，2025已跑路)',
+        enabled=False,  # 返回"跑路了"告别页面
         family='cenguigui',
         can_parse_url=True,
         parse_url_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level={quality}',
@@ -132,7 +133,7 @@ NETEASE_PARSE_URL_SOURCES = [
         timeout=10,
         max_quality='hires',
     ),
-    # 3. haitanw (海糖网) - musicdl 列表
+    # 3. haitanw (海糖网) - 不返回 url
     ApiSource(
         name='haitanw_url',
         platform='netease',
@@ -145,13 +146,13 @@ NETEASE_PARSE_URL_SOURCES = [
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
     ),
-    # 4. xuanluoge parse
-    # max_quality='lossless'：实测 lossless 可用
+    # 3. xuanluoge parse - 已验证可用，保留作为兜底
     ApiSource(
         name='xuanluoge_url',
         platform='netease',
         priority=20,
-        description='xuanluoge parse（实测可用，search 已死）',
+        description='xuanluoge parse（实测 ✅ lossless 可用）',
+        family='xuanluoge',
         can_parse_url=True,
         parse_url_url='http://118.24.104.108:3456/api.php?miss=getMusicUrl&id={song_id}&level={quality}',
         extract_url=extract_xuanluoge_url,
@@ -174,56 +175,52 @@ NETEASE_PARSE_URL_SOURCES = [
         timeout=10,
         max_quality='lossless',
     ),
-    # 6. gdstudio
-    # max_quality='lossless'：br 最高 lossless
+    # 6. gdstudio - 需要 __br__ 转换，实测不可用
     ApiSource(
         name='gdstudio_url',
         platform='netease',
         priority=40,
-        description='gdstudio (musicdl 验证)',
-        family='gdstudio',
-        can_parse_url=True,
+        description='gdstudio (需要 __br__ 转换，实测不可用)',
+        enabled=False,  # 需要 __br__ 转换
         parse_url_url='https://music-api.gdstudio.xyz/api.php?types=url&id={song_id}&source=netease&br={__br__}',
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
         max_quality='lossless',
     ),
-    # 7. cunyu
-    # max_quality='lossless'：quality={quality} 支持
+    # 5. cunyu - SSL 证书无效
     ApiSource(
         name='cunyu',
         platform='netease',
         priority=50,
-        description='cunyu (musicdl 验证)',
-        can_parse_url=True,
+        description='cunyu (musicdl 验证，SSL cert 无效)',
+        enabled=False,  # SSL 证书验证失败
         parse_url_url='https://www.cunyuapi.top/163music_play?id={song_id}&quality={quality}',
         extract_url=lambda d: d.get('song_file_url', '') if isinstance(d, dict) else '',
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
         max_quality='lossless',
     ),
-    # 8. rxtool
-    # max_quality='hires'：level=hires 写死
+    # 6. rxtool - SSL 证书无效
     ApiSource(
         name='rxtool',
         platform='netease',
         priority=60,
-        description='rxtool (musicdl 验证)',
-        can_parse_url=True,
+        description='rxtool (musicdl 验证，SSL cert 无效)',
+        enabled=False,  # SSL 证书验证失败
         parse_url_url='https://api.rxtool.top/api/meteasecloudmusic.php?id={song_id}&level=hires',
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
         max_quality='hires',
     ),
-    # 9. cocodownloader
+    # 7. cocodownloader - SSL 证书无效
     ApiSource(
         name='cocodownloader',
         platform='netease',
         priority=70,
         description='cocodownloader (musicdl 验证)',
-        can_parse_url=True,
+        enabled=False,  # SSL 证书验证失败
         parse_url_url='https://cocodownloader.markqq.com/api/url?id={song_id}&provider=netease&quality=jymaster',
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
@@ -235,6 +232,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=80,
         description='vincentzyu233 (musicdl 验证)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='http://xwl.vincentzyu233.cn:51217/v2/music/netease?id={song_id}&quality=9',
         extract_url=lambda d: d.get('data', {}).get('url', '') if isinstance(d, dict) else '',
@@ -276,20 +274,20 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=110,
         description='yutangxiaowu (musicdl 列表)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://yutangxiaowu.cn:4000/Song_V1?url={song_id}&level={quality}&type=json',
         extract_url=extract_first_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
     ),
-    # 14. qjqq (POST) - musicdl 验证
+    # 8. qjqq (POST) - 虽然可用但只保留 3 个 URL 源
     ApiSource(
         name='qjqq',
         platform='netease',
         priority=120,
-        description='qjqq (musicdl 列表)',
-        can_parse_url=True,
-        method='POST',
+        description='qjqq (musicdl 列表，实测可用但保留3个源已满)',
+        enabled=False,  # 回退保留，非主要源
         parse_url_url='https://metings.qjqq.cn/Song_V1',
         post_data={'url': '{song_id}', 'level': '{quality}', 'type': 'json'},
         extract_url=extract_first_url,
@@ -326,14 +324,13 @@ NETEASE_PARSE_URL_SOURCES = [
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
     ),
-    # 17. jfjt (POST) - musicdl 列表
+    # 9. jfjt (POST) - HTTP 200 但无 url 字段
     ApiSource(
         name='jfjt',
         platform='netease',
         priority=128,
-        description='jfjt (musicdl 列表)',
-        can_parse_url=True,
-        method='POST',
+        description='jfjt (musicdl 列表，HTTP 200 但无 url)',
+        enabled=False,  # 无 url 字段
         parse_url_url='https://dm.jfjt.cc/Song_V1',
         post_data={'url': '{song_id}', 'level': '{quality}', 'type': 'json'},
         extract_url=extract_first_url,
@@ -346,19 +343,20 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=130,
         description='bugpk (musicdl 列表，返回 redirect 链接)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://api.bugpk.com/api/163_music?ids={song_id}&level={quality}&type=json',
         extract_url=extract_text_url,
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
     ),
-    # 19. byfuns - musicdl 列表
+    # 10. byfuns - SSL 证书无效
     ApiSource(
         name='byfuns',
         platform='netease',
         priority=140,
-        description='byfuns (musicdl 列表，纯文本 URL)',
-        can_parse_url=True,
+        description='byfuns (musicdl 列表，SSL cert 无效)',
+        enabled=False,  # SSL 证书验证失败
         parse_url_url='https://api.byfuns.top/1/?id={song_id}&level=hires',
         extract_url=extract_text_url,
         headers=NETEASE_COMMON_HEADERS,
@@ -416,13 +414,13 @@ NETEASE_PARSE_URL_SOURCES = [
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
     ),
-    # 24. guyuei - musicdl 列表
+    # 11. guyuei - SSL 证书无效
     ApiSource(
         name='guyuei',
         platform='netease',
         priority=170,
-        description='guyuei (musicdl 列表)',
-        can_parse_url=True,
+        description='guyuei (musicdl 列表，SSL cert 无效)',
+        enabled=False,  # SSL 证书验证失败
         parse_url_url='https://www.guyuei.com/music/163.php?url=https://music.163.com/song?id={song_id}&yinzhi=hns',
         extract_url=extract_text_url,
         headers=NETEASE_COMMON_HEADERS,
@@ -434,6 +432,7 @@ NETEASE_PARSE_URL_SOURCES = [
         platform='netease',
         priority=175,
         description='xiaot (musicdl 列表)',
+        enabled=False,
         can_parse_url=True,
         parse_url_url='https://api.s0o1.com/API/wyy_music/?id={song_id}&yz=7',
         extract_url=extract_first_url,
@@ -574,14 +573,14 @@ NETEASE_PARSE_INFO_SOURCES = [
         headers=NETEASE_COMMON_HEADERS,
         timeout=10,
     ),
-    # 5. cenguigui info（包含在 cggapi 响应中）
+    # 5. cenguigui info（已跑路）
     ApiSource(
         name='cenguigui_info',
         platform='netease',
         priority=40,
-        description='cenguigui 解析响应（包含完整元信息）',
+        description='cenguigui 解析响应（已跑路，返回告别页面）',
+        enabled=False,  # 已跑路
         family='cenguigui',
-        can_parse_info=True,
         parse_info_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level=lossless',
         extract_info=lambda d: {
             'id': str(d.get('data', {}).get('id', '')) if isinstance(d, dict) else '',
@@ -625,14 +624,14 @@ NETEASE_PARSE_LYRIC_SOURCES = [
         headers=NETEASE_COMMON_HEADERS,
         timeout=15,
     ),
-    # 3. cenguigui lyric（在 data.lyric 字段）
+    # 3. cenguigui lyric（已跑路）
     ApiSource(
         name='cenguigui_lyric',
         platform='netease',
         priority=20,
-        description='cenguigui 解析响应（data.lyric 字段）',
+        description='cenguigui 解析响应（已跑路，返回告别页面）',
+        enabled=False,  # 已跑路
         family='cenguigui',
-        can_parse_lyric=True,
         parse_lyric_url='https://api-v2.cenguigui.cn/api/netease/music_v1.php?id={song_id}&type=json&level=lossless',
         extract_lyric=lambda d: d.get('data', {}).get('lyric', '') if isinstance(d, dict) else '',
         headers=NETEASE_COMMON_HEADERS,

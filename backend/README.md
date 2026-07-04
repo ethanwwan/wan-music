@@ -66,9 +66,9 @@ MIT
 
 | 值 | 说明 |
 |----|------|
-| `standard` | 标准音质 (128kbps) |
+| `standard` | 标准 (128kbps) |
 | `exhigh` | 极高音质 (320kbps) |
-| `lossless` | 无损音质 (FLAC) |
+| `lossless` | 无损 (FLAC) |
 | `hires` | Hi-Res 音质 (FLAC 24bit) |
 | `sky` | 沉浸环绕声 |
 | `jyeffect` | 高清臻音 |
@@ -237,19 +237,17 @@ curl http://localhost:5002/platforms
 - `size` 单位字节，`br` 单位 kbps
 - 前端展示 "用户选了 hires，实际给了 lossless" 时直接对比这两个字段
 
-#### 4.3 mismatch_warning（跨源版本错配提示）
+#### 4.3 url/lyric 同源策略
 
-当 lyric（歌词末时间戳）和 audio（duration）时长差异 > 5s 时，后端会在响应中加 `mismatch_warning` 字段提示该歌曲**音频和歌词版本可能不一致**（常见于 Live 版 vs 录音室版）。
+为避免"音频来自 A 源、歌词来自 B 源"导致的**版本错配**（Live vs Studio 混搭），/song 接口采用**同源优先**策略：
 
-```json
-{
-  "mismatch_warning": "lyric_version_mismatch: 差 12.7s (info=263.2s, lyric_max=250.6s)"
-}
-```
+1. **先抢答 url**：并行/串行调用 url 链，拿到第一个返回有效 URL 的源（如 `haitanw_url`）
+2. **lyric 复用 url 选中的源**：lyric 链拿到 `url_src = haitanw_url` 后，**强制优先**从 haitanw 拉歌词
+3. **降级到下一个能提供 lyric 的源**：如果 haitanw 不提供 lyric（如直传模式 ccwu），
+   降级到下一个能 provide `lyric` 能力的源
 
-- 仅作提示，不阻断播放
-- 前端可选择性展示（"歌词可能与音频不匹配"）或静默忽略
-- 后端不会自动换源（避免无限重试）
+实现细节见 [chain.py:329-374](file:///Users/Awan/Public/Repository/wan-music/backend/clients/fallback/chain.py#L329-L374) 的 `same_source` 机制。
+每个 ApiSource 通过 `provides` 字段（自动从 `can_*` 字段推导）声明自己提供哪些能力。
 
 ### 5. 获取歌单详情
 

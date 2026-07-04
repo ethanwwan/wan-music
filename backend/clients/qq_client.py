@@ -26,7 +26,7 @@ class QQClient(BaseMusicClient):
     """QQ 音乐客户端 - 数据驱动版"""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(cookie_file='qq_cookie.txt')
         self.platform_id = 'qq'
         self.platform_name = 'QQ音乐'
         self.search_chain = FallbackChain(QQ_SEARCH_SOURCES, platform='qq', strategy='serial')
@@ -85,7 +85,7 @@ class QQClient(BaseMusicClient):
         use_info_fallback = not _cached_info
         max_workers = 2 if use_info_fallback else 1
         pool = ThreadPoolExecutor(max_workers=max_workers)
-        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
+        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', cookies=self.cookies, **url_kwargs)
         f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
                               song_id=song_id_str, preferred_source=preferred_source)
                   if use_info_fallback else None)
@@ -120,7 +120,8 @@ class QQClient(BaseMusicClient):
         if with_lyric:
             lyric_kwargs = dict(song_id=song_id_str,
                                 preferred_source=preferred_source,
-                                same_source=url_src or '')
+                                same_source=url_src or '',
+                                cookies=self.cookies)
             try:
                 lyric, lyric_src = self.parse_lyric_chain.try_fetch('parse_lyric', **lyric_kwargs)
             except Exception as e:
