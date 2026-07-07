@@ -252,26 +252,55 @@ QQ_SEARCH_SOURCES = [
 # ==================== 下载 URL 源 ====================
 # 前2（保留）：qq_official_vkey(需cookie) → vkeys_url
 
+def _has_file_path(url: str) -> bool:
+    """检查 URL 是否包含实际的文件路径（非仅有域名/）"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        path = parsed.path or ''
+        # 有效的 CDN URL 必有具体文件名（如 /F000xxx.flac），不只是 "/"
+        return bool(path) and path != '/'
+    except Exception:
+        return False
+
+
 def _vkeys_multi_extract(d: dict, song_id: str = None, **kwargs) -> str:
     """vkeys API 多质量降级提取器
 
     兼容 v1.1.3 逻辑：先试 quality=13（FLAC），不行就 11→10→8。
+    用 _has_file_path 判断 URL 是否有效（而非靠 len>50 猜）。
     """
     import requests as _requests
     if not isinstance(d, dict):
         return ''
+
+    # HEAD 验证 + 质量降级用的公共 headers
+    _verify_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'}
+
+    def _head_ok(url: str) -> bool:
+        """HEAD 验证 URL 是否真的可达（CDN 200/206 才算）
+        超时 2s：仅做快速过滤，后续 chain 还会 _verify_url_reachable 兜底
+        """
+        try:
+            hr = _requests.head(url, headers=_verify_headers, timeout=2, allow_redirects=True)
+            return hr.status_code in (200, 206)
+        except Exception:
+            return False
+
     url = d.get('data', {}).get('url', '') if isinstance(d.get('data'), dict) else ''
-    if url and url.startswith('http') and len(url) > 50:
+    if url and url.startswith('http') and _has_file_path(url) and _head_ok(url):
         return url
     # 质量降级（v1.1.3 同款 requests.get，支持 SSL）
-    headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'}
-    for q in [11, 10, 8]:
+    # 顺序: 10(F000 FLAC) → 11(RS01) → 9(OGG) → 8(MP3)
+    # F000 前缀是真正 FLAC，优先于 RS01
+    # 每个 quality 的 URL 都会做 HEAD 验证，不可达则继续降级
+    for q in [10, 11, 9, 8]:
         try:
             api_url = f'https://api.vkeys.cn/music/tencent/song/link?mid={song_id}&quality={q}'
-            resp = _requests.get(api_url, headers=headers, timeout=8)
+            resp = _requests.get(api_url, headers=_verify_headers, timeout=8)
             data = resp.json()
             u = data.get('data', {}).get('url', '') if isinstance(data.get('data'), dict) else ''
-            if u and u.startswith('http') and len(u) > 50:
+            if u and u.startswith('http') and _has_file_path(u) and _head_ok(u):
                 return u
         except Exception:
             continue

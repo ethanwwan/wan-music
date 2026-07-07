@@ -366,16 +366,17 @@ const clearCompleted = async () => {
 // 因为用户打开 drawer 时，后端可能仍没就绪（init 时不做 → 用户可能
 // 立即点开 drawer，那时后端只启动了 1-2s）。
 
-const openDrawer = async () => {
+const openDrawer = () => {
   drawerOpen.value = true
-  // 打开抽屉时按需同步任务列表
-  await syncWithBackend()
+  // 同步放后台，不阻塞抽屉立即展示
+  // 下载后的任务已由 addTask() 加入本地 tasks，用户立即可见
+  syncWithBackend()
 }
 const closeDrawer = () => { drawerOpen.value = false }
-const toggleDrawer = async () => {
+const toggleDrawer = () => {
   drawerOpen.value = !drawerOpen.value
   if (drawerOpen.value) {
-    await syncWithBackend()
+    syncWithBackend()
   }
 }
 

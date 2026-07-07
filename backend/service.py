@@ -297,10 +297,10 @@ class BatchDownloadService:
     """
 
     # 任务完成后自动清理的秒数
-    TASK_TTL = 600
+    TASK_TTL = 1800
 
     # 并发下载线程数
-    MAX_WORKERS = 6
+    MAX_WORKERS = 10
 
     # 音频扩展名 → MIME 类型
     EXT_MIME_TYPES = {
