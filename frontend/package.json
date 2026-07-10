@@ -7,13 +7,13 @@
     "dev": "vite --mode dev",
     "dev:lan": "vite --mode dev --host 0.0.0.0 --port 5173",
     "dev:full": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:api\" \"sleep 3 && npm run dev\"",
-    "dev:api": "cd .. && python3 backend/main.py",
+    "dev:api": "cd .. && backend/.venv/bin/python3 backend/main.py",
     "build": "vite build --mode prod",
     "build:dev": "vite build --mode dev",
     "preview": "vite preview --mode prod",
     "preview:dev": "vite preview --mode dev",
     "preview:full": "concurrently \"npm run preview\" \"npm run preview:api\"",
-    "preview:api": "cd .. && python3 backend/main.py"
+    "preview:api": "cd .. && backend/.venv/bin/python3 backend/main.py"
   },
   "dependencies": {
     "ant-design-vue": "^4.2.6",

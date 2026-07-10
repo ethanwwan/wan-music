@@ -9,6 +9,26 @@
     class="settings-drawer"
   >
     <div class="settings-content">
+      <!-- 线路选择 -->
+      <div class="setting-section">
+        <div class="section-title">线路选择</div>
+        <a-form :model="settings" layout="horizontal" class="settings-form">
+          <a-form-item label="接口线路">
+            <a-select
+              v-model:value="settings.musicLine"
+              @change="handleSave"
+              :style="{ width: '200px' }"
+            >
+              <a-select-option :value="0">线路一（项目源）</a-select-option>
+              <a-select-option :value="1">线路二（musicdl）</a-select-option>
+            </a-select>
+            <div class="form-item-hint">
+              <a-tag color="blue" bordered>线路一使用自有解析源，线路二使用 musicdl 底层库</a-tag>
+            </div>
+          </a-form-item>
+        </a-form>
+      </div>
+
       <!-- 音质设置 -->
       <div class="setting-section">
         <div class="section-title">音质设置</div>

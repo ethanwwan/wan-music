@@ -10,6 +10,7 @@ export const defaultSettings = {
   enableCache: true,                 // 搜索/歌单详情页缓存开关
   cacheTTLMinutes: 24 * 60,
   selectedQuality: 'lossless',       // 默认音质
+  musicLine: 0,                      // 线路：0=项目源, 1=musicdl
 }
 
 export const settings = reactive({ ...defaultSettings })

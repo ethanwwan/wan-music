@@ -115,17 +115,17 @@ const get = async (url) => {
   }
 }
 
-const postJson = async (url, data) => {
+const postJson = async (url, data, timeoutMs = DEFAULT_TIMEOUT_MS) => {
   try {
     const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
-    })
+    }, timeoutMs)
     return safeJson(response)
   } catch (e) {
     if (e.name === 'AbortError') {
-      return { success: false, error: '请求超时（15s），后端可能较慢', message: 'timeout' }
+      return { success: false, error: `请求超时（${timeoutMs / 1000}s），后端可能较慢`, message: 'timeout' }
     }
     // 捕获网络错误（ERR_EMPTY_RESPONSE / ECONNREFUSED / ECONNRESET 等）
     const hint = e.message?.includes('Failed to fetch')
@@ -196,7 +196,8 @@ export const parseMusicInfo = async (track, quality = 'lossless') => {
     id: String(musicId),
     level: quality,
     source: platform,
-    qualityMap: qualityMap || undefined
+    qualityMap: qualityMap || undefined,
+    line: settings.musicLine ?? 0
   })
   if (!result?.success) throw new Error(result?.error || result?.message || '获取歌曲信息失败')
   if (!result.data) throw new Error('未找到歌曲详情')
@@ -257,6 +258,57 @@ const mapSearchSong = (song) => ({
 })
 
 /**
+ * SSE 流式搜索（线路二 musicdl 专用）
+ * 通过 EventSource 逐条接收搜索结果，收集完成后 resolve
+ */
+const streamSearch = (keyword, source, timeout = 20) => {
+  return new Promise((resolve, reject) => {
+    const url = `/search/sse?keyword=${encodeURIComponent(keyword)}&source=${encodeURIComponent(source)}&timeout=${timeout}`
+    const es = new EventSource(url)
+    const items = []
+
+    es.addEventListener('result', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.song) {
+          items.push(mapSearchSong(data.song))
+        }
+      } catch { /* skip malformed */ }
+    })
+
+    es.addEventListener('done', (e) => {
+      es.close()
+      resolve({
+        success: true,
+        data: items,
+        type: 'song',
+        detail: null,
+        error: '',
+        fromCache: false,
+      })
+    })
+
+    es.addEventListener('error', (e) => {
+      es.close()
+      reject(new Error('流式搜索连接失败'))
+    })
+
+    // 安全兜底：timeout + 5s 后如果还没 done 就强制结束
+    setTimeout(() => {
+      es.close()
+      resolve({
+        success: true,
+        data: items,
+        type: 'song',
+        detail: null,
+        error: '',
+        fromCache: false,
+      })
+    }, (timeout + 5) * 1000)
+  })
+}
+
+/**
  * 统一搜索（仅搜歌曲）
  * @param {string} keyword 关键词或 URL
  * @param {Array<string>} sources 数据源列表（仅第一个生效）
@@ -267,7 +319,17 @@ export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()])
     const cached = getCachedSearch(keyword, source)
     if (cached) return { success: true, data: cached, fromCache: true }
 
-    const result = await postJson('/search', { keyword, source, limit: 50 })
+    // line=1 走 SSE 流式搜索（musicdl），20s 超时
+    const line = settings.musicLine ?? 0
+    if (line === 1) {
+      const result = await streamSearch(keyword, source)
+      if (result?.data?.length) {
+        setCachedSearch(keyword, source, result.data)
+      }
+      return result
+    }
+
+    const result = await postJson('/search', { keyword, source, limit: 50, line }, 120000)
     if (!result?.success) {
       return { success: false, error: result?.error || result?.message || '搜索失败' }
     }
@@ -293,7 +355,7 @@ export const startBatchTask = async (items, name = 'songs', opts = {}) => {
   const resp = await fetch('/download/batch/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, name, settings: opts })
+    body: JSON.stringify({ items, name, settings: opts, line: settings.musicLine ?? 0 })
   })
   if (!resp.ok) {
     let msg = '启动批量下载失败'

@@ -73,3 +73,6 @@ test-results/
 
 
 musicdl-master/
+
+backend/logs/
+backend/.venv/

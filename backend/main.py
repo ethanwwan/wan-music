@@ -6,6 +6,7 @@
 （与 gunicorn.conf.py 共享 utils.config.resolve_port）
 """
 import logging
+import os
 import sys
 import time
 
@@ -20,7 +21,9 @@ from utils.logging_config import setup_logging, LOG_FILE
 setup_logging()
 
 logger = logging.getLogger(__name__)
-logger.info(f'日志文件: {LOG_FILE}')
+
+# 注意：启动日志（日志文件路径、服务地址）在 if __name__ == '__main__' 内打印，
+# 同时用 WERKZEUG_RUN_MAIN 避免 debug reloader 双进程重复打印
 
 app = Flask(
     __name__,
@@ -206,7 +209,12 @@ def _resolve_default_port() -> int:
 if __name__ == '__main__':
     try:
         port = _resolve_default_port()
-        logger.info(f"启动服务: http://0.0.0.0:{port}")
+
+        # werkzeug reloader 会启动双进程：父进程监控文件变化，子进程提供服务。
+        # WERKZEUG_RUN_MAIN 仅在子进程中有值，用此判断避免重复打印。
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            logger.info(f'日志文件: {LOG_FILE}')
+            logger.info(f"启动服务: http://0.0.0.0:{port}")
 
         # 用 werkzeug.serving.run_simple 替代 app.run：
         # 1. 立即监听端口（不等待 reloader fork 完成，reloader fork 期间也能接受请求）

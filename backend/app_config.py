@@ -249,4 +249,8 @@ def get_full_config() -> Dict[str, Any]:
         'qualities': get_quality_options(),
         'filename_formats': get_filename_format_options(),
         'platform_quality_support': PLATFORM_QUALITY_SUPPORT,
+        'lines': [
+            {'id': 0, 'name': '项目源', 'description': '自有音乐数据源'},
+            {'id': 1, 'name': 'musicdl', 'description': 'musicdl 底层源'},
+        ],
     }

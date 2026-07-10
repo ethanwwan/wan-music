@@ -1,5 +1,5 @@
 """所有 HTTP 路由（仅做请求/响应包装，业务逻辑在 service.py）"""
-from flask import Blueprint, request, jsonify, send_file, Response
+from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context
 from typing import Optional
 import json
 import logging
@@ -90,13 +90,14 @@ def search():
         keyword = data.get('keyword', '').strip()
         platform = data.get('source')
         limit = data.get('limit', 50)
+        line = data.get('line', 0)
 
-        logger.info(f"/search 请求: keyword={keyword!r}, source={platform}, limit={limit}")
+        logger.info(f"/search 请求: keyword={keyword!r}, source={platform}, limit={limit}, line={line}")
 
         if not keyword:
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
-        result = music_service.search(keyword, platform, limit)
+        result = music_service.search(keyword, platform, limit, line=line)
         results_count = len(result.get('data', []))
         logger.info(
             f"/search 结果: 数量={results_count}, "
@@ -115,6 +116,74 @@ def search():
         return jsonify(APIResponse.error(f"搜索失败: {str(e)}", 500))
 
 
+@music_bp.route('/search/debug', methods=['GET'])
+def search_debug():
+    """调试端点：直接调用 search_via_http 返回 JSON，排除 SSE 干扰"""
+    import urllib.parse
+    keyword = request.args.get('keyword', '').strip()
+    source = request.args.get('source', 'netease')
+
+    from musicdl_adapter.streaming import search_via_http
+
+    result = {
+        'raw_keyword': repr(keyword),
+        'keyword_bytes': list(keyword.encode('utf-8')),
+        'source': source,
+        'search_count': 0,
+        'songs': [],
+    }
+
+    if not keyword:
+        return jsonify(result)
+
+    songs = search_via_http(keyword, source)
+    result['search_count'] = len(songs)
+    result['songs'] = songs
+    return jsonify(result)
+
+
+@music_bp.route('/search/sse', methods=['GET'])
+def search_sse():
+    """SSE 流式搜索（仅 line=1 musicdl）
+
+    参数:
+      - keyword: 搜索关键词
+      - source: 数据源（netease/qq/kugou/kuwo）
+      - timeout: 超时秒数（默认 20）
+
+    返回 SSE 事件流:
+      event: result  / data: {"song": {...}}
+      event: done    / data: {"count": N}
+      event: error   / data: {"message": "..."}
+    """
+    keyword = request.args.get('keyword', '').strip()
+    source = request.args.get('source', 'netease')
+    timeout = int(request.args.get('timeout', 20))
+
+    if not keyword:
+        return jsonify(APIResponse.error("请输入搜索关键词", 400))
+
+    logger.info(f"/search/sse 请求: keyword={keyword!r}, source={source}, timeout={timeout}")
+
+    from musicdl_adapter.streaming import search_stream
+
+    @stream_with_context
+    def generate():
+        yield 'retry: 10000\n\n'
+        for event in search_stream(keyword, source, timeout=timeout):
+            yield f'event: {event["type"]}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n'
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        }
+    )
+
+
 @music_bp.route('/song', methods=['POST'])
 def get_song_info():
     """获取歌曲完整信息：基本信息 + 播放/下载地址 + 歌词
@@ -129,6 +198,7 @@ def get_song_info():
     payload = request.get_json(silent=True) or request.form.to_dict()
     music_id, source, url = _resolve_song_ref(payload)
     level = (payload.get('level') or 'lossless').strip() or 'lossless'
+    line = payload.get('line', 0)
 
     # 解析 qualityMap：允许 dict 或 JSON 字符串
     quality_map = payload.get('qualityMap')
@@ -147,11 +217,11 @@ def get_song_info():
 
     logger.info(
         f"/song 请求: music_id={music_id}, source={source}, level={level}, "
-        f"qualityMap={'yes' if quality_map else 'no'}"
+        f"line={line}, qualityMap={'yes' if quality_map else 'no'}"
     )
 
     try:
-        song_info = music_service.get_song_info(music_id, level, source, quality_map=quality_map)
+        song_info = music_service.get_song_info(music_id, level, source, quality_map=quality_map, line=line)
     except Exception as e:
         logger.error(f"/song 获取歌曲信息失败: {e}")
         return jsonify(APIResponse.error(f"获取歌曲信息失败: {str(e)}", 500))
@@ -262,11 +332,16 @@ def download_batch_start():
     items = data.get('items', [])
     zip_name = _sanitize_filename(data.get('name', 'playlist') or 'playlist')
     settings = data.get('settings', {})
+    line = data.get('line', 0)
+
+    # 把 line 注入到每个 item 中（_process_song 读取 item['line'] 传给 get_song_info）
+    for item in items:
+        item['line'] = item.get('line', line)
 
     logger.info(
         f"/download/batch/start 请求: 歌曲数={len(items)}, "
         f"quality={settings.get('selectedQuality', 'lossless')}, "
-        f"包名={zip_name}"
+        f"包名={zip_name}, line={line}"
     )
 
     try:

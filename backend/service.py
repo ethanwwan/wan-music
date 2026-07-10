@@ -21,6 +21,7 @@ from typing import Dict, List, Any, Optional
 import requests
 
 from clients.music_client import music_client, search_music, get_song, get_platforms, parse_playlist
+from musicdl_adapter import adapter as musicdl_adapter
 from utils.url_parser import parse_url
 from utils.filename import (
     sanitize_filename as _sanitize_filename,
@@ -111,7 +112,7 @@ class MusicService:
     # ==================== 公开 API（路由直接调用） ====================
 
     def search(self, keyword: str, platform: str = None,
-               limit: int = 50) -> Dict[str, Any]:
+               limit: int = 50, line: int = 0) -> Dict[str, Any]:
         """统一搜索
 
         1. keyword 是 URL → 解析后拿歌曲详情
@@ -119,6 +120,35 @@ class MusicService:
 
         返回：{'data': [...], 'warnings': [...]}
         """
+        # line=1: 走 musicdl
+        if line == 1:
+            parsed = parse_url(keyword)
+            if parsed and parsed.get('type') == 'playlist':
+                playlist = musicdl_adapter.parse_playlist(keyword)
+                if playlist and playlist.get('tracks'):
+                    return {
+                        'data': playlist['tracks'],
+                        'type': 'playlist',
+                        'detail': {
+                            'name': playlist.get('name') or '歌单',
+                            'creator': playlist.get('creator') or '',
+                            'cover': playlist.get('cover') or '',
+                            'trackCount': playlist.get('trackCount') or len(playlist['tracks']),
+                        },
+                        'search_source': 'musicdl',
+                        'warnings': [],
+                    }
+                return {
+                    'data': [],
+                    'type': 'playlist',
+                    'error': '暂不支持解析此歌单',
+                    'search_source': 'musicdl',
+                    'warnings': [],
+                }
+            # 关键词搜索
+            songs = musicdl_adapter.search(keyword, platform or 'netease', limit)
+            return {'data': songs, 'type': 'song', 'search_source': 'musicdl', 'warnings': []}
+
         parsed = parse_url(keyword)
         if parsed:
             return self._resolve_from_url(parsed)
@@ -127,13 +157,19 @@ class MusicService:
     def get_song_info(self, song_id, quality: str = 'lossless',
                       platform: str = None,
                       quality_map: dict = None,
-                      with_lyric: bool = True) -> Optional[Dict[str, Any]]:
+                      with_lyric: bool = True,
+                      line: int = 0) -> Optional[Dict[str, Any]]:
         """获取歌曲完整信息（基本信息 + 播放 URL + 可选歌词）
 
         song_id 可以是 str 或 dict（含 id + mp3_hash 等）
         quality_map（可选）：该歌曲的可用品质字典，让降级更精准
         with_lyric（可选，默认 True）：是否获取歌词（重试时可设 False 节省请求）
         """
+        # line=1: 走 musicdl 适配器
+        if line == 1:
+            sid = song_id if isinstance(song_id, str) else song_id.get('id', '')
+            return musicdl_adapter.get_song(sid, platform or 'netease')
+
         return get_song(song_id, quality, platform, quality_map=quality_map, with_lyric=with_lyric)
 
     def get_platforms(self) -> List[Dict[str, str]]:
@@ -515,6 +551,7 @@ class BatchDownloadService:
         quality = item.get('quality', 'lossless')
         # item.source = 4 大 platform（netease/qq/kugou/kuwo）
         source = item.get('source', '').strip() or None
+        data_line = item.get('line', 0)  # 线路选择
         name = item.get('name', 'song')
         artist = item.get('artist', '')
         album = item.get('album', '')
@@ -564,6 +601,7 @@ class BatchDownloadService:
                     song_id_arg, quality, source,
                     quality_map=item_quality_map,
                     with_lyric=with_lyric,
+                    line=data_line,
                 )
                 url = song_info.get('url') if song_info else None
                 if not url:
