@@ -21,9 +21,32 @@ PER_SOURCE_TIMEOUT = 20
 SEARCH_SIZE = 50  # 前端 limit 默认 50
 
 
+def _get_ci(d: dict, *keys):
+    """Case-insensitive key lookup — 依次尝试各 key，匹配大小写"""
+    for key in keys:
+        if key in d:
+            return d[key]
+    # fallback: 小写匹配
+    lower_map = {k.lower(): k for k in d}
+    for key in keys:
+        if key.lower() in lower_map:
+            return d[lower_map[key.lower()]]
+    return ''
+
+
+def _get_ci_int(d: dict, *keys) -> int:
+    val = _get_ci(d, *keys)
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _extract_singers(search: dict, source: str) -> str:
-    """从 search 结果中提取歌手名"""
-    artists = search.get('ar') or search.get('artists') or search.get('singer') or []
+    """"""
+    artists = search.get('ar') or search.get('artists') or search.get('singer') or search.get('SingerName') or search.get('ARTIST') or search.get('artist') or []
+    if isinstance(artists, str):
+        return artists
     if isinstance(artists, list):
         names = [a.get('name', '') if isinstance(a, dict) else str(a) for a in artists]
         return ', '.join(n for n in names if n)
@@ -33,7 +56,9 @@ def _extract_singers(search: dict, source: str) -> str:
 
 
 def _extract_album(search: dict) -> str:
-    album = search.get('album') or search.get('al') or {}
+    album = search.get('album') or search.get('al') or search.get('ALBUM') or search.get('AlbumName') or {}
+    if isinstance(album, str):
+        return album
     if isinstance(album, dict):
         return album.get('name', '') or album.get('title', '')
     return str(album) if album else ''
@@ -52,11 +77,31 @@ def _extract_cover(search: dict) -> str:
 
 
 def _raw_to_search_song(raw: dict, source: str) -> dict:
-    """搜索 API 原始结果 → 统一搜索格式"""
-    duration_ms = raw.get('duration', raw.get('dt', raw.get('interval', 0))) or 0
+    """搜索 API 原始结果 → 统一搜索格式
+    
+    不同平台的 key 命名不同：
+      - netease: id, name, ar, al (小写)
+      - qq:      mid(作为 id), title, singer[].name, album.title (小写)
+      - kugou:   ID, SongName, SingerName, AlbumName (驼峰大写)
+      - kuwo:    MUSICRID, NAME, ARTIST, ALBUM (全大写)
+    """
+    song_id = _get_ci(raw, 'id', 'ID', 'mid', 'MUSICRID', 'songmid')
+    if song_id and (source == 'kuwo' or isinstance(song_id, str) and song_id.startswith('MUSIC_')):
+        song_id = str(song_id).removeprefix('MUSIC_')
+
+    song_name = _get_ci(raw, 'name', 'NAME', 'SongName', 'title', 'songname', 'SONGNAME')
+    # 清理 kuwo 的污损名
+    if isinstance(song_name, str) and '&' in song_name and source == 'kuwo':
+        import html
+        song_name = html.unescape(song_name)
+
+    duration_ms = _get_ci_int(raw, 'duration', 'DURATION', 'dt', 'interval')
+    if not duration_ms:
+        duration_ms = 0
+
     raw_dict = {
-        'identifier': str(raw.get('id', '')),
-        'song_name': raw.get('name', '') or raw.get('title', ''),
+        'identifier': str(song_id) if song_id else '',
+        'song_name': str(song_name) if song_name else '',
         'singers': _extract_singers(raw, source),
         'album': _extract_album(raw),
         'cover_url': _extract_cover(raw),
@@ -69,15 +114,32 @@ def _raw_to_search_song(raw: dict, source: str) -> dict:
 
 
 def _parse_songs(raw_data: dict, client_name: str) -> list[dict]:
-    """从平台 API 原始响应中提取歌曲列表"""
+    """从平台 API 原始响应中提取歌曲列表
+    
+    musicdl 各平台 _constructsearchurls 的响应结构差异很大，
+    需按实际 API 返回的 JSON 路径提取。
+    """
     if client_name == 'NeteaseMusicClient':
         return raw_data.get('result', {}).get('songs', [])
     elif client_name == 'QQMusicClient':
-        return raw_data.get('req_0', {}).get('data', {}).get('body', {}).get('song', {}).get('list', [])
+        # QQ 搜索 API 返回动态模块 key（如 music.search.SearchCgiService.DoSearchForQQMusicMobile），
+        # 需要找到第一个以 "music." 开头的 key，然后取 data.body.item_song
+        for k, v in raw_data.items():
+            if k.startswith('music.') and isinstance(v, dict):
+                body = v.get('data', {}).get('body', {})
+                if not isinstance(body, dict):
+                    continue
+                # item_song 是歌曲列表，item_album/singer 等的键类似
+                songs = body.get('item_song', [])
+                if songs:
+                    return songs
+        return []
     elif client_name == 'KuwoMusicClient':
-        return raw_data.get('data', {}).get('list', [])
+        # Kuwo 搜索返回 abslist（顶层 key 就是歌曲列表）
+        return raw_data.get('abslist', [])
     elif client_name == 'KugouMusicClient':
-        return raw_data.get('data', {}).get('info', [])
+        # Kugou 搜索返回 data.lists（包含每首歌曲信息）
+        return raw_data.get('data', {}).get('lists', [])
     return []
 
 
@@ -86,6 +148,12 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
 
     不使用 musicdl 的 _search（解析 URL 太慢），只用 _constructsearchurls
     构造请求参数，然后手动发 HTTP 请求获取元数据。
+
+    不同平台 _constructsearchurls 返回格式：
+      - netease: list[dict] with 'url'(str) + 'data'(dict) + 'page'(int)
+      - qq:      list[dict] with 'url'(str) + 'data'(bytes) + 'page_no'(int)
+      - kugou:   list[str]  (完整 GET URL)
+      - kuwo:    list[str]  (完整 GET URL)
     """
     client_name = PLATFORM_MAP.get(source)
     if not client_name:
@@ -117,24 +185,34 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
     seen_ids = set()
 
     for idx, url_info in enumerate(search_urls):
-        page_url = url_info.pop('url', '')
-        page_no = url_info.pop('page', idx + 1)
+        # 处理 list[str] 格式 (kugou, kuwo) — 完整 URL，GET 请求
+        if isinstance(url_info, str):
+            page_url = url_info
+            page_no = idx + 1
+            is_get = True
+            extra_kwargs = {}
+        else:
+            page_url = url_info.pop('url', '')
+            page_no = url_info.pop('page', url_info.pop('page_no', idx + 1))
+            is_get = False
+            extra_kwargs = url_info
 
-        # 记录实际请求 URL 和 keyword 编码
+        # 记录实际请求 URL
         logger.info(f"search_via_http URL {idx+1}: {page_url}")
-        logger.info(f"search_via_http url_info: data keys={list(url_info.get('data', {}).keys()) if url_info.get('data') else 'no data'}")
 
-        songs = []  # 默认空
-        # 重试逻辑：musicdl 的 post() 有 max_retries=3，每次重试用不同 cookies/proxies
+        songs = []
         for attempt in range(3):
             try:
-                # 让 musicdl 的 post 自己处理 session 重试
                 platform_client.default_headers = platform_client.default_search_headers
                 if hasattr(platform_client, 'default_search_cookies'):
                     platform_client.default_cookies = platform_client.default_search_cookies
                 platform_client._initsession()
 
-                resp = platform_client.post(page_url, **url_info)
+                if is_get:
+                    resp = platform_client.get(page_url, **extra_kwargs)
+                else:
+                    resp = platform_client.post(page_url, **extra_kwargs)
+
                 if resp.status_code != 200:
                     logger.warning(f"搜索请求状态码 {resp.status_code} (attempt {attempt+1})")
                     continue
@@ -142,14 +220,14 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
                 raw_data = resp.json()
                 songs = _parse_songs(raw_data, client_name)
                 logger.info(f"search_via_http: page {page_no}, API 返回 {len(songs)} 条结果 (attempt {attempt+1})")
-                break  # 成功就跳出重试循环
+                break
             except Exception as e:
                 logger.warning(f"搜索请求失败 (attempt {attempt+1}): {e}")
                 songs = []
                 continue
 
         for s in songs:
-                sid = str(s.get('id', ''))
+                sid = str(_get_ci(s, 'id', 'ID', 'mid', 'MUSICRID', 'songmid') or '')
                 if sid and sid not in seen_ids:
                     seen_ids.add(sid)
                     try:
