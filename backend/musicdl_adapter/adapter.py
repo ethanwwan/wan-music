@@ -24,7 +24,7 @@ _clients: dict[str, musicdl.MusicClient] = {}
 _search_cache: dict[str, list[dict]] = {}
 
 
-def _get_client(source: str, search_size: int = 5) -> Optional[musicdl.MusicClient]:
+def _get_client(source: str, search_size: int = 50) -> Optional[musicdl.MusicClient]:
     """获取或创建对应平台的 MusicClient 实例"""
     client_name = PLATFORM_MAP.get(source)
     if not client_name:
