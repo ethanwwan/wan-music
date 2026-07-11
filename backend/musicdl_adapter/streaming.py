@@ -210,7 +210,21 @@ def _extract_quality_map(raw: dict, source: str) -> dict:
     qmap = {}
 
     if source == 'netease':
-        qmap['standard'] = {'br': 128, 'size': 0}
+        # Netease 搜索 API 返回 l(128k)/m(192k)/h(320k)/sq(flac)/hr(hires)
+        # 优先级从高到低遍历，同一 quality 只保留最高
+        for key, quality in [('hr', 'hires'), ('sq', 'lossless'),
+                              ('h', 'exhigh'), ('m', 'standard'),
+                              ('l', 'standard')]:
+            if quality in qmap:
+                continue
+            info = raw.get(key)
+            if isinstance(info, dict):
+                br = int(info.get('br', 0) or 0)
+                size = int(info.get('size', 0) or 0)
+                if br > 0:
+                    qmap[quality] = {'br': br // 1000, 'size': size}
+        if not qmap:
+            qmap['standard'] = {'br': 128, 'size': 0}
 
     elif source == 'qq':
         file_info = raw.get('file') or {}
