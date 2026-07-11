@@ -112,7 +112,7 @@ class MusicService:
     # ==================== 公开 API（路由直接调用） ====================
 
     def search(self, keyword: str, platform: str = None,
-               limit: int = 50, line: int = 0) -> Dict[str, Any]:
+               limit: int = 50, line: int = 0, quality: str = 'lossless') -> Dict[str, Any]:
         """统一搜索
 
         1. keyword 是 URL → 解析后拿歌曲详情
@@ -168,7 +168,7 @@ class MusicService:
         # line=1: 走 musicdl 适配器
         if line == 1:
             sid = song_id if isinstance(song_id, str) else song_id.get('id', '')
-            return musicdl_adapter.get_song(sid, platform or 'netease')
+            return musicdl_adapter.get_song(sid, platform or 'netease', quality=quality)
 
         return get_song(song_id, quality, platform, quality_map=quality_map, with_lyric=with_lyric)
 
@@ -332,8 +332,8 @@ class BatchDownloadService:
     - 提供文件下载信息接口
     """
 
-    # 任务完成后自动清理的秒数
-    TASK_TTL = 1800
+    # 任务完成后自动清理的秒数（2 小时）
+    TASK_TTL = 7200
 
     # 并发下载线程数
     MAX_WORKERS = 10

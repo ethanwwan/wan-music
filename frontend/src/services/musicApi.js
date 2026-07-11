@@ -261,9 +261,9 @@ const mapSearchSong = (song) => ({
  * SSE 流式搜索（线路二 musicdl 专用）
  * 通过 EventSource 逐条接收搜索结果，收集完成后 resolve
  */
-const streamSearch = (keyword, source, timeout = 20) => {
+const streamSearch = (keyword, source, timeout = 20, quality = 'lossless') => {
   return new Promise((resolve, reject) => {
-    const url = `/search/sse?keyword=${encodeURIComponent(keyword)}&source=${encodeURIComponent(source)}&timeout=${timeout}`
+    const url = `/search/sse?keyword=${encodeURIComponent(keyword)}&source=${encodeURIComponent(source)}&timeout=${timeout}&quality=${encodeURIComponent(quality)}`
     const es = new EventSource(url)
     const items = []
 
@@ -288,9 +288,22 @@ const streamSearch = (keyword, source, timeout = 20) => {
       })
     })
 
-    es.addEventListener('error', (e) => {
+    es.addEventListener('error', () => {
       es.close()
-      reject(new Error('流式搜索连接失败'))
+      // 区分后端未启动 vs 其他错误：探 /health 判断后端状态
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 5000)
+      fetch('/health', { method: 'GET', signal: ctrl.signal })
+        .then(r => {
+          clearTimeout(timer)
+          reject(new Error(r.ok
+            ? '流式搜索连接失败，后端服务异常'
+            : '后端服务未就绪，请先启动音乐服务后刷新页面'))
+        })
+        .catch(() => {
+          clearTimeout(timer)
+          reject(new Error('后端服务未就绪，请先启动音乐服务后刷新页面'))
+        })
     })
 
     // 安全兜底：timeout + 5s 后如果还没 done 就强制结束
@@ -313,7 +326,7 @@ const streamSearch = (keyword, source, timeout = 20) => {
  * @param {string} keyword 关键词或 URL
  * @param {Array<string>} sources 数据源列表（仅第一个生效）
  */
-export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()]) => {
+export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()], quality) => {
   try {
     const source = sources[0] || getCurrentDataSource()
     const cached = getCachedSearch(keyword, source)
@@ -322,14 +335,16 @@ export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()])
     // line=1 走 SSE 流式搜索（musicdl），20s 超时
     const line = settings.musicLine ?? 0
     if (line === 1) {
-      const result = await streamSearch(keyword, source)
+      const q = quality || settings.selectedQuality || 'lossless'
+      const result = await streamSearch(keyword, source, 20, q)
       if (result?.data?.length) {
         setCachedSearch(keyword, source, result.data)
       }
       return result
     }
 
-    const result = await postJson('/search', { keyword, source, limit: 50, line }, 120000)
+    const q = quality || settings.selectedQuality || 'lossless'
+    const result = await postJson('/search', { keyword, source, limit: 50, line, quality: q }, 120000)
     if (!result?.success) {
       return { success: false, error: result?.error || result?.message || '搜索失败' }
     }

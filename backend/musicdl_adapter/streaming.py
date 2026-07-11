@@ -13,7 +13,7 @@ import sys
 import time
 
 from . import converter
-from .adapter import PLATFORM_MAP, _get_client, _cleanup_output
+from .adapter import PLATFORM_MAP, _get_client, _cleanup_output, _search_cache, _raw_search_cache
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +212,7 @@ def _extract_quality_map(raw: dict, source: str) -> dict:
     if source == 'netease':
         # Netease 搜索 API 返回 l(128k)/m(192k)/h(320k)/sq(flac)/hr(hires)
         # 优先级从高到低遍历，同一 quality 只保留最高
+        # 注意：hr.br 是采样率(Hz)，不是比特率(bps)，不能除以 1000 当比特率使用
         for key, quality in [('hr', 'hires'), ('sq', 'lossless'),
                               ('h', 'exhigh'), ('m', 'standard'),
                               ('l', 'standard')]:
@@ -222,7 +223,11 @@ def _extract_quality_map(raw: dict, source: str) -> dict:
                 br = int(info.get('br', 0) or 0)
                 size = int(info.get('size', 0) or 0)
                 if br > 0:
-                    qmap[quality] = {'br': br // 1000, 'size': size}
+                    if key == 'hr':
+                        # hr.br 是采样率(Hz)，非比特率；用 9999 占位
+                        qmap[quality] = {'br': 9999, 'size': size}
+                    else:
+                        qmap[quality] = {'br': br // 1000, 'size': size}
         if not qmap:
             qmap['standard'] = {'br': 128, 'size': 0}
 
@@ -275,9 +280,9 @@ def _extract_quality_map(raw: dict, source: str) -> dict:
     return qmap
 
 
-def _raw_to_search_song(raw: dict, source: str) -> dict:
+def _raw_to_search_song(raw: dict, source: str, quality: str = 'lossless') -> dict:
     """搜索 API 原始结果 → 统一搜索格式
-    
+
     不同平台的 key 命名不同：
       - netease: id, name, ar, al (小写)
       - qq:      mid(作为 id), title, singer[].name, album.title (小写)
@@ -312,7 +317,7 @@ def _raw_to_search_song(raw: dict, source: str) -> dict:
         'pay': pay,
         'duration_s': duration_ms / 1000 if duration_ms else 0,
     }
-    return converter.musicdl_to_search_song(raw_dict, source)
+    return converter.musicdl_to_search_song(raw_dict, source, requested=quality)
 
 
 def _parse_songs(raw_data: dict, client_name: str) -> list[dict]:
@@ -345,9 +350,9 @@ def _parse_songs(raw_data: dict, client_name: str) -> list[dict]:
     return []
 
 
-def search_via_http(keyword: str, source: str) -> list[dict]:
+def search_via_http(keyword: str, source: str, quality: str = 'lossless') -> list[dict]:
     """直接用平台 client 的 session 请求搜索 API，返回统一格式结果
-
+    
     不使用 musicdl 的 _search（解析 URL 太慢），只用 _constructsearchurls
     构造请求参数，然后手动发 HTTP 请求获取元数据。
 
@@ -385,6 +390,7 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
 
     results = []
     seen_ids = set()
+    all_raw_songs = []
 
     for idx, url_info in enumerate(search_urls):
         # 处理 list[str] 格式 (kugou, kuwo) — 完整 URL，GET 请求
@@ -421,6 +427,7 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
 
                 raw_data = resp.json()
                 songs = _parse_songs(raw_data, client_name)
+                all_raw_songs.extend(songs)
                 logger.info(f"search_via_http: page {page_no}, API 返回 {len(songs)} 条结果 (attempt {attempt+1})")
                 break
             except Exception as e:
@@ -433,17 +440,54 @@ def search_via_http(keyword: str, source: str) -> list[dict]:
                 if sid and sid not in seen_ids:
                     seen_ids.add(sid)
                     try:
-                        results.append(_raw_to_search_song(s, source))
+                        results.append(_raw_to_search_song(s, source, quality=quality))
                     except Exception:
                         continue
+
+    # 缓存原始歌曲元数据到 adapter._search_cache，供后续 get_song() 解析下载 URL
+    try:
+        cache_key = f'{source}:{keyword}'
+        cache_entries = []
+        for s in all_raw_songs:
+            sid = str(_get_ci(s, 'id', 'ID', 'mid', 'MUSICRID', 'songmid') or '')
+            if not sid:
+                continue
+            # 归一化 kuwo 的 MUSIC_ 前缀，保持与前端 id 一致
+            if source == 'kuwo' and sid.startswith('MUSIC_'):
+                sid = sid.removeprefix('MUSIC_')
+            song_name = str(_get_ci(s, 'name', 'NAME', 'SongName', 'title', 'songname', 'SONGNAME') or '')
+            if not song_name:
+                continue
+            # 元数据缓存：供 _find_in_cache 查找
+            cache_entries.append({
+                'identifier': str(sid),
+                'song_name': song_name,
+                'singers': _extract_singers(s, source),
+                'album': _extract_album(s),
+                'ext': 'mp3',
+                'file_size_bytes': 0,
+                'duration_s': _get_ci_int(s, 'duration', 'DURATION', 'dt', 'interval') / 1000 or 0,
+                'bitrate': 0,
+                'lyric': '',
+                'cover_url': _extract_cover(s, source),
+                'source': source,
+                'download_url': '',
+                'root_source': '',
+            })
+            # 原始响应缓存：供 _parsewiththirdpartapis 快速 URL 解析
+            _raw_search_cache[f'{source}:{sid}'] = s
+        if cache_entries:
+            _search_cache[cache_key] = cache_entries
+    except Exception:
+        pass
 
     return results[:SEARCH_SIZE]
 
 
-def search_stream(keyword: str, source: str, timeout: int = PER_SOURCE_TIMEOUT):
+def search_stream(keyword: str, source: str, timeout: int = PER_SOURCE_TIMEOUT, quality: str = 'lossless'):
     """流式搜索结果，逐条 yield（基于 HTTP 直接搜索，不解析 URL）"""
     try:
-        songs = search_via_http(keyword, source)
+        songs = search_via_http(keyword, source, quality=quality)
     except Exception as e:
         logger.error(f"search_via_http 异常: {e}", exc_info=True)
         songs = []

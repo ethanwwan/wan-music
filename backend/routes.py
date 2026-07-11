@@ -91,13 +91,14 @@ def search():
         platform = data.get('source')
         limit = data.get('limit', 50)
         line = data.get('line', 0)
+        quality = data.get('quality', 'lossless')
 
-        logger.info(f"/search 请求: keyword={keyword!r}, source={platform}, limit={limit}, line={line}")
+        logger.info(f"/search 请求: keyword={keyword!r}, source={platform}, limit={limit}, line={line}, quality={quality}")
 
         if not keyword:
             return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
-        result = music_service.search(keyword, platform, limit, line=line)
+        result = music_service.search(keyword, platform, limit, line=line, quality=quality)
         results_count = len(result.get('data', []))
         logger.info(
             f"/search 结果: 数量={results_count}, "
@@ -159,6 +160,7 @@ def search_sse():
     keyword = request.args.get('keyword', '').strip()
     source = request.args.get('source', 'netease')
     timeout = int(request.args.get('timeout', 20))
+    quality = request.args.get('quality', 'lossless')
 
     if not keyword:
         return jsonify(APIResponse.error("请输入搜索关键词", 400))
@@ -170,7 +172,7 @@ def search_sse():
     @stream_with_context
     def generate():
         yield 'retry: 10000\n\n'
-        for event in search_stream(keyword, source, timeout=timeout):
+        for event in search_stream(keyword, source, timeout=timeout, quality=quality):
             yield f'event: {event["type"]}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n'
 
     return Response(
@@ -242,6 +244,7 @@ def get_song_info():
         'requested_level': level,                              # 用户请求的音质
         'level_fallback': bool(song_info.get('level_fallback', False)),  # 是否降级
         'fileType': song_info.get('fileType') or _infer_file_type(song_info.get('url', '')),
+        'size': song_info.get('size', 0),
         'source': song_info.get('source', source or 'netease'),
         'api_source': song_info.get('api_source', ''),
         'available': True,
@@ -465,5 +468,4 @@ def download_batch_file(task_id):
             download_name=f"{info['name']}.zip"
         )
 
-    response.call_on_close(lambda: batch_download_service.cleanup(task_id))
     return response

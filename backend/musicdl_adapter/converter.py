@@ -2,10 +2,32 @@
 
 将 musicdl 代理返回的歌曲 dict 转换为前端 /search 和 /song 接口需要的格式。
 """
-import re
+
+_UNIFIED_QUALITY_PRIORITY = [
+    'jymaster', 'jysurround', 'dolby', 'sky', 'jyeffect', 'hires', 'lossless', 'exhigh', 'standard'
+]
 
 
-def musicdl_to_search_song(s: dict, source: str) -> dict:
+def _match_quality(quality_map: dict, requested: str = 'lossless') -> str:
+    """根据用户请求音质匹配实际可用音质（从高到低降级）"""
+    if not quality_map:
+        return ''
+    if requested in quality_map:
+        return requested
+    try:
+        start = _UNIFIED_QUALITY_PRIORITY.index(requested)
+    except ValueError:
+        start = len(_UNIFIED_QUALITY_PRIORITY)
+    for qk in _UNIFIED_QUALITY_PRIORITY[start:]:
+        if qk in quality_map:
+            return qk
+    for qk in _UNIFIED_QUALITY_PRIORITY:
+        if qk in quality_map:
+            return qk
+    return next(iter(quality_map), '')
+
+
+def musicdl_to_search_song(s: dict, source: str, requested: str = 'lossless') -> dict:
     """musicdl 搜索歌曲 → 统一搜索格式"""
     song_id = str(s.get('identifier', ''))
     song_name = s.get('song_name', '') or ''
@@ -21,12 +43,8 @@ def musicdl_to_search_song(s: dict, source: str) -> dict:
         s.get('bitrate', 0) or 0,
     )
 
-    # 确定最佳音质
-    best_quality = 'standard'
-    for q in ['hires', 'lossless', 'exhigh']:
-        if q in quality_map:
-            best_quality = q
-            break
+    # 根据用户请求音质降级匹配最佳可用音质（而非取最高）
+    best_quality = _match_quality(quality_map, requested) or 'standard'
 
     duration_ms = duration_s * 1000
     return {
@@ -93,7 +111,7 @@ def _build_quality_map(ext: str, file_size_bytes: int, bitrate: int) -> dict:
     ext = (ext or 'mp3').lower()
 
     if ext in ('flac', 'ape', 'wav'):
-        quality_map['hires'] = {'br': 9999, 'size': file_size_bytes}
+        quality_map['lossless'] = {'br': 1411, 'size': file_size_bytes}
     elif ext == 'm4a':
         quality_map['lossless'] = {'br': 1411, 'size': file_size_bytes}
     elif ext == 'ogg':
@@ -112,11 +130,8 @@ def _build_quality_map(ext: str, file_size_bytes: int, bitrate: int) -> dict:
 
 
 def _detect_level(ext: str, quality_map: dict, requested: str) -> str:
-    """检测实际音质等级"""
-    for q in ['hires', 'lossless', 'exhigh', 'standard']:
-        if q in quality_map:
-            return q
-    return 'standard'
+    """根据请求音质匹配实际可用音质（而非取最高）"""
+    return _match_quality(quality_map, requested) or 'standard'
 
 
 def merge_singers(singers) -> str:

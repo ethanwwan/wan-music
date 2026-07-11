@@ -326,8 +326,9 @@ const downloadTask = async (taskId) => {
   for (let i = 0; i < 2; i++) {
     try {
       const filename = await downloadBatchAsZip(taskId)
-      // 下载完成后删除任务
-      await cancelTask(taskId)
+      // 保存后主动清理后端文件
+      removeTask(taskId)
+      cancelBatchTask(taskId).catch(() => {})  // 忽略 404（可能已被 TTL 清理）
       return filename
     } catch (e) {
       err = e

@@ -33,7 +33,7 @@ const notifySearchResult = (count, fromCache = false) => {
  * @param {string} source 数据源
  * @returns {Promise<{success: boolean, type?: string, detail?: object, count?: number}>}
  */
-export const parseMusic = async (input, source) => {
+export const parseMusic = async (input, source, quality) => {
   if (!input?.trim()) {
     message.warning('请输入内容')
     return { success: false }
@@ -41,7 +41,7 @@ export const parseMusic = async (input, source) => {
 
   loading.value = true
   try {
-    const result = await musicApi.unifiedSearch(input, [source || settings.selectedSource || 'netease'])
+    const result = await musicApi.unifiedSearch(input, [source || settings.selectedSource || 'netease'], quality)
     if (!result.success) {
       searchResults.value = []
       searchType.value = 'song'

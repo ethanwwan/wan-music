@@ -72,12 +72,12 @@ const searchSession = ref(0)
 
 const themeToken = reactive({ colorPrimary: DEFAULT_THEME_COLOR })
 
-const handleParse = async ({ url, sources = [currentSource.value] }) => {
+const handleParse = async ({ url, quality, sources = [currentSource.value] }) => {
   const source = sources[0] || currentSource.value
   currentSource.value = source
   // 注意：searchSession 必须在 parseMusic 成功之后再自增，
   // 否则失败/空结果时 SearchResult 会被强制重新挂载、清空旧数据。
-  const result = await parseMusic(url, source)
+  const result = await parseMusic(url, source, quality)
   if (!result?.success) {
     // 搜索失败 → 保留旧数据，只在 toast 提示错误（parseMusic 内部已 message.error）
     return

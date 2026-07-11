@@ -286,7 +286,7 @@ const matchQuality = (qualityMap, requested = 'lossless') => {
 const getQualitySize = (track) => {
   // 关键：基于用户选中的音质 + qualityMap 算出实际能下的最高音质，再取 size
   // 避免显示「Hi-Res 25MB」但实际只下到 standard 3.9MB
-  const requested = settings.value?.selectedQuality || 'lossless'
+  const requested = settings.selectedQuality || 'lossless'
   const effectiveQuality = matchQuality(track.qualityMap, requested)
   return effectiveQuality ? formatSize(track.qualityMap?.[effectiveQuality]?.size) : ''
 }
@@ -296,7 +296,7 @@ const getQualitySize = (track) => {
  * 用作显示标签
  */
 const getEffectiveQuality = (track) => {
-  const requested = settings.value?.selectedQuality || 'lossless'
+  const requested = settings.selectedQuality || 'lossless'
   return matchQuality(track.qualityMap, requested)
 }
 
