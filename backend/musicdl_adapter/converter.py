@@ -14,11 +14,12 @@ def musicdl_to_search_song(s: dict, source: str) -> dict:
     ext = s.get('ext', 'mp3') or 'mp3'
     duration_s = s.get('duration_s', 0) or 0
 
-    # 计算音质 Map
-    file_size_bytes = s.get('file_size_bytes', 0) or 0
-    bitrate = s.get('bitrate', 0) or 0
-
-    quality_map = _build_quality_map(ext, file_size_bytes, bitrate)
+    # 优先使用预构建的 quality_map（流式搜索时各平台已有完整音质信息）
+    quality_map = s.get('quality_map') or _build_quality_map(
+        ext,
+        s.get('file_size_bytes', 0) or 0,
+        s.get('bitrate', 0) or 0,
+    )
 
     # 确定最佳音质
     best_quality = 'standard'

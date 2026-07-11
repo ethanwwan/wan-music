@@ -76,6 +76,115 @@ def _extract_cover(search: dict) -> str:
     return search.get('picUrl') or search.get('pic') or ''
 
 
+def _parse_kuwo_minfo(minfo: str) -> dict:
+    """解析 Kuwo MINFO/N_MINFO 字符串，返回 {quality: {br, size}}
+    
+    格式: level:ff,bitrate:2000,format:flac,size:31.36Mb;level:p,bitrate:320,format:mp3,size:12.39Mb;...
+    level 映射:
+      ff → lossless (FLAC), p → exhigh (320k mp3), h → standard (128k mp3)
+      bcms → dolby, dtsx → sky, zply → jymaster, zpga* → hires
+    """
+    import re
+    qmap = {}
+    level_map = {
+        'ff': 'lossless', 'p': 'exhigh', 'h': 'standard',
+        'bcms': 'dolby', 'dtsx': 'sky', 'zply': 'jymaster',
+    }
+    for seg in minfo.split(';'):
+        seg = seg.strip()
+        if not seg:
+            continue
+        parts = dict(item.split(':', 1) for item in seg.split(',') if ':' in item)
+        level_key = parts.get('level', '')
+        bitrate = int(parts.get('bitrate', 0))
+        size_str = parts.get('size', '0')
+        # 解析 size: "31.36Mb" → bytes
+        size_bytes = 0
+        m = re.match(r'([\d.]+)\s*([KkMmGg]?[Bb]?)', size_str)
+        if m:
+            val = float(m.group(1))
+            unit = m.group(2).lower()
+            if 'g' in unit:
+                size_bytes = int(val * 1024**3)
+            elif 'm' in unit:
+                size_bytes = int(val * 1024**2)
+            elif 'k' in unit:
+                size_bytes = int(val * 1024)
+            else:
+                size_bytes = int(val)
+        # 映射 level → quality
+        quality = level_map.get(level_key)
+        if quality:
+            qmap[quality] = {'br': bitrate, 'size': size_bytes}
+        # zpga* → hires
+        if level_key.startswith('zpga'):
+            qmap['hires'] = {'br': bitrate, 'size': size_bytes}
+    return qmap
+
+
+def _extract_quality_map(raw: dict, source: str) -> dict:
+    """从各平台搜索 API 原始响应中提取 qualityMap
+    
+    各平台搜索 API 原生返回音质信息，字段名和结构各不相同：
+      - netease: 搜索阶段不返回音质信息，默认 standard
+      - qq:      file 对象中有 size_* 字段（size_flac, size_320mp3 等）
+      - kugou:   顶层字段 Bitrate/FileSize/ExtName + HQ* + SQ* + Res*
+      - kuwo:    MINFO/N_MINFO 字符串编码多品质信息
+    """
+    qmap = {}
+
+    if source == 'netease':
+        qmap['standard'] = {'br': 128, 'size': 0}
+
+    elif source == 'qq':
+        file_info = raw.get('file') or {}
+        if isinstance(file_info, dict):
+            qq_rules = [
+                ('size_hires', 'hires', 9999),
+                ('size_ape', 'hires', 9999),
+                ('size_flac', 'lossless', 1411),
+                ('size_dolby', 'dolby', 9999),
+                ('size_dts', 'sky', 9999),
+                ('size_320mp3', 'exhigh', 320),
+                ('size_192ogg', 'exhigh', 192),
+                ('size_192aac', 'exhigh', 192),
+                ('size_128mp3', 'standard', 128),
+            ]
+            for field, quality, default_br in qq_rules:
+                size = int(file_info.get(field, 0) or 0)
+                if size > 0:
+                    qmap[quality] = {'br': default_br, 'size': size}
+            if not qmap:
+                qmap['standard'] = {'br': 128, 'size': 0}
+
+    elif source == 'kugou':
+        kugou_rules = [
+            ('ResFileSize', 'ResBitrate', 'hires'),
+            ('SQFileSize', 'SQBitrate', 'lossless'),
+            ('HQFileSize', 'HQBitrate', 'exhigh'),
+            ('FileSize', 'Bitrate', 'standard'),
+        ]
+        for size_field, br_field, quality in kugou_rules:
+            size = int(raw.get(size_field, 0) or 0)
+            br = int(raw.get(br_field, 0) or 0)
+            if size > 0:
+                qmap[quality] = {'br': br, 'size': size}
+
+    elif source == 'kuwo':
+        for field in ('N_MINFO', 'MINFO'):
+            val = raw.get(field, '')
+            if isinstance(val, str) and val.strip():
+                parsed = _parse_kuwo_minfo(val)
+                if parsed:
+                    qmap.update(parsed)
+                    break
+
+    if not qmap:
+        qmap['standard'] = {'br': 128, 'size': 0}
+
+    return qmap
+
+
 def _raw_to_search_song(raw: dict, source: str) -> dict:
     """搜索 API 原始结果 → 统一搜索格式
     
@@ -99,15 +208,15 @@ def _raw_to_search_song(raw: dict, source: str) -> dict:
     if not duration_ms:
         duration_ms = 0
 
+    quality_map = _extract_quality_map(raw, source)
+
     raw_dict = {
         'identifier': str(song_id) if song_id else '',
         'song_name': str(song_name) if song_name else '',
         'singers': _extract_singers(raw, source),
         'album': _extract_album(raw),
         'cover_url': _extract_cover(raw),
-        'ext': 'mp3',
-        'file_size_bytes': 0,
-        'bitrate': 0,
+        'quality_map': quality_map,
         'duration_s': duration_ms / 1000 if duration_ms else 0,
     }
     return converter.musicdl_to_search_song(raw_dict, source)

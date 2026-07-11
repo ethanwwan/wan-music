@@ -21,7 +21,7 @@ import urllib.parse
 
 
 BACKEND_URL = 'http://127.0.0.1:5005'
-TIMEOUT = 30
+TIMEOUT = 120
 PLATFORMS = ['netease', 'qq', 'kugou', 'kuwo']
 KEYWORD = '海阔天空'
 
