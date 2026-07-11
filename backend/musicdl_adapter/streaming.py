@@ -64,16 +64,92 @@ def _extract_album(search: dict) -> str:
     return str(album) if album else ''
 
 
-def _extract_cover(search: dict) -> str:
+def _extract_cover(search: dict, source: str) -> str:
+    """从搜索 API 原始响应中提取封面 URL"""
+    # 1. Netease: al.picUrl
     album = search.get('album') or search.get('al') or {}
     if isinstance(album, dict):
         pic = album.get('picUrl') or album.get('picurl') or album.get('pic') or ''
         if pic:
             return pic
-    albummid = search.get('albummid') or (album.get('albumMID') if isinstance(album, dict) else None)
+    # 2. QQ: 构造 y.gtimg.cn URL (album.mid)
+    if source == 'qq':
+        albummid = search.get('albummid') or (
+            album.get('mid') if isinstance(album, dict) else None
+        )
+        if albummid and 'y.qq.com' not in str(albummid):
+            return f'https://y.gtimg.cn/music/photo_new/T002R300x300M000{albummid}.jpg'
+    # 3. Kugou: Image 模板 (替换 {size})
+    if source == 'kugou':
+        img = search.get('Image') or search.get('image') or ''
+        if img and '{size}' in img:
+            return img.replace('{size}', '240')
+        if img:
+            return img
+    # 4. Kuwo: hts_MVPIC (完整 URL) 或 MVPIC (相对路径)
+    if source == 'kuwo':
+        hts = search.get('hts_MVPIC') or ''
+        if hts:
+            return hts
+        mvp = search.get('MVPIC') or ''
+        if mvp:
+            return f'https://img4.kuwo.cn/{mvp.lstrip("/")}'
+    # 5. 通用兜底
+    albummid = search.get('albummid') or (
+        album.get('albumMID') if isinstance(album, dict) else None
+    )
     if albummid and 'y.qq.com' not in str(albummid):
         return f'https://y.qq.com/music/photo_new/T002R300x300M000{albummid}.jpg'
     return search.get('picUrl') or search.get('pic') or ''
+
+
+def _extract_fee(search: dict, source: str) -> tuple:
+    """从搜索 API 原始响应中提取 (fee_number, pay_bool)
+    
+    fee: 0=免费, 1=付费, 4=免费播放(需VIP下载), 8=VIP
+    pay: 前端使用的 boolean
+    """
+    if source == 'netease':
+        fee = int(search.get('fee', 1) or 1)
+        pay = fee in (1, 4, 8)
+        return fee, pay
+
+    if source == 'qq':
+        # QQ item_song 的 action.msgpay 或 pay 对象
+        action = search.get('action') or {}
+        msgpay = int(action.get('msgpay', 0) or 0)
+        pay_obj = search.get('pay') or {}
+        if isinstance(pay_obj, dict):
+            pp = int(pay_obj.get('pay_play', 0) or 0)
+            pd = int(pay_obj.get('pay_download', 0) or 0)
+            if pp or pd:
+                return 1, True
+        if msgpay > 0:
+            return 1, True
+        return 0, False
+
+    if source == 'kugou':
+        pay_type = int(search.get('PayType', 0) or 0)
+        privilege = int(search.get('Privilege', 0) or 0)
+        pay = pay_type > 0 or privilege < 10
+        fee = 1 if pay else 0
+        return fee, pay
+
+    if source == 'kuwo':
+        fee_type = search.get('payInfo', {}).get('feeType', {})
+        if isinstance(fee_type, dict):
+            song_fee = int(fee_type.get('song', 0) or 0)
+            vip_fee = int(fee_type.get('vip', 0) or 0)
+            pay = song_fee > 0 or vip_fee > 0
+        else:
+            # fallback: tpay/fpay
+            tpay = int(search.get('tpay', 0) or 0)
+            fpay = int(search.get('fpay', 0) or 0)
+            pay = tpay > 0 or fpay > 0
+        fee = 1 if pay else 0
+        return fee, pay
+
+    return 1, True  # 未知平台默认付费
 
 
 def _parse_kuwo_minfo(minfo: str) -> dict:
@@ -209,14 +285,17 @@ def _raw_to_search_song(raw: dict, source: str) -> dict:
         duration_ms = 0
 
     quality_map = _extract_quality_map(raw, source)
+    fee, pay = _extract_fee(raw, source)
 
     raw_dict = {
         'identifier': str(song_id) if song_id else '',
         'song_name': str(song_name) if song_name else '',
         'singers': _extract_singers(raw, source),
         'album': _extract_album(raw),
-        'cover_url': _extract_cover(raw),
+        'cover_url': _extract_cover(raw, source),
         'quality_map': quality_map,
+        'fee': fee,
+        'pay': pay,
         'duration_s': duration_ms / 1000 if duration_ms else 0,
     }
     return converter.musicdl_to_search_song(raw_dict, source)

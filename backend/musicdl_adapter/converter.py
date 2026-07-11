@@ -41,7 +41,8 @@ def musicdl_to_search_song(s: dict, source: str) -> dict:
         'bestQuality': best_quality,
         'source': source,
         'api_source': 'musicdl',
-        'fee': 1,  # musicdl 没有付费标识，默认 1
+        'fee': s.get('fee', 1),
+        'pay': s.get('pay', False),
         'url': '',  # 搜索阶段不返回 URL
         'duration': duration_ms,       # 前端 mapSearchSong 读这个
         'songTime': duration_ms,       # 兼容旧版
