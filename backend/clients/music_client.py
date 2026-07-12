@@ -204,11 +204,16 @@ class MusicClient:
 
     # ==================== 业务方法 ====================
 
-    def search(self, keyword: str, platform: str = None, limit: int = 50) -> Dict[str, Any]:
+    def search(self, keyword: str, platform: str = None, limit: int = 50,
+               quality: str = 'lossless') -> Dict[str, Any]:
         """搜索歌曲（永远只搜歌曲；URL 由 service 层另行解析）
 
         4 个平台 search 链都走官方 API，一次返回完整元信息
         （album / cover / qualityMap / pay），不需要后置补全
+
+        根据用户请求的音质 quality，对 qualityMap 做过滤：
+        - matchQuality 设为 {quality, br, size}
+        - 完整 qualityMap 仍存入 song_info_cache 供 /song 降级使用
 
         返回 dict（含 search_source），兼容 routes.py 和 service.py
         """
@@ -228,11 +233,41 @@ class MusicClient:
             sid = s.get('id')
             if not sid:
                 continue
-            # 复制一份避免外部修改污染缓存
+            # 复制一份避免外部修改污染缓存（存完整 qualityMap 供降级使用）
             payload = dict(s)
             if search_source and not payload.get('_search_source'):
                 payload['_search_source'] = search_source
             song_info_cache.put(platform or self.default_platform, str(sid), payload)
+
+        # 根据请求音质过滤 qualityMap，返回结果只保留匹配音质
+        try:
+            from ..app_config import get_platform_quality_chain
+        except (ImportError, ValueError):
+            import os, sys
+            _backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if _backend_root not in sys.path:
+                sys.path.insert(0, _backend_root)
+            from app_config import get_platform_quality_chain
+
+        for song in songs:
+            if not isinstance(song, dict):
+                continue
+            qmap = song.get('qualityMap')
+            if not isinstance(qmap, dict) or not qmap:
+                continue
+            chain = get_platform_quality_chain(
+                platform or self.default_platform, quality, qmap
+            )
+            if chain:
+                matched = chain[0]
+                entry = qmap.get(matched)
+                song['matchQuality'] = {
+                    'quality': matched,
+                    'br': entry.get('br', 0) if entry else 0,
+                    'size': entry.get('size', 0) if entry else 0,
+                } if matched in qmap else {}
+            else:
+                song['matchQuality'] = {}
 
         return {'data': songs, 'search_source': search_source}
 
@@ -432,8 +467,9 @@ music_client = MusicClient()
 
 # ==================== 向后兼容的函数接口 ====================
 
-def search_music(keywords: str, platform: str = None, limit: int = 50) -> List[Dict[str, Any]]:
-    return music_client.search(keywords, platform, limit=limit)
+def search_music(keywords: str, platform: str = None, limit: int = 50,
+                 quality: str = 'lossless') -> List[Dict[str, Any]]:
+    return music_client.search(keywords, platform, limit=limit, quality=quality)
 
 
 def get_song(song_id: str, quality: str, platform: str = None,

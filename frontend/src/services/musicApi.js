@@ -178,7 +178,7 @@ export const getConfig = async () => {
  *
  * 设计原则（按用户意图）：
  * 1. 调用方只传 (track, quality)，不直接传 qualityMap
- * 2. 内部从 track.qualityMap 提取（该字段在 search result 中已存在）
+ * 2. 内部从 track.matchQuality 构造 qualityMap
  * 3. qualityMap 让后端做精准降级：用户请求 lossless，歌曲只有 exhigh → 直接 exhigh
  *
  * @param {object} track  - 歌曲对象（来自 search result，含 id/source/qualityMap）
@@ -190,7 +190,9 @@ export const parseMusicInfo = async (track, quality = 'lossless') => {
   if (!musicId) throw new Error('歌曲ID缺失，请重新搜索')
 
   const platform = track.source || getCurrentDataSource()
-  const qualityMap = track.qualityMap || null
+  const qualityMap = track.qualityMap || (track.matchQuality
+    ? { [track.matchQuality.quality]: { br: track.matchQuality.br, size: track.matchQuality.size } }
+    : null)
 
   const result = await postJson('/song', {
     id: String(musicId),
@@ -252,8 +254,7 @@ const mapSearchSong = (song) => ({
   pay: song.pay || false,
   fee: song.fee || 0,
   payInfo: song.pay ? { payed: false, fee: song.fee || 0, listenUrl: null } : null,
-  qualityMap: song.qualityMap || null,
-  bestQuality: song.bestQuality || '',
+  matchQuality: song.matchQuality || null,
   api_source: song.api_source || '',
 })
 

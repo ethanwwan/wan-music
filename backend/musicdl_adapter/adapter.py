@@ -110,7 +110,7 @@ def _normalize_download_url(url) -> str:
     return str(url)
 
 
-def search(keyword: str, source: str, limit: int = 0) -> list[dict]:
+def search(keyword: str, source: str, limit: int = 0, quality: str = 'lossless') -> list[dict]:
     """搜索歌曲，返回统一格式的搜索结果列表"""
     cache_key = f'{source}:{keyword}:{limit}'
     # musicdl 的 search_size_per_source 控制每个平台搜索多少条数据
@@ -118,11 +118,11 @@ def search(keyword: str, source: str, limit: int = 0) -> list[dict]:
     search_size = 15
     raw_songs = _do_search(keyword, source, search_size)
 
-    # 转为统一格式
+    # 转为统一格式（传入用户请求音质，让 converter 做 qualityMap 过滤）
     songs = []
     for raw in raw_songs:
         try:
-            songs.append(musicdl_to_search_song(raw, source))
+            songs.append(musicdl_to_search_song(raw, source, requested=quality))
         except Exception:
             continue
 

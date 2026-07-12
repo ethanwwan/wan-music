@@ -45,6 +45,7 @@ def musicdl_to_search_song(s: dict, source: str, requested: str = 'lossless') ->
 
     # 根据用户请求音质降级匹配最佳可用音质（而非取最高）
     best_quality = _match_quality(quality_map, requested) or 'standard'
+    entry = quality_map.get(best_quality)
 
     duration_ms = duration_s * 1000
     return {
@@ -55,8 +56,11 @@ def musicdl_to_search_song(s: dict, source: str, requested: str = 'lossless') ->
         'album': album,
         'pic': s.get('cover_url', ''),
         'picUrl': s.get('cover_url', ''),  # 兼容前端 mapSearchSong
-        'qualityMap': quality_map,
-        'bestQuality': best_quality,
+        'matchQuality': {
+            'quality': best_quality,
+            'br': entry.get('br', 0) if entry else 0,
+            'size': entry.get('size', 0) if entry else 0,
+        } if entry else {},
         'source': source,
         'api_source': 'musicdl',
         'fee': s.get('fee', 1),

@@ -120,8 +120,8 @@
               </span>
             </td>
             <td class="col-quality">
-              <div v-if="track.bestQuality" class="quality-info">
-                <span class="quality-label">{{ getQualityLabel(track.bestQuality) }}</span>
+              <div v-if="track.matchQuality?.quality" class="quality-info">
+                <span class="quality-label">{{ getQualityLabel(track.matchQuality.quality) }}</span>
                 <span v-if="getQualitySize(track)" class="quality-size">{{ getQualitySize(track) }}</span>
               </div>
             </td>
@@ -257,47 +257,9 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
-// 音质从高到低排序（与后端 quality_config._UNIFIED_QUALITY_PRIORITY 一致）
-const UNIFIED_QUALITY_PRIORITY = [
-  'jymaster', 'jyeffect', 'hires', 'lossless', 'dolby', 'sky', 'exhigh', 'standard'
-]
-
-/**
- * 根据用户请求的音质 + 该歌曲 qualityMap，计算实际能拿到的最高音质
- * 与后端 match_quality 函数保持一致
- */
-const matchQuality = (qualityMap, requested = 'lossless') => {
-  if (!qualityMap) return ''
-  // 1. 精确匹配
-  if (qualityMap[requested]) return requested
-  // 2. 从 requested 往低找
-  const start = UNIFIED_QUALITY_PRIORITY.indexOf(requested)
-  const startIdx = start >= 0 ? start : UNIFIED_QUALITY_PRIORITY.length
-  for (const qk of UNIFIED_QUALITY_PRIORITY.slice(startIdx)) {
-    if (qualityMap[qk]) return qk
-  }
-  // 3. 兜底：qualityMap 中最高音质
-  for (const qk of UNIFIED_QUALITY_PRIORITY) {
-    if (qualityMap[qk]) return qk
-  }
-  return ''
-}
 
 const getQualitySize = (track) => {
-  // 关键：基于用户选中的音质 + qualityMap 算出实际能下的最高音质，再取 size
-  // 避免显示「Hi-Res 25MB」但实际只下到 standard 3.9MB
-  const requested = settings.selectedQuality || 'lossless'
-  const effectiveQuality = matchQuality(track.qualityMap, requested)
-  return effectiveQuality ? formatSize(track.qualityMap?.[effectiveQuality]?.size) : ''
-}
-
-/**
- * 实际能下到的最高音质（按用户请求）
- * 用作显示标签
- */
-const getEffectiveQuality = (track) => {
-  const requested = settings.selectedQuality || 'lossless'
-  return matchQuality(track.qualityMap, requested)
+  return track.matchQuality?.size ? formatSize(track.matchQuality.size) : ''
 }
 
 // 付费标签：仅 2 种 — 免费 / 付费（VIP、专辑、试听 全部归为付费）
@@ -349,7 +311,7 @@ const playTrack = async (track) => {
 
   try {
     const quality = settings.selectedQuality || 'lossless'
-    // 调用方只传 track，qualityMap 内部自动从 track.qualityMap 提取
+    // 调用方只传 track，qualityMap 由 parseMusicInfo 从 matchQuality 构造
     const info = await parseMusicInfo(track, quality)
     if (!info?.url || !info.available) {
       markUnavailable(track)
@@ -396,9 +358,10 @@ const buildDownloadItem = (track, quality = 'lossless') => ({
   artist: track.artists,
   album: track.album,
   source: track.source || '',
-  // 用户请求的音质：用于后端做精准降级（用户请求 lossless，歌曲只有 exhigh → 直接 exhigh）
   quality: quality,
-  qualityMap: track.qualityMap || {},
+  qualityMap: track.matchQuality
+    ? { [track.matchQuality.quality]: { br: track.matchQuality.br, size: track.matchQuality.size } }
+    : {},
 })
 
 const downloadSingle = async (track) => {

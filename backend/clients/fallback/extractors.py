@@ -344,7 +344,7 @@ def _extract_netease_quality_map(raw: dict) -> dict:
 
 
 # 音质从高到低排序
-_QUALITY_ORDER = ['hires', 'jymaster', 'lossless', 'exhigh', 'standard']
+_QUALITY_ORDER = ['jymaster', 'hires', 'lossless', 'exhigh', 'standard']
 
 
 def _best_quality(quality_map: dict) -> str:
@@ -651,7 +651,7 @@ def _parse_size_to_bytes(size_str: str) -> int:
     """解析 '51.58Mb' / '5.23Mb' / '1024kb' 字符串为字节数"""
     if not size_str:
         return 0
-    s = size_str.strip().lower()
+    s = size_str.strip().lower().replace(' ', '')
     try:
         if s.endswith('mb'):
             return int(float(s[:-2]) * 1024 * 1024)
@@ -677,7 +677,8 @@ def _parse_kuwo_minfo(minfo_str: str) -> dict:
     qmap = {}
     for item in minfo_str.split(';'):
         item = item.strip()
-        if not item or item.endswith('Mb') is False and 'bitrate' not in item:
+        item_lower = item.lower()
+        if not item or (not item_lower.endswith('mb') and 'bitrate' not in item):
             continue
         parts = {}
         for kv in item.split(','):
@@ -699,11 +700,12 @@ def _parse_kuwo_minfo(minfo_str: str) -> dict:
         existing = qmap.get(quality_key)
         if existing and existing.get('br', 0) >= bitrate * 1000:
             continue
-        qmap[quality_key] = {
-            'br': bitrate * 1000,  # kbps → bps
-            'size': size,
-            'format': parts.get('format', ''),
-        }
+        if size > 0:
+            qmap[quality_key] = {
+                'br': bitrate * 1000,  # kbps → bps
+                'size': size,
+                'format': parts.get('format', ''),
+            }
     return qmap
 
 

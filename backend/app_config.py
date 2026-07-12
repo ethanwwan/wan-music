@@ -137,8 +137,11 @@ PLATFORM_QUALITY_SUPPORT: Dict[str, Dict[str, Any]] = {
         'note': 'FLAC 用 SQFileHash 命中，MP3 用 FileHash 命中（normalize 已分别存为 id/mp3_hash）',
     },
     'kuwo': {
+        # 搜索 qualityMap 含 jymaster（77%）但唯一 jymaster 源 ccwu 已失效，
+        # 可用源（nxinxz）hires/standard/exhigh 只返 mp3，lossless 返 flac
         'max_quality': 'lossless',
         'fallback_chain': ['lossless', 'exhigh', 'standard'],
+        'note': '搜索 qualityMap 含 jymaster 但无可用源，实际最高=lossless',
     },
 }
 

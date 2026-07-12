@@ -83,7 +83,7 @@ def check_song(song: dict, platform: str) -> list[str]:
     issues = []
 
     fields = [('id', str), ('name', str), ('artist', str),
-              ('qualityMap', dict), ('bestQuality', str), ('source', str)]
+              ('matchQuality', dict), ('source', str)]
     for field, ftype in fields:
         val = song.get(field)
         if val is None or (ftype == str and val == ''):
@@ -92,17 +92,14 @@ def check_song(song: dict, platform: str) -> list[str]:
     if song.get('source') != platform:
         issues.append(f'source 不一致(期望={platform}, 实际={song.get("source")})')
 
-    qm = song.get('qualityMap', {})
-    if not qm:
-        issues.append('qualityMap 为空')
+    mq = song.get('matchQuality') or {}
+    if not mq.get('quality'):
+        issues.append('matchQuality.quality 为空')
     else:
-        for q, info in qm.items():
-            if not isinstance(info, dict):
-                issues.append(f'qualityMap[{q}] 不是 dict')
-                break
-            if 'br' not in info:
-                issues.append(f'qualityMap[{q}] 缺少 br')
-                break
+        if 'br' not in mq:
+            issues.append('matchQuality 缺少 br')
+        if 'size' not in mq:
+            issues.append('matchQuality 缺少 size')
 
     return issues
 
@@ -114,8 +111,8 @@ def print_songs(songs: list[dict], platform: str, label: str):
         return
     print(f'    {label}: {len(songs)} 条结果')
     for i, s in enumerate(songs[:3]):
-        q_keys = list(s.get('qualityMap', {}).keys())
-        q_str = ', '.join(q_keys) if q_keys else '无'
+        mq = s.get('matchQuality') or {}
+        q_str = mq.get('quality', '无')
         artist = s.get('artist', '?') or '?'
         print(f'      [{i+1}] {s.get("name","?"):16s} - {artist:12s}  [{q_str}]')
     if len(songs) > 3:
@@ -255,8 +252,8 @@ def run_tests(platform: str, keyword: str, verbose: bool = False) -> tuple[int, 
         songs = result.get('songs', [])
         if songs:
             for i, s in enumerate(songs[:3]):
-                q_keys = list(s.get('qualityMap', {}).keys())
-                q_str = ', '.join(q_keys) if q_keys else '无'
+                mq = s.get('matchQuality') or {}
+                q_str = mq.get('quality', '无')
                 artist = s.get('artist', '?') or '?'
                 print(f'        [{i+1}] {s.get("name","?"):16s} - {artist:12s}  [{q_str}]')
             if len(songs) > 3:

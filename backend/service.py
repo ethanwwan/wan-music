@@ -146,13 +146,13 @@ class MusicService:
                     'warnings': [],
                 }
             # 关键词搜索
-            songs = musicdl_adapter.search(keyword, platform or 'netease', limit)
+            songs = musicdl_adapter.search(keyword, platform or 'netease', limit, quality=quality)
             return {'data': songs, 'type': 'song', 'search_source': 'musicdl', 'warnings': []}
 
         parsed = parse_url(keyword)
         if parsed:
             return self._resolve_from_url(parsed)
-        return self._search_by_keyword(keyword, platform, limit)
+        return self._search_by_keyword(keyword, platform, limit, quality=quality)
 
     def get_song_info(self, song_id, quality: str = 'lossless',
                       platform: str = None,
@@ -236,10 +236,11 @@ class MusicService:
             'warnings': [],
         }
 
-    def _search_by_keyword(self, keyword: str, platform: str, limit: int) -> Dict[str, Any]:
+    def _search_by_keyword(self, keyword: str, platform: str, limit: int,
+                           quality: str = 'lossless') -> Dict[str, Any]:
         """关键字搜索歌曲"""
         try:
-            result = search_music(keyword, platform, limit)
+            result = search_music(keyword, platform, limit, quality=quality)
             # music_client.search() 返回 {'data': [...], 'search_source': 'xxx'}
             songs = result.get('data', []) if isinstance(result, dict) else result
             search_source = result.get('search_source', '') if isinstance(result, dict) else ''
