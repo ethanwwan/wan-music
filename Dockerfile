@@ -31,10 +31,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     FLASK_APP=main.py
 
-# 安装系统依赖（仅 curl 用于健康检查 + gcc 用于构建 mutagen 等含 C 扩展的包）
+# 安装系统依赖（curl 用于健康检查 + gcc 用于编译含 C 扩展的 pip 包 + gosu 用于 entrypoint 降权）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         gcc \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户
@@ -61,7 +62,11 @@ COPY --from=frontend-builder /app/frontend/dist/favicon.svg ./static/favicon.svg
 # 创建运行时目录（cookie 持久化、日志输出）
 RUN mkdir -p /app/cookie /app/logs && chown -R wanmusic:wanmusic /app
 
-USER wanmusic
+# entrypoint 以 root 启动 → 修复 volume 权限 → 降权到 wanmusic → exec CMD
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # EXPOSE 不指定固定端口（gunicorn.conf.py 在启动时解析实际端口）
 EXPOSE 6005
