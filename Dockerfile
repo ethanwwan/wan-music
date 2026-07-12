@@ -38,8 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建非 root 用户
-RUN groupadd -r wanmusic && useradd -r -g wanmusic wanmusic
+# 创建非 root 用户（-m 创建 home 目录，muciddl user_log_dir 需要它）
+RUN groupadd -r wanmusic && useradd -rm -g wanmusic wanmusic
 
 WORKDIR /app
 
