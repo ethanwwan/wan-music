@@ -8,6 +8,7 @@
 - 私有方法：仅服务内部使用，前缀 `_`
 - 客户端调用：直接调 `clients.music_client` 提供的函数，不再额外包装
 """
+import json
 import logging
 import os
 import tempfile
@@ -348,9 +349,111 @@ class BatchDownloadService:
         '.wav': 'audio/wav',
     }
 
+    # 持久化目录（跨 gunicorn worker 共享）
+    _TASKS_DIR = '/app/logs/batch_tasks'
+
     def __init__(self):
         self._tasks: dict[str, dict] = {}
         self._lock = threading.Lock()
+        self._ensure_store_dir()
+        self._load_existing_tasks()
+
+    # ==================== 磁盘持久化（跨 worker 共享任务状态） ====================
+
+    def _ensure_store_dir(self):
+        try:
+            os.makedirs(self._TASKS_DIR, exist_ok=True)
+        except Exception as e:
+            logger.warning(f'无法创建任务持久化目录 {self._TASKS_DIR}: {e}')
+
+    def _task_path(self, task_id: str) -> str:
+        return os.path.join(self._TASKS_DIR, f'{task_id}.json')
+
+    def _save_to_disk(self, task_id: str, task: dict):
+        path = self._task_path(task_id)
+        try:
+            tmp = path + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(task, f, ensure_ascii=False, default=str)
+            os.replace(tmp, path)
+        except Exception as e:
+            logger.warning(f'保存任务 {task_id} 到磁盘失败: {e}')
+
+    def _delete_from_disk(self, task_id: str):
+        path = self._task_path(task_id)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            logger.warning(f'删除任务 {task_id} 磁盘文件失败: {e}')
+
+    def _load_existing_tasks(self):
+        try:
+            if not os.path.isdir(self._TASKS_DIR):
+                return
+            now = time.time()
+            for name in os.listdir(self._TASKS_DIR):
+                if not name.endswith('.json'):
+                    continue
+                task_id = name[:-5]
+                path = self._task_path(task_id)
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        task = json.load(f)
+                    if task_id not in self._tasks:
+                        # 容器重启后，running 状态的任务已丢失后台线程
+                        if task.get('status') == 'running' and now - task.get('created_at', 0) > 300:
+                            task['status'] = 'error'
+                            task['error'] = '任务中断（服务重启）'
+                            self._save_to_disk(task_id, task)
+                        self._tasks[task_id] = task
+                except Exception as e:
+                    logger.warning(f'加载任务 {task_id} 失败: {e}')
+        except Exception as e:
+            logger.warning(f'加载已有任务失败: {e}')
+
+    def _disk_task_ids(self) -> set:
+        try:
+            if not os.path.isdir(self._TASKS_DIR):
+                return set()
+            return {
+                name[:-5] for name in os.listdir(self._TASKS_DIR)
+                if name.endswith('.json')
+            }
+        except Exception:
+            return set()
+
+    def _get_task(self, task_id: str) -> dict | None:
+        with self._lock:
+            task = self._tasks.get(task_id)
+        if task is not None:
+            return task
+        path = self._task_path(task_id)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                task = json.load(f)
+            with self._lock:
+                self._tasks[task_id] = task
+            return task
+        except (FileNotFoundError, json.JSONDecodeError):
+            return None
+        except Exception as e:
+            logger.warning(f'读取任务 {task_id} 失败: {e}')
+            return None
+
+    def _all_tasks(self) -> list[tuple[str, dict]]:
+        seen = set()
+        result = []
+        with self._lock:
+            for tid, t in self._tasks.items():
+                seen.add(tid)
+                result.append((tid, t))
+        for tid in self._disk_task_ids():
+            if tid not in seen:
+                t = self._get_task(tid)
+                if t is not None:
+                    result.append((tid, t))
+        return result
 
     # ==================== 公开 API（路由直接调用） ====================
 
@@ -405,6 +508,7 @@ class BatchDownloadService:
                 'file_size': 0,                # 前端实时累加 done 歌曲的 file_size
                 'songs': initial_songs,        # per-song 状态数组
             }
+            self._save_to_disk(task_id, self._tasks[task_id])
 
         thread = threading.Thread(
             target=self._run_batch_task,
@@ -421,8 +525,7 @@ class BatchDownloadService:
 
     def get_list(self) -> list:
         """列出所有任务（按创建时间倒序），对外暴露的字典"""
-        with self._lock:
-            items = [self._task_to_dict(tid, t) for tid, t in self._tasks.items()]
+        items = [self._task_to_dict(tid, t) for tid, t in self._all_tasks()]
         items.sort(key=lambda x: x.get('created_at', 0), reverse=True)
         return items
 
@@ -450,6 +553,8 @@ class BatchDownloadService:
         if status == 'running':
             time.sleep(0.3)
 
+        self._delete_from_disk(task_id)
+
         with self._lock:
             self._tasks.pop(task_id, None)
 
@@ -457,8 +562,7 @@ class BatchDownloadService:
 
     def get_state(self, task_id: str):
         """获取当前任务状态（SSE 轮询用），返回 None 表示任务不存在"""
-        with self._lock:
-            task = self._tasks.get(task_id)
+        task = self._get_task(task_id)
         if not task:
             return None
         return {
@@ -478,8 +582,7 @@ class BatchDownloadService:
 
         返回：{status, path, name, is_single, mime_type} 或 None
         """
-        with self._lock:
-            task = self._tasks.get(task_id)
+        task = self._get_task(task_id)
         if not task:
             return None
         is_single = task.get('single_file', False)
@@ -500,6 +603,7 @@ class BatchDownloadService:
 
     def cleanup(self, task_id: str):
         """下载完成后清理：移除任务 + 删除文件"""
+        self._delete_from_disk(task_id)
         with self._lock:
             t = self._tasks.pop(task_id, None)
         if t:
@@ -533,10 +637,14 @@ class BatchDownloadService:
             task = self._tasks.get(task_id)
             if not task:
                 return
+            saved = False
             for s in task.get('songs', []):
                 if s.get('id') == song_id:
                     s.update(updates)
+                    saved = True
                     break
+            if saved:
+                self._save_to_disk(task_id, task)
 
     def _process_song(self, item: dict, settings: dict, task_id: str = None):
         """处理单首歌曲：下载音频 + 写 metadata + 返回结果
@@ -827,11 +935,13 @@ class BatchDownloadService:
                     task['completed'] = len(completed_results)
                     task['failed'] = len(failed_items)
                     task['current'] = item.get('name', '')
+                    self._save_to_disk(task_id, task)
 
         # 检查是否被取消
         with self._lock:
             if task.get('cancelled'):
                 task['status'] = 'cancelled'
+                self._save_to_disk(task_id, task)
                 for r in completed_results:
                     _safe_remove(r.get('tmp_path', ''))
                 return
@@ -849,6 +959,7 @@ class BatchDownloadService:
                     task['single_file'] = True
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
+                    self._save_to_disk(task_id, task)
             else:
                 fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='wan-music-batch-')
                 os.close(fd)
@@ -862,15 +973,10 @@ class BatchDownloadService:
                     task['zip_path'] = zip_path
                     task['errors'] = failed_items
                     task['completed_at'] = time.time()
+                    self._save_to_disk(task_id, task)
 
-            # 启动延迟清理（TASK_TTL 秒未下载则清理）
-            def _cleanup_task():
-                with self._lock:
-                    t = self._tasks.pop(task_id, None)
-                if t:
-                    _safe_remove(t.get('zip_path', ''))
-
-            timer = threading.Timer(self.TASK_TTL, _cleanup_task)
+            # 启动延迟清理（TASK_TTL 秒后自动删除任务和文件）
+            timer = threading.Timer(self.TASK_TTL, self.cleanup, args=[task_id])
             timer.daemon = True
             timer.start()
         except Exception as e:
@@ -880,6 +986,7 @@ class BatchDownloadService:
             with self._lock:
                 task['status'] = 'error'
                 task['error'] = str(e)
+                self._save_to_disk(task_id, task)
 
 
 batch_download_service = BatchDownloadService()

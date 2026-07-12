@@ -59,8 +59,8 @@ COPY --from=frontend-builder /app/frontend/dist/index.html ./templates/index.htm
 COPY --from=frontend-builder /app/frontend/dist/assets ./static/assets
 COPY --from=frontend-builder /app/frontend/dist/favicon.svg ./static/favicon.svg
 
-# 创建运行时目录（cookie 持久化、日志输出）
-RUN mkdir -p /app/cookie /app/logs && chown -R wanmusic:wanmusic /app
+# 创建运行时目录（cookie 持久化、日志输出、批量下载任务状态）
+RUN mkdir -p /app/cookie /app/logs /app/logs/batch_tasks && chown -R wanmusic:wanmusic /app
 
 # entrypoint 以 root 启动 → 修复 volume 权限 → 降权到 wanmusic → exec CMD
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
