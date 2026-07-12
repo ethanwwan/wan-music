@@ -482,6 +482,20 @@ class FallbackChain:
                             f'[{self.platform}.{op}] ⚠️ {source.name} URL 不可用: {data[:80]}'
                         )
                         continue
+                    # URL 音质验证：请求 flac 音质但源返 mp3 → 跳过，等下一个源
+                    if user_quality and user_quality in ('lossless', 'hires', 'jymaster', 'jyeffect', 'sky', 'dolby', 'jysurround'):
+                        from urllib.parse import urlparse
+                        _path = urlparse(data).path
+                        _ext = _path.split('.')[-1].lower() if '.' in _path else ''
+                        if _ext and _ext in ('mp3',):
+                            source._stats['fail'] += 1
+                            source._stats['last_error'] = f'请求 {user_quality} 但返 {_ext}'
+                            source._stats['total_ms'] += elapsed_ms
+                            logger.info(
+                                f'[{self.platform}.{op}] ⚠️ {source.name} '
+                                f'请求 {user_quality} 但返 .{_ext}，跳过等下一个源: {data[:80]}'
+                            )
+                            continue
 
                 # 成功：立即返回
                 source._stats['ok'] += 1
