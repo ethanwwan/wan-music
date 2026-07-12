@@ -439,6 +439,11 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
       }
       const wrapper = await safeJson(response)
       // 后端包装层：{ success, message, data: {status, total, ...} }
+      // 任务不存在时后端返回 { success: false, message: '...', code: 404 }，data 为 undefined
+      if (!wrapper?.success) {
+        onError?.(new Error(wrapper?.message || '任务不存在'))
+        return close()
+      }
       const data = wrapper?.data || wrapper
       consecutiveErrors = 0   // 成功后重置错误计数
       if (data.error) { onError?.(new Error(data.error)); return close() }

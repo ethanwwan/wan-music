@@ -466,6 +466,13 @@ class BatchDownloadService:
         if not items:
             raise ValueError("缺少 items 参数")
 
+        # 将 settings.selectedQuality 传播到每个 item（如果 item 自身没有 quality）
+        settings_quality = settings.get('selectedQuality', '')
+        if settings_quality:
+            for item in items:
+                if not item.get('quality'):
+                    item['quality'] = settings_quality
+
         task_id = f"task_{uuid.uuid4().hex[:16]}"
 
         # 初始化每首歌曲的状态：pending
