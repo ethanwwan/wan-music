@@ -196,6 +196,36 @@ def _resolve_song_url(raw: dict, song_id: str, source: str, quality: str = 'loss
         except Exception:
             _log.warning(f'resolve_song_url: 无法加载 {_conf[0]}.{_conf[1] or ""}，不截断')
 
+    # 低音质请求：截断音质列表让 musicdl 只尝试对应档位
+    # ★ 必须在 _parsewiththirdpartapis 之前截断，否则 thirdpartapis 可能返回
+    # 一个不在截断列表中的 quality（如 jymaster），后续 officialapiv1 的
+    # MUSIC_QUALITIES.index() 会因找不到该 quality 而抛 ValueError、
+    # 被 suppress 吞掉 → 最终返回 standard mp3
+    _ql = None
+    _ql_snapshot = None
+    _ql_is_tuple = False
+    if _truncate_idx is not None and _quality_container is not None:
+        _ql = getattr(_quality_container, _conf[2], None)
+        if _ql is not None:
+            import enum
+            if isinstance(_ql, enum.Enum):
+                _ql_snapshot = list(_ql.value)
+                _ql.value[:] = _ql.value[_truncate_idx:]
+            elif isinstance(_ql, tuple):
+                _ql_is_tuple = True
+                _ql_snapshot = _ql
+                setattr(_quality_container, _conf[2], _ql[_truncate_idx:])
+                _src_mod_map = {'kugou': 'musicdl.modules.sources.kugou'}
+                _src_path = _src_mod_map.get(source)
+                if _src_path:
+                    try:
+                        setattr(importlib.import_module(_src_path), _conf[2], _ql[_truncate_idx:])
+                    except Exception:
+                        pass
+            else:
+                _ql_snapshot = list(_ql)
+                _ql[:] = _ql[_truncate_idx:]
+
     try:
         with contextlib.redirect_stdout(sys.stderr):
             platform_client._initsession()
@@ -204,37 +234,6 @@ def _resolve_song_url(raw: dict, song_id: str, source: str, quality: str = 'loss
                 search_result=raw_search,
                 request_overrides=request_overrides,
             )
-
-            # 低音质请求：丢弃第三方 API 结果 + 截断音质列表让 musicdl 只尝试对应档位
-            _ql = None
-            _ql_snapshot = None
-            _ql_is_tuple = False
-            if _truncate_idx is not None and _quality_container is not None:
-                _ql = getattr(_quality_container, _conf[2], None)
-                if _ql is not None:
-                    import enum
-                    if isinstance(_ql, enum.Enum):
-                        # QQ: SORTED_QUALITIES 是 enum 成员，通过 .value 获取底层列表
-                        _ql_snapshot = list(_ql.value)
-                        _ql.value[:] = _ql.value[_truncate_idx:]
-                    elif isinstance(_ql, tuple):
-                        _ql_is_tuple = True
-                        _ql_snapshot = _ql
-                        setattr(_quality_container, _conf[2], _ql[_truncate_idx:])
-                        # 某些平台（如 kugou）的 _parsewithofficialapiv1 通过
-                        # from ... import 本地引用，setattr 对定义模块不生效，
-                        # 需直接修补源模块的全局变量
-                        _src_mod_map = {'kugou': 'musicdl.modules.sources.kugou'}
-                        _src_path = _src_mod_map.get(source)
-                        if _src_path:
-                            try:
-                                setattr(importlib.import_module(_src_path), _conf[2], _ql[_truncate_idx:])
-                            except Exception:
-                                pass
-                    else:
-                        _ql_snapshot = list(_ql)
-                        _ql[:] = _ql[_truncate_idx:]
-                song_info = None
 
             try:
                 song_info = platform_client._parsewithofficialapiv1(
