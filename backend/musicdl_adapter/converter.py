@@ -84,6 +84,13 @@ def musicdl_to_song_info(s: dict, source: str, level: str = 'lossless') -> dict:
     download_url = s.get('download_url', '') or ''
     lyric = s.get('lyric', '') or ''
 
+    # 从实际 URL 扩展名修正 ext（部分源声明 flac 但实际返 mp3）
+    if download_url:
+        from urllib.parse import urlparse
+        _url_ext = urlparse(download_url).path.split('.')[-1].lower() if '.' in urlparse(download_url).path else ''
+        if _url_ext in ('mp3', 'm4a', 'ogg', 'opus') and ext in ('flac', 'ape', 'wav'):
+            ext = _url_ext
+
     quality_map = _build_quality_map(ext, file_size_bytes, bitrate)
     actual_level = _detect_level(ext, quality_map, level)
 
