@@ -349,8 +349,8 @@ class BatchDownloadService:
         '.wav': 'audio/wav',
     }
 
-    # 持久化目录（跨 gunicorn worker 共享）
-    _TASKS_DIR = '/app/logs/batch_tasks'
+    # 持久化目录（跨 gunicorn worker 共享），可通过环境变量 TASKS_DIR 覆盖
+    _TASKS_DIR = os.environ.get('TASKS_DIR', '/app/logs/batch_tasks')
 
     def __init__(self):
         self._tasks: dict[str, dict] = {}
