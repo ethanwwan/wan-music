@@ -130,10 +130,23 @@ class NeteaseClient(BaseMusicClient):
             }
             info_src_name = 'unknown'
 
+        # 从 URL 推断实际音质（避免源返回 .mp3 却标记 lossless）
+        actual_level = quality
+        if url:
+            url_lower = url.lower()
+            for ext, max_q in [('.mp3', 'exhigh'), ('.m4a', 'exhigh'),
+                                ('.ogg', 'exhigh'), ('.opus', 'exhigh'),
+                                ('.ape', 'lossless'), ('.wav', 'lossless')]:
+                if ext in url_lower:
+                    from .fallback.chain import _quality_rank
+                    if _quality_rank(quality) > _quality_rank(max_q):
+                        actual_level = max_q
+                    break
+
         return {
             **base,
             'url': url,
-            'level': quality,
+            'level': actual_level,
             'lyric': lyric or '',
             'source': self.platform_id,
             'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},

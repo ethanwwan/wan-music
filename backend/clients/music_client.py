@@ -419,30 +419,41 @@ class MusicClient:
                     if ext in url_lower:
                         result['file_ext'] = ext.lstrip('.')
                         break
-                if try_quality != quality:
-                    result['requested_quality'] = quality
-                    # 区分升级/降级（用音质 rank 比较）
-                    from .fallback.chain import _quality_rank
-                    actual_rank = _quality_rank(try_quality)
-                    requested_rank = _quality_rank(quality)
-                    if actual_rank < requested_rank:
-                        # 实际音质低于请求音质 → 真降级
-                        result['level_fallback'] = True
-                        result['level_upgrade'] = False
-                        logger.info(
-                            f"音质降级: {platform}/{song_id_str} "
-                            f"{quality} → {try_quality}"
-                        )
-                    else:
-                        # 实际音质高于请求音质 → 升级（数据源给得比请求更好）
-                        result['level_fallback'] = False
-                        result['level_upgrade'] = True
-                        logger.info(
-                            f"音质升级: {platform}/{song_id_str} "
-                            f"{quality} → {try_quality} (数据源给得更好)"
-                        )
+                # 根据 URL 文件扩展名修正实际音质（部分源返的 level 名不副实）
+                from .fallback.chain import _quality_rank as _qr
+                _file_ext = result.get('file_ext', '')
+                if _file_ext:
+                    _EXT_MAX_QUALITY = {
+                        '.mp3': 'exhigh', '.m4a': 'exhigh', '.ogg': 'exhigh', '.opus': 'exhigh',
+                        '.ape': 'lossless', '.wav': 'lossless',
+                    }
+                    _max_q = _EXT_MAX_QUALITY.get('.' + _file_ext)
+                    if _max_q and _qr(actual_level) > _qr(_max_q):
+                        actual_level = _max_q
+                        result['level'] = actual_level
+                        level_cfg = QUALITY_LEVELS.get(actual_level) or {}
+                        result['level_name'] = level_cfg.get('label', actual_level)
+                        result['level_format'] = level_cfg.get('description', '')
+                # 最终音质 vs 请求音质 → 标记升级/降级
+                result['requested_quality'] = quality
+                actual_rank = _qr(actual_level)
+                requested_rank = _qr(quality)
+                if actual_rank < requested_rank:
+                    result['level_fallback'] = True
+                    result['level_upgrade'] = False
+                    logger.info(
+                        f"音质降级: {platform}/{song_id_str} "
+                        f"{quality} → {actual_level} (URL 检测)"
+                    )
+                elif actual_rank > requested_rank:
+                    result['level_fallback'] = False
+                    result['level_upgrade'] = True
+                    logger.info(
+                        f"音质升级: {platform}/{song_id_str} "
+                        f"{quality} → {actual_level} (数据源给得更好)"
+                    )
                 # ★ 精简 qualityMap：前端只关心"请求音质 + 实际音质"两项
-                _prune_quality_map(result, quality, try_quality)
+                _prune_quality_map(result, quality, actual_level)
                 return result
             last_result = result
 
