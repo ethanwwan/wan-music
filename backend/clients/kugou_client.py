@@ -5,8 +5,6 @@
 由 kugou_official_lyric (P=0) source 自动处理。
 """
 import logging
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -57,7 +55,7 @@ class KugouClient(BaseMusicClient):
                  with_lyric: bool = True, preferred_source: str = '',
                  quality_map: dict = None,
                  _cached_info: dict = None) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息（酷狗用 hash 标识）
+        """一次性获取歌曲完整信息（酷狗用 hash 标识，使用基类模板方法）
 
         跨源一致性策略：
         - 若传入了 _cached_info（来自 search 阶段 song_info_cache），
@@ -66,112 +64,72 @@ class KugouClient(BaseMusicClient):
         - 若 _cached_info 缺失（URL 解析/歌单导入等无 search 上下文），
           回退到 parse_info_chain 兜底拿 info
 
+        酷狗特殊处理：
+        1. URL 参数用 `hash` 而非 `song_id`
+        2. Info 参数同样用 `hash`
+        3. Lyric 需要 `duration_ms` 参数（来自 cached_info.duration）
+
         Args:
             preferred_source: 来自 search 的源名，传下去给 url/info/lyric 链优先使用
             quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
             _cached_info: search 阶段缓存的完整 song info
         """
-        quality = self._normalize_quality(quality)
-        song_id_str = str(song_id)
-
         # 关键：酷狗的 lossless 用 SQ hash（FLAC），exhigh/standard 用 FileHash（MP3）
-        # song_id_str 是 normalize 后的 primary_hash（已优先用 SQFileHash）
+        # song_id 是 normalize 后的 primary_hash（已优先用 SQFileHash）
         # 但 exhigh/standard 时需要切到 mp3_hash（如果有的话）
         # 调用方在调用 get_song 时通常传入的是搜索结果的 id
         # 这里从传入的 id 中判断：
         # 简化处理：直接用传入的 id（已在 normalize 时选择过）
-        parse_hash = song_id_str
-        url_kwargs = dict(hash=parse_hash, quality=quality,
-                          preferred_source=preferred_source, quality_map=quality_map or {})
+        parse_hash = str(song_id)
 
-        # ★ 关键：用 shutdown(wait=False) 替代 `with ThreadPoolExecutor`
-        # 旧版会等最慢的链（url）完成才返回。新版 url/info 抢答，谁先到用谁。
-        # 注：kugou 的 lyric 链依赖 info 的 duration，所以 lyric 放在 info 之后串行调用。
-        # parse_info_chain 仅在 _cached_info 缺失时才跑（兜底）
-        t_start = time.time()
-        use_info_fallback = not _cached_info
-        max_workers = 2 if use_info_fallback else 1
-        pool = ThreadPoolExecutor(max_workers=max_workers)
-        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', **url_kwargs)
-        f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                              hash=parse_hash, preferred_source=preferred_source)
-                  if use_info_fallback else None)
-        pool.shutdown(wait=False)
-
-        url, url_src = '', None
-        info, info_src = None, None
-        deadline = t_start + 6.5
-        futures = [f for f in (f_url, f_info) if f is not None]
-        try:
-            for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
-                try:
-                    data, src = fut.result()
-                except Exception as e:
-                    logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
-                    continue
-                if fut is f_url:
-                    url, url_src = data, src
-                elif fut is f_info:
-                    info, info_src = data, src
-                # url 拿到就退出（info 后台继续跑；cached_info 视为 info 已就绪）
-                if url and url.startswith('http') and (info or _cached_info):
-                    break
-        except TimeoutError:
-            logger.warning(f'[{self.platform_id}] {"2" if use_info_fallback else "1"} 链并行抢答超时')
-            pass
-
-        if not url or not url.startswith('http'):
-            return None
-
-        # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
-        if _cached_info and _cached_info.get('name'):
-            base = normalize_kugou_song(_cached_info)
-            info_src_name = _cached_info.get('_search_source', 'cached')
-        elif info and info.get('name'):
-            base = normalize_kugou_song(info)
-            info_src_name = info_src
-        else:
-            base = {
-                'id': song_id_str,
-                'name': '',
-                'artists': '',
-                'album': '',
-                'picUrl': '',
-                'duration': 0,
-            }
-            info_src_name = 'unknown'
-
-        # 歌词链（酷狗官方两步：krcs.search + lyrics.download KRC 解密）
-        # 必须用 info.duration（ms）当 search 的 duration 参数，所以 lyric 在 info 后再调
-        # ★ duration 来自 base（_cached_info 优先），保证歌词版本和 audio 一致
-        # ★ same_source=url_src：让 lyric 链优先用 url 选中的源，避免跨源版本错配
-        lyric = ''
-        lyric_src = None
-        if with_lyric:
+        # 缓存中提取 duration（毫秒）用于歌词链
+        cached_duration_ms = 0
+        if _cached_info:
             try:
-                duration_ms = int(base.get('duration') or 0)
-                lyric, lyric_src = self.parse_lyric_chain.try_fetch(
-                    'parse_lyric', song_id=parse_hash, duration=duration_ms,
-                    preferred_source=preferred_source,
-                    same_source=url_src or '',
-                )
-            except Exception as e:
-                logger.warning(f'[kugou.get_song] 取歌词失败: {e}')
+                cached_duration_ms = int(_cached_info.get('duration') or 0)
+            except (TypeError, ValueError):
+                cached_duration_ms = 0
 
-        logger.info(
-            f'[{self.platform_id}] /song 同源抢答: '
-            f'url={url_src} lyric={lyric_src} info={info_src or "cached"} '
-            f'耗时={time.time()-t_start:.2f}s'
+        def build_url_params(song_id_str, quality, preferred_source, quality_map):
+            return {
+                'hash': song_id_str,
+                'quality': quality,
+                'preferred_source': preferred_source,
+                'quality_map': quality_map or {},
+            }
+
+        def build_lyric_params(song_id_str, preferred_source, url_src):
+            # 酷狗官方两步：krcs.search + lyrics.download KRC 解密
+            # 需要 duration_ms（来自 cached_info 或 info）作为 search 参数
+            return {
+                'song_id': song_id_str,
+                'duration': cached_duration_ms,
+                'preferred_source': preferred_source,
+            }
+
+        result = self._get_song_template(
+            song_id=parse_hash,
+            quality=quality,
+            with_lyric=with_lyric,
+            preferred_source=preferred_source,
+            quality_map=quality_map,
+            _cached_info=_cached_info,
+            url_chain=self.parse_url_chain,
+            lyric_chain=self.parse_lyric_chain,
+            info_chain=self.parse_info_chain,
+            normalize_func=normalize_kugou_song,
+            url_params_builder=build_url_params,
+            lyric_params_builder=build_lyric_params,
+            url_deadline_seconds=6.5,
         )
 
-        return {
-            **base,
-            'url': url,
-            'level': quality,                  # 前端用 'level' 字段
-            'lyric': lyric or '',
-            'source': self.platform_id,
-            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},
-        }
+        # 酷狗特殊处理：info_chain 用 hash 参数而非 song_id
+        # 由于模板方法内 _build_info_params 走基类默认实现，已正确处理 hash 命名
+        return result
+
+    def _build_info_params(self, song_id_str: str, preferred_source: str) -> dict:
+        """覆盖基类实现：酷狗 info_chain 使用 hash 参数"""
+        return {'hash': song_id_str, 'preferred_source': preferred_source}
 
     def get_health(self) -> dict:
         return {

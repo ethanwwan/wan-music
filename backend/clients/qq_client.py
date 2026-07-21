@@ -3,8 +3,6 @@
 QQ 鉴权复杂，主要依赖第三方解析 API。
 """
 import logging
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Optional
 
 from .base_client import BaseMusicClient
@@ -84,7 +82,7 @@ class QQClient(BaseMusicClient):
                  with_lyric: bool = True, preferred_source: str = '',
                  quality_map: dict = None,
                  _cached_info: dict = None) -> Optional[Dict[str, Any]]:
-        """一次性获取歌曲完整信息
+        """一次性获取歌曲完整信息（使用基类模板方法）
 
         跨源一致性策略：
         - 若传入了 _cached_info（来自 search 阶段 song_info_cache），
@@ -97,6 +95,8 @@ class QQClient(BaseMusicClient):
         - 先抢答 url，**成功后立刻用 url 选中的源**抢答 lyric
         - 避免 url 来自 A 源、lyric 来自 B 源导致的"音频/歌词版本错配"
 
+        QQ 特殊处理：从 URL 推断实际音质（QQ CDN URL 前缀能精确识别 FLAC/MP3）
+
         Args:
             preferred_source: 来自 search 链的源名（如 'qq_official_search'），
                 传下去给 url/lyric 链优先使用（避免跨源不一致）
@@ -104,90 +104,42 @@ class QQClient(BaseMusicClient):
                 用于 URL 链 size 验证
             _cached_info: search 阶段缓存的完整 song info
         """
-        quality = self._normalize_quality(quality)
-        song_id_str = str(song_id)
-        url_kwargs = dict(song_id=song_id_str, quality=quality,
-                          preferred_source=preferred_source, quality_map=quality_map or {})
 
-        # ★ 关键：先抢答 url，**先不并行 lyric**
-        t_start = time.time()
-        use_info_fallback = not _cached_info
-        max_workers = 2 if use_info_fallback else 1
-        pool = ThreadPoolExecutor(max_workers=max_workers)
-        f_url = pool.submit(self.parse_url_chain.try_fetch, 'parse_url', cookies=self.cookies, **url_kwargs)
-        f_info = (pool.submit(self.parse_info_chain.try_fetch, 'parse_info',
-                              song_id=song_id_str, preferred_source=preferred_source)
-                  if use_info_fallback else None)
-        pool.shutdown(wait=False)
+        def build_url_params(song_id_str, quality, preferred_source, quality_map):
+            return {
+                'song_id': song_id_str,
+                'quality': quality,
+                'preferred_source': preferred_source,
+                'quality_map': quality_map or {},
+            }
 
-        url, url_src = '', None
-        info, info_src = None, None
-        deadline = t_start + 5.0
-        futures = [f for f in (f_url, f_info) if f is not None]
-        try:
-            for fut in as_completed(futures, timeout=max(0.1, deadline - time.time())):
-                try:
-                    data, src = fut.result()
-                except Exception as e:
-                    logger.warning(f'[{self.platform_id}] 单链 future 异常: {e}')
-                    continue
-                if fut is f_url:
-                    url, url_src = data, src
-                elif fut is f_info:
-                    info, info_src = data, src
-                if url and url.startswith('http') and (info or _cached_info):
-                    break
-        except TimeoutError:
-            logger.warning(f'[{self.platform_id}] {"2" if use_info_fallback else "1"} 链 url 抢答超时')
-            pass
+        def build_lyric_params(song_id_str, preferred_source, url_src):
+            return {
+                'song_id': song_id_str,
+                'preferred_source': preferred_source,
+            }
 
-        if not url or not url.startswith('http'):
-            return None
-
-        # ★ 关键：lyric 抢答 — 传 same_source 让 lyric 链优先用 url 选中的源
-        lyric, lyric_src = '', None
-        if with_lyric:
-            lyric_kwargs = dict(song_id=song_id_str,
-                                preferred_source=preferred_source,
-                                same_source=url_src or '',
-                                cookies=self.cookies)
-            try:
-                lyric, lyric_src = self.parse_lyric_chain.try_fetch('parse_lyric', **lyric_kwargs)
-            except Exception as e:
-                logger.warning(f'[{self.platform_id}] lyric 抢答异常: {e}')
-
-        logger.info(
-            f'[{self.platform_id}] /song 同源抢答: '
-            f'url={url_src} lyric={lyric_src} info={info_src or "cached"} '
-            f'耗时={time.time()-t_start:.2f}s'
+        result = self._get_song_template(
+            song_id=song_id,
+            quality=quality,
+            with_lyric=with_lyric,
+            preferred_source=preferred_source,
+            quality_map=quality_map,
+            _cached_info=_cached_info,
+            url_chain=self.parse_url_chain,
+            lyric_chain=self.parse_lyric_chain,
+            info_chain=self.parse_info_chain,
+            normalize_func=normalize_qq_song,
+            url_params_builder=build_url_params,
+            lyric_params_builder=build_lyric_params,
+            url_deadline_seconds=5.0,
         )
 
-        # ★ 关键：info 拼接优先级 _cached_info > parse_info_chain
-        if _cached_info and _cached_info.get('name'):
-            base = normalize_qq_song(_cached_info)
-            info_src_name = _cached_info.get('_search_source', 'cached')
-        elif info and info.get('name'):
-            base = normalize_qq_song(info)
-            info_src_name = info_src
-        else:
-            base = {
-                'id': song_id_str,
-                'name': '',
-                'artists': '',
-                'album': '',
-                'picUrl': '',
-                'duration': 0,
-            }
-            info_src_name = 'unknown'
+        # QQ 特殊处理：从 CDN URL 前缀推断实际音质（覆盖模板默认的 level=quality）
+        if result and result.get('url'):
+            result['level'] = _detect_actual_quality_from_url(result['url'], quality)
 
-        return {
-            **base,
-            'url': url,
-            'level': _detect_actual_quality_from_url(url, quality),  # 从 URL 推断实际音质
-            'lyric': lyric or '',
-            'source': self.platform_id,
-            'api_source': {'url': url_src, 'info': info_src_name, 'lyric': lyric_src},
-        }
+        return result
 
     def get_health(self) -> dict:
         return {

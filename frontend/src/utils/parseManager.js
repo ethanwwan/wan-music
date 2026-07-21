@@ -7,7 +7,6 @@
 import { ref } from 'vue'
 import { message, notification } from 'ant-design-vue'
 import musicApi from '../services/musicApi.js'
-import { settings } from './settingsManager.js'
 
 // ==================== 状态 ====================
 
@@ -41,7 +40,7 @@ export const parseMusic = async (input, source, quality) => {
 
   loading.value = true
   try {
-    const result = await musicApi.unifiedSearch(input, [source || settings.selectedSource || 'netease'], quality)
+    const result = await musicApi.unifiedSearch(input, [source || 'netease'], quality)
     if (!result.success) {
       searchResults.value = []
       searchType.value = 'song'

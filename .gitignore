@@ -67,6 +67,14 @@ test_*.py
 playwright-report/
 test-results/
 
+# 例外：前端 Playwright UI 测试是项目的一部分，纳入版本控制
+!frontend/tests/
+!frontend/playwright.config.js
+
+# 但截图与运行产物不入库
+frontend/tests/screenshots/
+frontend/tests/report/
+
 # Cookie / 凭据（绝不能进入仓库）
 **/cookie/
 **/*_cookie.txt

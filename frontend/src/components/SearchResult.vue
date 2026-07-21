@@ -398,7 +398,7 @@ const handleBatchDownloadSelected = async () => {
     return
   }
   const tracks = props.songs.filter(t => selectedIds.value.includes(t.id))
-  const quality = settings.value?.selectedQuality || 'lossless'
+  const quality = settings.selectedQuality || 'lossless'
   const items = tracks.map(t => buildDownloadItem(t, quality))
   const label = items.length > 1 ? `${items[0].name}等${items.length}首` : items[0].name
   try {

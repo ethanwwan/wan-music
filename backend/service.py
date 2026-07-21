@@ -247,7 +247,9 @@ class MusicService:
             search_source = result.get('search_source', '') if isinstance(result, dict) else ''
             return {'data': songs, 'type': 'song', 'search_source': search_source, 'warnings': []}
         except Exception as e:
+            import traceback
             logger.error(f"[{platform}] 搜索失败: {e}")
+            logger.error(f"[{platform}] 堆栈:\n{traceback.format_exc()}")
             return {
                 'data': [],
                 'type': 'song',

@@ -79,11 +79,18 @@ class NeteaseClient(BaseMusicClient):
           - URL 成功后 `mark_source_success`，下次该源排最前
           - URL 失败后 `mark_source_failed`，下次跳过该源
 
+        网易云特殊处理：从 URL 后缀推断实际音质（避免源返回 .mp3 却标记 lossless）
+
         Args:
             preferred_source: 来自 search 的源名，传下去给 url/lyric 链优先使用
             quality_map: 该歌曲可用音质字典（来自 search result），用于 URL size 验证
             _cached_info: search 阶段缓存的完整 song info
         """
+        # ★ 关键：网易云走串行模式（无 info 并行抢答，无需 ThreadPoolExecutor）
+        # 这里不复用基类 _get_song_template（它是并行抢答设计），改为直接组装：
+        #   - URL 用串行获取（节省 API 配额、降低并发压力）
+        #   - Lyric 用串行获取（带 same_source 优先用 URL 同源）
+        #   - cached_info 复用通过基类 _process_base_info 共享
         quality = self._normalize_quality(quality)
         song_id_str = str(song_id)
         url_kwargs = dict(song_id=song_id_str, quality=quality,
@@ -109,26 +116,10 @@ class NeteaseClient(BaseMusicClient):
             except Exception as e:
                 logger.warning(f'[{self.platform_id}] lyric 获取异常: {e}')
 
-        logger.info(
-            f'[{self.platform_id}] /song 串行完成: '
-            f'url={url_src} lyric={lyric_src} info={"cached" if _cached_info else "none"} '
-            f'耗时={time.time()-t_start:.2f}s'
+        # Step 3: 复用基类的 cached_info 优先级处理逻辑
+        base, info_src_name = self._process_base_info(
+            _cached_info, None, None, song_id_str, normalize_netease_song
         )
-
-        # Step 3: 元信息直接复用 _cached_info
-        if _cached_info and _cached_info.get('name'):
-            base = normalize_netease_song(_cached_info)
-            info_src_name = _cached_info.get('_search_source', 'cached')
-        else:
-            base = {
-                'id': song_id_str,
-                'name': '',
-                'artists': '',
-                'album': '',
-                'picUrl': '',
-                'duration': 0,
-            }
-            info_src_name = 'unknown'
 
         # 从 URL 推断实际音质（避免源返回 .mp3 却标记 lossless）
         actual_level = quality
@@ -142,6 +133,12 @@ class NeteaseClient(BaseMusicClient):
                     if _quality_rank(quality) > _quality_rank(max_q):
                         actual_level = max_q
                     break
+
+        logger.info(
+            f'[{self.platform_id}] /song 串行完成: '
+            f'url={url_src} lyric={lyric_src} info={info_src_name} '
+            f'耗时={time.time()-t_start:.2f}s'
+        )
 
         return {
             **base,

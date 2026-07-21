@@ -8,6 +8,21 @@
 """
 import re
 import time
+
+
+def _safe_int(val, default: int = 0) -> int:
+    """安全地把值转 int；非数字字符串/None 返回 default
+
+    用途：酷我/某些三方源偶尔返回 hex 字符串（如 '7fff...'）作为数字字段，
+    直接 int() 会抛 ValueError，导致整批搜索失败。
+    此函数单点兜底，保持单条坏数据不影响全局。
+    """
+    if val is None or val == '':
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 from typing import List, Dict, Any, Optional
 from urllib.parse import quote
 
@@ -613,11 +628,12 @@ def normalize_kuwo_song(raw: dict) -> dict:
 
     # 付费：PAY 是 32 位二进制标志 (1=online, 2=download, 4=ring, ...)
     # 简化：fpay/tpay/opay 任一非 0 表示需要付费
-    fpay = int(raw.get('fpay') or 0)
-    tpay = int(raw.get('tpay') or 0)
-    opay = int(raw.get('opay') or 0)
+    # 用 _safe_int 防止酷我等源偶尔返回非数字字符串（如 '7fff...'）导致整批搜索失败
+    fpay = _safe_int(raw.get('fpay'))
+    tpay = _safe_int(raw.get('tpay'))
+    opay = _safe_int(raw.get('opay'))
     payInfo = raw.get('payInfo') if isinstance(raw.get('payInfo'), dict) else {}
-    fee_song = int(payInfo.get('feeType', {}).get('song', 0)) if isinstance(payInfo.get('feeType'), dict) else 0
+    fee_song = _safe_int(payInfo.get('feeType', {}).get('song')) if isinstance(payInfo.get('feeType'), dict) else 0
     pay = bool(fpay or tpay or opay or fee_song)
     fee = 1 if pay else 0
 
