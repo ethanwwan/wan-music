@@ -364,6 +364,7 @@ class MusicClient:
         max_total_seconds = 6.5
 
         last_result = None
+        attempt_log = []  # ★ 记录本次请求每个音质的尝试情况，给上层做错误信息
         for try_quality in chain:
             # 检查总耗时
             if _time.time() - song_start >= max_total_seconds:
@@ -393,6 +394,12 @@ class MusicClient:
                 preferred_source=preferred, quality_map=qmap_for_url or None,
                 _cached_info=cached_info,  # ★ 新增：把 search info 传给 client，client 不再抢答 parse_info
             )
+            # ★ 追踪每次尝试（即使 result 是 None 或没 url 也记）
+            attempt_log.append({
+                'quality': try_quality,
+                'success': bool(result and result.get('url')),
+                'api_source': (result or {}).get('api_source') if isinstance(result, dict) else None,
+            })
             if result and result.get('url'):
                 # ★ 把 cached_info（name/artist/album/cover/duration/qualityMap）
                 # **优先**应用到 result（解决跨源不一致问题）
@@ -457,6 +464,13 @@ class MusicClient:
                 return result
             last_result = result
 
+        # ★ 完全失败时，把尝试历史附到返回值上，让 service 层能给用户具体错误
+        if last_result is None:
+            last_result = {}
+        if isinstance(last_result, dict):
+            last_result['_attempt_log'] = attempt_log
+            last_result['_requested_quality'] = quality
+            last_result['_chain'] = list(chain)
         return last_result
 
     def parse_playlist(self, playlist_id: str, platform: str = None,

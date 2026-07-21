@@ -133,7 +133,13 @@ def search(keyword: str, source: str, limit: int = 0, quality: str = 'lossless')
 
 
 def get_song(song_id: str, source: str, keyword: str = '', quality: str = 'lossless') -> Optional[dict]:
-    """获取单曲信息，返回 /song 接口格式"""
+    """获取单曲信息，返回 /song 接口格式
+
+    注：musicdl 内部 _parsewiththirdpartapis + _parsewithofficialapiv1 会用所有可用 quality
+    尝试解析下载 URL（受 quality 截断参数约束），所以外层无需再做 quality 循环降级。
+    musicdl 拿不到 URL 时返回的 dict 不会带 _attempt_log（仅作 None 返回），
+    错误信息由 service 层用通用文案填充。
+    """
     raw = _find_in_cache(song_id, source, keyword)
     if not raw:
         return None

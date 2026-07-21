@@ -235,7 +235,16 @@ class BaseMusicClient(ABC):
             )
 
         if not url or not url.startswith('http'):
-            return None
+            # ★ 失败时也返回带 api_source 的 dict，让上层能给用户具体的错误信息
+            # 不返回 None（避免 chain 内部 _is_valid 把 api_source 误丢弃）
+            return {
+                'url': None,
+                'level': quality,
+                'lyric': '',
+                'source': self.platform_id,
+                'api_source': {'url': url_src, 'info': None, 'lyric': None},
+                '_last_attempt_source': url_src,  # ★ 方便上层定位失败的源
+            }
 
         # Lyric 抢答（带 same_source 同源优先）
         lyric, lyric_src = '', None

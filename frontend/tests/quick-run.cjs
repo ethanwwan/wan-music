@@ -28,6 +28,11 @@ const QUALITIES = [
   { value: 'exhigh', label: '极高' },
   { value: 'lossless', label: '无损' },
 ]
+// 两条线路：0=项目源, 1=musicdl
+const LINES = [
+  { value: 0, label: '项目源' },
+  { value: 1, label: 'musicdl' },
+]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -90,76 +95,91 @@ async function run() {
 
   // ============== 测试 2: 搜索矩阵 ==============
   console.log('')
-  console.log('▶ 测试 02 - 搜索矩阵 (4平台 × 3音质)')
-  for (const p of PLATFORMS) {
-    for (const q of QUALITIES) {
-      const page = await context.newPage()
-      const errors = []
-      const pageErrors = []
-      page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()) })
-      page.on('pageerror', (err) => pageErrors.push(err.message))
+  console.log('▶ 测试 02 - 搜索矩阵 (2线路 × 4平台 × 3音质 = 24 组合)')
+  for (const l of LINES) {
+    console.log(`  ── 线路: ${l.label} ──`)
+    for (const p of PLATFORMS) {
+      // musicdl 用更轻量查询（避免 SSE 流超时）；项目源走原查询
+      const query = (l.value === 1) ? (p.id === 'netease' ? '周杰伦' : p.id === 'qq' ? '邓紫棋' : p.id === 'kugou' ? '薛之谦' : '林俊杰') : p.query
+      for (const q of QUALITIES) {
+        const page = await context.newPage()
+        const errors = []
+        const pageErrors = []
+        page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()) })
+        page.on('pageerror', (err) => pageErrors.push(err.message))
 
-      summary.total++
-      const label = `${p.name} × ${q.label}`
-      try {
-        await page.goto(BASE_URL)
-        await page.waitForFunction(() => {
-          const sel = document.querySelector('.input-row .ant-select')
-          return sel && !sel.classList.contains('ant-select-disabled')
-        }, { timeout: 15000 })
+        summary.total++
+        const label = `[${l.label}] ${p.name} × ${q.label}`
+        try {
+          await page.goto(BASE_URL)
+          await page.waitForFunction(() => {
+            const sel = document.querySelector('.input-row .ant-select')
+            return sel && !sel.classList.contains('ant-select-disabled')
+          }, { timeout: 15000 })
 
-        // 设置音质
-        await page.locator('.settings-btn').click()
-        await page.locator('.ant-drawer-open').first().waitFor({ state: 'visible' })
-        await page.locator('.settings-content').waitFor({ state: 'visible' })
-        const qSel = page.locator('.ant-drawer-open .ant-form-item').filter({ hasText: '默认音质' }).locator('.ant-select')
-        await qSel.click()
-        await page.locator('.ant-select-item-option').filter({ hasText: q.label }).first().click()
-        await sleep(400)
-        await page.locator('.ant-drawer-open .drawer-footer button').filter({ hasText: /关\s*闭/ }).first().click()
-      await sleep(800)
+          // 设置线路
+          await page.locator('.settings-btn').click()
+          await page.locator('.ant-drawer-open').first().waitFor({ state: 'visible' })
+          await page.locator('.settings-content').waitFor({ state: 'visible' })
+          // 接口线路
+          const lineSel = page.locator('.ant-drawer-open .ant-form-item').filter({ hasText: '接口线路' }).locator('.ant-select')
+          await lineSel.click()
+          // 线路一/线路二（可能受字符间距影响）
+          const lineOptionText = l.value === 0 ? /线路一/ : /线路二/
+          await page.locator('.ant-select-item-option').filter({ hasText: lineOptionText }).first().click()
+          await sleep(300)
+          // 默认音质
+          const qSel = page.locator('.ant-drawer-open .ant-form-item').filter({ hasText: '默认音质' }).locator('.ant-select')
+          await qSel.click()
+          await page.locator('.ant-select-item-option').filter({ hasText: q.label }).first().click()
+          await sleep(400)
+          await page.locator('.ant-drawer-open .drawer-footer button').filter({ hasText: /关\s*闭/ }).first().click()
+          await sleep(800)
 
-        // 设置平台
-        const pSel = page.locator('.input-row .ant-select').first()
-        await pSel.click()
-        await page.locator('.ant-select-item-option').filter({ hasText: p.name }).first().click()
-        await sleep(300)
+          // 设置平台
+          const pSel = page.locator('.input-row .ant-select').first()
+          await pSel.click()
+          await page.locator('.ant-select-item-option').filter({ hasText: p.name }).first().click()
+          await sleep(300)
 
-        // 搜索
-        await page.locator('.input-row .ant-input').first().fill(p.query)
-        await page.locator('.input-row button.ant-btn-primary').filter({ hasText: /搜\s*索/ }).click()
+          // 搜索
+          await page.locator('.input-row .ant-input').first().fill(query)
+          await page.locator('.input-row button.ant-btn-primary').filter({ hasText: /搜\s*索/ }).click()
 
-        // 等结果
-        const rowCount = await page.locator('.tracks-table tbody tr.track-row').count()
-        if (rowCount === 0) {
-          await page.waitForSelector('.tracks-table tbody tr.track-row', { timeout: 90000 })
+          // 等结果（musicdl 流式稍慢，给更多时间）
+          const rowCount = await page.locator('.tracks-table tbody tr.track-row').count()
+          if (rowCount === 0) {
+            await page.waitForSelector('.tracks-table tbody tr.track-row', { timeout: 90000 })
+          }
+          const finalCount = await page.locator('.tracks-table tbody tr.track-row').count()
+
+          if (finalCount === 0) {
+            throw new Error('搜索结果为空')
+          }
+
+          const safeP = p.id
+          const safeL = l.value
+          await page.screenshot({ path: `tests/screenshots/quick-02-search-L${safeL}-${safeP}-${q.value}.png`, fullPage: true })
+
+          // console 干净
+          const realErrors = errors.filter((e) => !e.includes('favicon'))
+          if (realErrors.length > 0) {
+            summary.issues.push({ test: `02-search-L${l.value}-${p.id}-${q.value}`, type: 'console-error', detail: realErrors })
+            throw new Error(`${realErrors.length} console errors: ${realErrors[0].slice(0, 100)}`)
+          }
+          if (pageErrors.length > 0) {
+            summary.issues.push({ test: `02-search-L${l.value}-${p.id}-${q.value}`, type: 'page-error', detail: pageErrors })
+            throw new Error(`${pageErrors.length} page errors`)
+          }
+          console.log(`  ✅ ${label} → ${finalCount} 首`)
+          summary.passed++
+        } catch (e) {
+          summary.failed++
+          console.log(`  ❌ ${label}: ${e.message}`)
+          await page.screenshot({ path: `tests/screenshots/quick-FAIL-02-search-L${l.value}-${p.id}-${q.value}.png`, fullPage: true })
         }
-        const finalCount = await page.locator('.tracks-table tbody tr.track-row').count()
-
-        if (finalCount === 0) {
-          throw new Error('搜索结果为空')
-        }
-
-        await page.screenshot({ path: `tests/screenshots/quick-02-search-${p.id}-${q.value}.png`, fullPage: true })
-
-        // console 干净
-        const realErrors = errors.filter((e) => !e.includes('favicon'))
-        if (realErrors.length > 0) {
-          summary.issues.push({ test: `02-search-${p.id}-${q.value}`, type: 'console-error', detail: realErrors })
-          throw new Error(`${realErrors.length} console errors: ${realErrors[0].slice(0, 100)}`)
-        }
-        if (pageErrors.length > 0) {
-          summary.issues.push({ test: `02-search-${p.id}-${q.value}`, type: 'page-error', detail: pageErrors })
-          throw new Error(`${pageErrors.length} page errors`)
-        }
-        console.log(`  ✅ ${label} → ${finalCount} 首`)
-        summary.passed++
-      } catch (e) {
-        summary.failed++
-        console.log(`  ❌ ${label}: ${e.message}`)
-        await page.screenshot({ path: `tests/screenshots/quick-FAIL-02-search-${p.id}-${q.value}.png`, fullPage: true })
+        await page.close()
       }
-      await page.close()
     }
   }
 
@@ -181,6 +201,16 @@ async function run() {
         return sel && !sel.classList.contains('ant-select-disabled')
       }, { timeout: 15000 })
 
+      // 显式设置线路=0（项目源），避免上一轮 musicdl 残留导致 /song 走 musicdl
+      await page.locator('.settings-btn').click()
+      await page.locator('.ant-drawer-open').first().waitFor({ state: 'visible' })
+      const lineSel = page.locator('.ant-drawer-open .ant-form-item').filter({ hasText: '接口线路' }).locator('.ant-select')
+      await lineSel.click()
+      await page.locator('.ant-select-item-option').filter({ hasText: /线路一/ }).first().click()
+      await sleep(300)
+      await page.locator('.ant-drawer-open .drawer-footer button').filter({ hasText: /关\s*闭/ }).first().click()
+      await sleep(500)
+
       // 选平台
       await page.locator('.input-row .ant-select').first().click()
       await page.locator('.ant-select-item-option').filter({ hasText: p.name }).first().click()
@@ -192,7 +222,26 @@ async function run() {
       await page.waitForSelector('.tracks-table tbody tr.track-row', { timeout: 90000 })
 
       // 点击播放
-      await page.locator('.tracks-table tbody tr.track-row').first().locator('button').first().click()
+      const firstRow = page.locator('.tracks-table tbody tr.track-row').first()
+      // 跳过 unavailable 行：选第一个未标 unavailable 的行
+      const rowCount = await page.locator('.tracks-table tbody tr.track-row').count()
+      let playableRow = null
+      for (let i = 0; i < Math.min(rowCount, 10); i++) {
+        const r = page.locator('.tracks-table tbody tr.track-row').nth(i)
+        const cls = await r.getAttribute('class') || ''
+        if (!cls.includes('unavailable')) { playableRow = r; break }
+      }
+      if (!playableRow) {
+        // 调试：打印前 5 行的 class
+        for (let i = 0; i < Math.min(rowCount, 5); i++) {
+          const r = page.locator('.tracks-table tbody tr.track-row').nth(i)
+          const cls = await r.getAttribute('class') || ''
+          const name = await r.locator('.track-name').textContent().catch(() => '?')
+          console.log(`     [debug] row ${i}: class="${cls}" name="${(name||'').trim()}"`)
+        }
+        throw new Error('无可用播放的歌曲')
+      }
+      await playableRow.locator('button').first().click()
       await page.locator('.mini-player').waitFor({ state: 'visible', timeout: 30000 })
 
       // hover
@@ -232,6 +281,16 @@ async function run() {
         const sel = document.querySelector('.input-row .ant-select')
         return sel && !sel.classList.contains('ant-select-disabled')
       }, { timeout: 15000 })
+
+      // 显式设置线路=0（项目源），避免上一轮 musicdl 残留
+      await page.locator('.settings-btn').click()
+      await page.locator('.ant-drawer-open').first().waitFor({ state: 'visible' })
+      const lineSel = page.locator('.ant-drawer-open .ant-form-item').filter({ hasText: '接口线路' }).locator('.ant-select')
+      await lineSel.click()
+      await page.locator('.ant-select-item-option').filter({ hasText: /线路一/ }).first().click()
+      await sleep(300)
+      await page.locator('.ant-drawer-open .drawer-footer button').filter({ hasText: /关\s*闭/ }).first().click()
+      await sleep(500)
 
       // 选 netease
       await page.locator('.input-row .ant-select').first().click()

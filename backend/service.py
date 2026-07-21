@@ -321,8 +321,57 @@ class MusicService:
             'warnings': [],
         }
 
-
 music_service = MusicService()
+
+
+def _build_detailed_error(song_info: Optional[Dict[str, Any]],
+                          platform: str, requested_quality: str,
+                          actual_level: str, quality_map: dict,
+                          line: int) -> str:
+    """构造给用户看的详细错误信息（module-level 函数，可被 MusicService 和 BatchDownloadService 调用）
+
+    来源：music_client.get_song 完全失败时返回的 _attempt_log / _chain / _requested_quality
+    包含：
+      - 降级链（请求音质 → 实际降级到最低）
+      - 每个音质尝试了哪些 API 源
+      - 该歌曲 qualityMap 中实际可用的档位
+      - 平台 + 线路
+    """
+    parts = []
+    plat = platform or '?'
+    from app_config import QUALITY_LEVELS
+    # 1. 降级链展示（请求 → 最低尝试）
+    chain = (song_info or {}).get('_chain') or []
+    if chain:
+        labels = [QUALITY_LEVELS.get(q, {}).get('label', q) for q in chain]
+        parts.append(f'降级链: {labels[0]}→...→{labels[-1]}（{len(chain)}档均失败）')
+    # 2. 各档音质尝试的源摘要
+    attempt_log = (song_info or {}).get('_attempt_log') or []
+    if attempt_log:
+        for a in attempt_log:
+            q_label = QUALITY_LEVELS.get(a.get('quality', ''), {}).get('label', a.get('quality', ''))
+            api = a.get('api_source') or {}
+            if isinstance(api, dict):
+                src_name = api.get('name') or api.get('url') or '未知源'
+                last_err = api.get('last_error') or api.get('reason') or ''
+                err_part = f' 错误={last_err[:50]}' if last_err else ''
+                parts.append(f'[{q_label}] {src_name}{err_part}')
+            else:
+                parts.append(f'[{q_label}] 无数据')
+    # 3. 该歌曲 qualityMap 中实际可用档位
+    if isinstance(quality_map, dict) and quality_map:
+        available = []
+        for q in ('hires', 'lossless', 'exhigh', 'standard'):
+            if q in quality_map:
+                available.append(QUALITY_LEVELS.get(q, {}).get('label', q))
+        if available:
+            parts.append(f'该歌曲可用音质: {"/".join(available)}')
+    # 4. 平台+线路
+    parts.append(f'平台={plat} 线路={line}')
+    # 兜底
+    if len(parts) <= 1:
+        parts.append('所有 API 源均无有效下载链接（可能因版权/区域限制）')
+    return ' | '.join(parts)
 
 
 # ==================== Batch Download Service ====================
@@ -733,14 +782,21 @@ class BatchDownloadService:
                                 reason='返回数据无效（URL 为空）',
                                 expire_seconds=300,
                             )
+                    # ★ 收集详细失败信息：本次 chain 内尝试的所有源 + 已降级过的音质
+                    # chain 内已按 priority 串行试过所有源，quality 链也试了所有等级。
+                    # 透传这些信息给前端，让用户看到具体失败原因。
+                    actual_level = (song_info.get('level') or quality) if song_info else quality
+                    detail_msg = _build_detailed_error(
+                        song_info, source, quality, actual_level, item_quality_map, data_line
+                    )
                     if attempt < max_attempts - 1:
                         logger.debug(f'[{song_id}] 拿不到 URL（attempt {attempt+1}/{max_attempts}），重试')
                         continue   # 重试让 chain 换源
-                    # 最后一次仍失败，标记 failed
+                    # 最后一次仍失败，标记 failed（错误信息透传到前端）
                     if task_id:
                         self._update_song_status(task_id, song_id,
                             status='failed',
-                            error='无法获取下载链接（可能因版权问题）',
+                            error=detail_msg,
                             completed_at=time.time(),
                         )
                     return None
