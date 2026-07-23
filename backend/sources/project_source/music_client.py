@@ -241,13 +241,13 @@ class MusicClient:
 
         # 根据请求音质过滤 qualityMap，返回结果只保留匹配音质
         try:
-            from ..app_config import get_platform_quality_chain
+            from ..utils.app_config import get_platform_quality_chain
         except (ImportError, ValueError):
             import os, sys
             _backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if _backend_root not in sys.path:
                 sys.path.insert(0, _backend_root)
-            from app_config import get_platform_quality_chain
+            from utils.app_config import get_platform_quality_chain
 
         for song in songs:
             if not isinstance(song, dict):
@@ -302,14 +302,14 @@ class MusicClient:
             None 表示完全失败
         """
         try:
-            from ..app_config import get_platform_quality_chain
+            from ..utils.app_config import get_platform_quality_chain
         except (ImportError, ValueError):
             # 兼容直接以脚本形式运行时（相对导入失败时走绝对路径）
             import os, sys
             _backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if _backend_root not in sys.path:
                 sys.path.insert(0, _backend_root)
-            from app_config import get_platform_quality_chain
+            from utils.app_config import get_platform_quality_chain
 
         client = self._get_client(platform)
         plat = platform or self.default_platform
@@ -416,7 +416,7 @@ class MusicClient:
                 actual_level = result.get('level') or try_quality
                 result['level'] = actual_level
                 # 附加前端展示字段（label 显示名、format 描述）
-                from app_config import QUALITY_LEVELS
+                from utils.app_config import QUALITY_LEVELS
                 level_cfg = QUALITY_LEVELS.get(actual_level) or {}
                 result['level_name'] = level_cfg.get('label', actual_level)
                 result['level_format'] = level_cfg.get('description', '')

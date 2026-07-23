@@ -1,29 +1,15 @@
-# Backend
+# Backend API
 
-> Flask 后端服务
+> Wan Music 后端 API 参考手册
 
-详细文档见根目录 [README.md](../README.md)。
+项目总览见根目录 [README.md](../README.md)。本文档只列出**前端实际使用**的接口。
 
-## 目录
+## 端口
 
-- `clients/` - 音乐平台客户端
-- `routes/` - Flask 路由
-- `services/` - 业务服务
-- `utils/` - 工具函数
-
-## 维护脚本
-
-```bash
-# 元数据检查
-python3 ../scripts/check_metadata.py
-
-# 歌单同步
-python3 ../scripts/sync_artist_to_playlist.py
-```
-
-## 许可证
-
-MIT
+| 环境 | 端口 | 配置 |
+|------|------|------|
+| dev（Flask dev server） | 5005 | `config.json: backend.devBackendPort` |
+| prod（Docker / gunicorn） | 6005 | Dockerfile `gunicorn -b` 硬编码 |
 
 ---
 
@@ -33,7 +19,6 @@ MIT
 
 ### 基础信息
 
-- **默认端口**: `5002`（可通过环境变量 `PORT` 覆盖）
 - **数据格式**: JSON
 - **统一响应格式**: `{success, message, data}`
 
@@ -84,7 +69,7 @@ MIT
 **`GET /health`**
 
 ```bash
-curl http://localhost:5002/health
+curl http://localhost:5005/health
 # {"status": "healthy"}
 ```
 
@@ -95,7 +80,7 @@ curl http://localhost:5002/health
 返回后端支持的音乐平台元数据（id / name / color / description），前端从该接口读取并动态渲染下拉选项，避免硬编码平台列表。
 
 ```bash
-curl http://localhost:5002/platforms
+curl http://localhost:5005/platforms
 ```
 
 ```json
@@ -327,7 +312,7 @@ curl http://localhost:5002/platforms
 **`GET /download/batch/progress/<task_id>`**
 
 ```bash
-curl -N http://localhost:5002/download/batch/progress/<task_id>
+curl -N http://localhost:5005/download/batch/progress/<task_id>
 ```
 
 每 0.3s 推一条：
@@ -363,51 +348,9 @@ status 取值：`running` / `done` / `error` / `cancelled`
 | POST | 复杂请求体 / 表单 | `/search`, `/song`, `/playlist`, `/download/batch/start` |
 | DELETE | 资源删除 | `/download/batch/<task_id>` |
 
-## 部署说明
 
-### 端口
+---
 
-端口由根目录 [`../config.json`](../config.json) 配置：
+## 许可证
 
-| 环境 | 端口 | 说明 |
-|------|------|------|
-| 开发（`PORT=5005`） | 5005 | `config.json: backend.devBackendPort` |
-| 生产预览（`PORT=6005`） | 6005 | `config.json: backend.prodBackendPort` |
-| Docker 部署 | 6005 | `Dockerfile` 的 `ARG PORT=6005` |
-
-### 启动
-
-```bash
-PORT=5005 python3 main.py
-```
-
-## 使用示例（cURL）
-
-```bash
-# 健康检查
-curl http://localhost:5002/health
-
-# 搜索歌曲
-curl -X POST http://localhost:5002/search \
-  -H "Content-Type: application/json" \
-  -d '{"keyword": "陈楚生", "type": 1, "limit": 5}'
-
-# 通过 URL 获取歌曲完整信息
-curl -X POST http://localhost:5002/song \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://music.163.com/song?id=123456", "level": "lossless"}'
-
-# 通过 ID 获取歌曲完整信息
-curl -X POST http://localhost:5002/song \
-  -H "Content-Type: application/json" \
-  -d '{"id": "123456", "source": "netease", "level": "lossless"}'
-
-# 获取歌单详情
-curl -X POST http://localhost:5002/playlist \
-  -d "url=https://music.163.com/playlist?id=7583298906"
-
-# 批量下载
-curl -X POST http://localhost:5002/download/batch/start \
-  -H "Content-Type: application/json" \
-  -d '{"items":[{"id":"123","quality":"lossless"}],"name":"playlist"}'
-```
+MIT

@@ -4,12 +4,16 @@
 #
 # 单一镜像同时包含前后端：Flask 后端监听 6005，并把 Vue 构建产物作为静态资源输出。
 # 前端无需独立部署，所有 HTTP 请求统一走同一个端口。
+#
+# 首次部署前请先修复 host 目录权限（容器内 UID=1000）：
+#   sudo chown -R 1000:1000 ./cookie ./logs
 
 services:
   wan-music:
     image: ethanwwan/wan-music:latest
     container_name: wan-music
     restart: always
+    user: "1000:1000"                   # 与镜像内 wanmusic 用户对齐
     ports:
       - "6005:6005"
     volumes:

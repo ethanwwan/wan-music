@@ -182,13 +182,13 @@ def get_platform_quality_chain(platform: str, requested: str = 'lossless',
             return filtered
         # 交集为空（所有基础音质都不可用），从 qualityMap 中选最高可用
         try:
-            from .clients.quality_config import match_quality
+            from ..sources.project_source.quality_config import match_quality
         except (ImportError, ValueError):
             import sys, os
-            _root = os.path.dirname(os.path.abspath(__file__))
+            _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if _root not in sys.path:
                 sys.path.insert(0, _root)
-            from clients.quality_config import match_quality
+            from sources.project_source.quality_config import match_quality
         # 找到 qualityMap 中 base_chain 范围内能降级到的最高
         best = ''
         for q in base_chain:

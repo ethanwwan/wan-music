@@ -7,7 +7,7 @@ import os
 import time
 
 from service import music_service, batch_download_service
-from app_config import get_full_config
+from utils.app_config import get_full_config
 from utils.url_parser import parse_url
 from utils.filename import sanitize_filename as _sanitize_filename
 
@@ -124,7 +124,7 @@ def search_debug():
     keyword = request.args.get('keyword', '').strip()
     source = request.args.get('source', 'netease')
 
-    from musicdl_adapter.streaming import search_via_http
+    from sources.musicdl_source.streaming import search_via_http
 
     result = {
         'raw_keyword': repr(keyword),
@@ -167,7 +167,7 @@ def search_sse():
 
     logger.info(f"/search/sse 请求: keyword={keyword!r}, source={source}, timeout={timeout}")
 
-    from musicdl_adapter.streaming import search_stream
+    from sources.musicdl_source.streaming import search_stream
 
     @stream_with_context
     def generate():

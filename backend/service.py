@@ -6,7 +6,7 @@
 设计原则：
 - 公开 API：路由层唯一直接调用的方法
 - 私有方法：仅服务内部使用，前缀 `_`
-- 客户端调用：直接调 `clients.music_client` 提供的函数，不再额外包装
+- 客户端调用：直接调 `sources.project_source.music_client` 提供的函数，不再额外包装
 """
 import json
 import logging
@@ -21,14 +21,14 @@ from typing import Dict, List, Any, Optional
 
 import requests
 
-from clients.music_client import music_client, search_music, get_song, get_platforms, parse_playlist
-from musicdl_adapter import adapter as musicdl_adapter
+from sources.project_source.music_client import music_client, search_music, get_song, get_platforms, parse_playlist
+from sources.musicdl_source import adapter as musicdl_adapter
 from utils.url_parser import parse_url
 from utils.filename import (
     sanitize_filename as _sanitize_filename,
     build_filename as _build_filename,
 )
-from app_config import QUALITY_LEVELS
+from utils.app_config import QUALITY_LEVELS
 
 
 def _get_level_display(quality: str, file_ext: str = '') -> Dict[str, str]:
@@ -339,7 +339,7 @@ def _build_detailed_error(song_info: Optional[Dict[str, Any]],
     """
     parts = []
     plat = platform or '?'
-    from app_config import QUALITY_LEVELS
+    from utils.app_config import QUALITY_LEVELS
     # 1. 降级链展示（请求 → 最低尝试）
     chain = (song_info or {}).get('_chain') or []
     if chain:

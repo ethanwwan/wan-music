@@ -2,8 +2,8 @@
 
 提供多平台音乐搜索、解析、下载 API。
 
-端口优先级：环境变量 PORT > config.json:backend.prodBackendPort > 默认 6005
-（与 gunicorn.conf.py 共享 utils.config.resolve_port）
+端口优先级：环境变量 PORT > config.json:backend.devBackendPort > 默认 5005
+（dev 模式专用，prod 模式由 gunicorn -b CLI 参数硬编码 6005）
 """
 import logging
 import os
@@ -202,7 +202,7 @@ def internal_error(error):
 
 
 def _resolve_default_port() -> int:
-    """从项目根 config.json 解析 dev 端口（与 gunicorn.conf.py 共用 resolve_port）"""
+    """从项目根 config.json 解析 dev 端口"""
     return resolve_port(mode='dev')
 
 
