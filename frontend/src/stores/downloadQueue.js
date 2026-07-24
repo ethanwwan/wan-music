@@ -319,6 +319,10 @@ const removeTask = (taskId) => {
 
 /**
  * 下载完成任务的 zip
+ *
+ * 注意：saveBlob() 同步触发 <a>.click()，但浏览器实际处理下载是异步的。
+ * 如果紧接着同域发出 DELETE 请求，可能干扰到 blob 流的接收/触发，
+ * 导致用户感知不到下载。修复：把任务清理 + 后端 DELETE 延后到下载事件落地后再发。
  */
 const downloadTask = async (taskId) => {
   // 用户主动操作，错误要暴露给 UI，但 console.warn 而不是 console.error
@@ -326,9 +330,12 @@ const downloadTask = async (taskId) => {
   for (let i = 0; i < 2; i++) {
     try {
       const filename = await downloadBatchAsZip(taskId)
-      // 保存后主动清理后端文件
-      removeTask(taskId)
-      cancelBatchTask(taskId).catch(() => {})  // 忽略 404（可能已被 TTL 清理）
+      // 延迟 500ms 再清理：让浏览器先完成下载事件处理，
+      // 避免同域 DELETE 请求竞争连接/打断下载流
+      setTimeout(() => {
+        removeTask(taskId)
+        cancelBatchTask(taskId).catch(() => {})  // 忽略 404（可能已被 TTL 清理）
+      }, 500)
       return filename
     } catch (e) {
       err = e

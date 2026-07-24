@@ -493,7 +493,9 @@ export const subscribeBatchTask = (taskId, { onProgress, onComplete, onError } =
 }
 
 export const downloadBatchAsZip = async (taskId) => {
-  const resp = await fetch(`/download/batch/file/${taskId}`)
+  // 用 fetchWithTimeout（5 分钟）兜底，避免后端长时间 hang 导致前端按钮"无反应"
+  // zip 可能几十 MB，下载/打包需时较长，给宽裕的超时窗口
+  const resp = await fetchWithTimeout(`/download/batch/file/${taskId}`, {}, 5 * 60 * 1000)
   if (!resp.ok) {
     let msg = '下载 zip 失败'
     try { const err = await resp.json(); msg = err.message || msg } catch { /* 非 JSON */ }
