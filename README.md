@@ -2,7 +2,7 @@
 
 > 多平台音乐搜索、解析、下载工具
 
-[![Docker Hub](https://hub.docker.com/r/ethanwwan/wan-music)](https://hub.docker.com/r/ethanwwan/wan-music)
+[![GitHub Container Registry](https://ghcr.io/ethanwwan/wan-music)](https://github.com/ethanwwan/wan-music/pkgs/container/wan-music)
 
 ## ✨ 特性
 
@@ -49,37 +49,39 @@
 ```
 wan-music/
 ├── backend/                          # Python Flask 后端
-│   ├── clients/                      # 音乐平台客户端
-│   │   ├── base_client.py            # 客户端基类（URL 抢答 + 音质验证）
-│   │   ├── music_client.py           # 统一入口（含音质降级链 + API 源 fallback）
-│   │   ├── song_info_cache.py        # 内存缓存（避免重复 search）
-│   │   ├── netease_client.py / qq_client.py / kugou_client.py / kuwo_client.py
-│   │   ├── data_models.py            # 数据模型（SongInfo / SongUrl）
-│   │   ├── quality_config.py         # 平台音质等级 + fallback_chain 配置
-│   │   ├── fallback/                 # 跨源 fallback chain 实现
-│   │   │   ├── chain.py              # 串行/并行源尝试 + URL/音质验证 + 超时
-│   │   │   ├── api_source.py         # 单个 API 源包装（动态解析 + 健康统计）
-│   │   │   ├── health.py             # 源健康状态（mark_source_failed + 5min expire）
-│   │   │   └── extractors.py         # 跨平台 extractors（含 _safe_int 兜底）
-│   │   └── sources/                  # 各平台的多个 URL/API 源
-│   │       ├── netease.py / qq.py / kugou.py / kuwo.py
-│   │       ├── _jbsou.py             # 跨平台聚合源
-│   │       └── _playlist_extractors.py
-│   ├── musicdl_adapter/              # musicdl 线路适配层（line=1）
-│   │   ├── adapter.py                # musicdl → 项目接口格式转换
-│   │   ├── converter.py              # 字段映射
-│   │   └── streaming.py              # 流式搜索 (yield)
+│   ├── sources/                      # 数据源层（按线路拆分）
+│   │   ├── project_source/           # 项目自研线路（line=0）
+│   │   │   ├── music_client.py       # 统一入口（含音质降级链 + API 源 fallback）
+│   │   │   ├── base_client.py        # 客户端基类（URL 抢答 + 音质验证）
+│   │   │   ├── netease_client.py / qq_client.py / kugou_client.py / kuwo_client.py
+│   │   │   ├── song_info_cache.py    # 内存缓存（避免重复 search）
+│   │   │   ├── data_models.py        # 数据模型（SongInfo / SongUrl）
+│   │   │   ├── quality_config.py     # 平台音质等级 + fallback_chain 配置
+│   │   │   ├── fallback/             # 跨源 fallback chain 实现
+│   │   │   │   ├── chain.py          # 串行/并行源尝试 + URL/音质验证 + 超时
+│   │   │   │   ├── api_source.py     # 单个 API 源包装（动态解析 + 健康统计）
+│   │   │   │   ├── health.py         # 源健康状态（mark_source_failed + 5min expire）
+│   │   │   │   └── extractors.py     # 跨平台 extractors（含 _safe_int 兜底）
+│   │   │   └── sources/              # 各平台的多个 URL/API 源
+│   │   │       ├── netease.py / qq.py / kugou.py / kuwo.py
+│   │   │       ├── _jbsou.py         # 跨平台聚合源
+│   │   │       └── _playlist_extractors.py
+│   │   └── musicdl_source/           # musicdl 库线路（line=1）
+│   │       ├── adapter.py            # musicdl → 项目接口格式转换
+│   │       ├── converter.py          # 字段映射
+│   │       └── streaming.py          # 流式搜索 (yield)
 │   ├── utils/                        # 工具函数
 │   │   ├── audio_utils.py            # 流式下载 + 重试
 │   │   ├── filename.py               # 合法化文件名（处理特殊字符）
 │   │   ├── metadata.py               # ID3 标签写入
 │   │   ├── url_parser.py             # 歌单/单曲链接解析
+│   │   ├── app_config.py             # 全局配置 + 平台音质等级表
 │   │   ├── logging_config.py
 │   │   └── config.py
-│   ├── app_config.py                 # 全局配置 + 平台音质等级表
 │   ├── service.py                    # MusicService + BatchDownloadService + 详细错误构造
 │   ├── routes.py                     # Flask 路由（含 SSE 流式搜索）
 │   ├── main.py                       # 入口（dev 模式 Flask dev server）
+│   ├── README.md
 │   └── requirements.txt              # Flask / requests / mutagen / gunicorn / musicdl / curl_cffi
 ├── frontend/                         # Vue 3 前端
 │   ├── src/
@@ -87,19 +89,19 @@ wan-music/
 │   │   │   ├── SearchContainer.vue   # 搜索框 + 平台切换 + 线路切换
 │   │   │   ├── SearchResult.vue      # 结果列表 + 批量选择 + 下载触发
 │   │   │   ├── MusicPlayer.vue       # 内嵌播放器
-│   │   │   ├── DownloadDrawer.vue    # 下载队列抽屉
+│   │   │   ├── DownloadDrawer.vue    # 下载队列抽屉（含保存按钮 + 任务清理）
 │   │   │   └── SettingsDialog.vue    # 设置面板（音质/线路/平台默认值）
 │   │   ├── stores/
-│   │   │   └── downloadQueue.js      # 下载队列 + SSE 进度订阅
+│   │   │   └── downloadQueue.js      # 下载队列 + 智能轮询 + 保存触发
 │   │   ├── services/
-│   │   │   └── musicApi.js           # Axios 封装
+│   │   │   └── musicApi.js           # fetch 封装（含 fetchWithTimeout 超时）
 │   │   ├── utils/                    # 配置/平台/主题/下载/设置/解析工具
 │   │   │   ├── configManager.js      # 读取 config.json
 │   │   │   ├── settingsManager.js    # localStorage 持久化（音质/线路/平台）
 │   │   │   ├── platformsManager.js   # 平台列表 + 图标
 │   │   │   ├── themeManager.js       # 暗色主题
 │   │   │   ├── parseManager.js       # URL 解析入口
-│   │   │   └── downloadHelper.js     # 下载触发辅助
+│   │   │   └── downloadHelper.js     # Blob → 浏览器下载（saveBlob 跨浏览器）
 │   │   ├── styles/global.css
 │   │   ├── App.vue
 │   │   └── main.js
@@ -111,7 +113,8 @@ wan-music/
 │   │   ├── 05-settings.spec.js       # 设置面板
 │   │   ├── 06-ui-integrity.spec.js   # 响应式 + 历史记录 + 页脚
 │   │   ├── 07-console-errors.spec.js # 控制台错误监控
-│   │   ├── quick-run.cjs             # 一键运行（31 个测试，无需 CLI）
+│   │   ├── 08-save-button.spec.js    # 保存按钮专项（验证 download 事件触发）
+│   │   ├── quick-run.cjs             # 一键运行（32 个测试，无需 CLI）
 │   │   ├── lib/helpers.js            # 公共 helper（drawer portal 选择器等）
 │   │   └── README.md
 │   ├── playwright.config.js
@@ -121,7 +124,7 @@ wan-music/
 │   ├── check_metadata.py             # 扫描音频文件元数据完整性
 │   └── sync_artist_to_playlist.py    # 同步歌手目录与歌单原曲
 ├── .github/workflows/
-│   └── docker-build-and-push.yml     # Tag 触发构建并推送 Docker Hub
+│   └── docker-build-and-push.yml     # Tag/push 触发构建并推送 GHCR
 ├── config.json                       # ⭐ 统一配置（前后端端口）
 ├── docker-compose.yml                # 单一容器部署（前后端一体）
 ├── Dockerfile                        # 多阶段构建（前后端 → 单一镜像）
@@ -168,10 +171,10 @@ npm run build               # 生产构建
 
 前端 `npm run dev:full` 会同时拉起前后端，端口/代理从根目录 [`config.json`](/config.json) 自动读取（devBackendPort=5005 / devPort=5175）。
 
-### 方式三：拉取预构建镜像
+### 方式三：拉取预构建镜像（GitHub Container Registry）
 
 ```bash
-docker pull ethanwwan/wan-music:latest
+docker pull ghcr.io/ethanwwan/wan-music:latest
 
 docker run -d \
   --name wan-music \
@@ -180,7 +183,7 @@ docker run -d \
   -v $(pwd)/downloads:/app/downloads \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
-  ethanwwan/wan-music:latest
+  ghcr.io/ethanwwan/wan-music:latest
 ```
 
 ## 🧪 测试
@@ -194,13 +197,14 @@ cd frontend
 npm install
 npx playwright install chromium        # 首次需要
 
-# 31 个测试覆盖：
+# 32 个测试覆盖：
 #   01 烟雾（1）
 #   02 搜索矩阵（2 线路 × 4 平台 × 3 音质 = 24）
 #   03 播放（2）
-#   04 下载（2）
+#   04 下载（3：4 平台单首 + 批量 + 抽屉）
 #   05 设置（1）
 #   06 响应式（1）
+#   08 保存按钮专项（1：验证 download 事件 + 任务清理）
 node tests/quick-run.cjs
 
 # 日志输出：tests/report/quick-run.log
@@ -254,18 +258,17 @@ npm run test -- tests/02-search.spec.js  # 单个文件
 ## 📦 版本发布
 
 ```bash
-# 创建 tag → 触发 Docker 自动构建
+# 创建 tag → 触发 GitHub Actions 自动构建
 git tag -a v1.3.0 -m "Release 1.3.0"
 git push origin v1.3.0
 
 # GitHub Actions 自动：
 #   1) 构建镜像 (linux/amd64)
-#   2) 推送到 Docker Hub（去 v 前缀，v1.3.0 → 1.3.0）
-#   3) 同步 README 到 Docker Hub 描述
-#   4) 创建 GitHub Release
+#   2) 推送到 GitHub Container Registry（去 v 前缀，v1.3.0 → 1.3.0）
+#   3) 创建 GitHub Release
 ```
 
-镜像标签策略：`v1.3.0` → `:1.3.0` + `:1.3` + `:1` + `:latest`
+镜像标签策略：`v1.3.0` → `:1.3.0` + `:latest`
 
 ## 🐳 Docker 部署
 
@@ -289,12 +292,15 @@ open http://localhost:6005
 
 ### GitHub Actions 自动发布
 
+镜像推送到 **GitHub Container Registry**（`ghcr.io/ethanwwan/wan-music`）。
+
 | 事件 | 触发结果 |
 |------|---------|
-| `git push origin v1.2.3` | 构建并推送 `:1.2.3` + `:1.2` + `:1` + `:latest` |
-| `git push origin v1.2.3-rc1` | 构建并推送 `:1.2.3-rc1`（预发布） |
+| `git push origin v1.2.3` | 构建并推送 `:1.2.3` + `:latest` |
+| `git push origin v1.2.3-rc1` | 构建并推送 `:1.2.3-rc1` + `:latest-prerelease` |
+| `git push origin main` | 构建并推送 `:main-<7位sha>`（不动 latest） |
 
-镜像支持 `linux/amd64`。
+镜像支持 `linux/amd64`。首次拉取无需登录（公开镜像）。
 
 ### 常用命令
 
