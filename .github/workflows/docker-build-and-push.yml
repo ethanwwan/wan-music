@@ -14,10 +14,11 @@ on:
     branches:
       - main
 
-# 避免重复运行
+# 避免重复运行（同一 ref 同时只跑一个）
+# 不用 cancel-in-progress：因为 push events 里可能同时匹配 branches 和 tags，
+# 取消会导致 tag 触发的构建被 main 分支构建取消
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   # GitHub Container Registry（ghcr.io）
@@ -79,12 +80,13 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # tag 策略：
           #   push tag v1.2.3      → 1.2.3, latest
-          #   push tag v1.2.3-rc1  → 1.2.3-rc1, latest-prerelease（用 prerelease 取代 latest）
-          #   push main            → main-<sha>（不动 latest）
+          #   push tag v1.2.3-rc1  → 1.2.3-rc1, latest-prerelease（rc 不覆盖 latest）
+          #   push main            → main-<sha>（main 打 latest）
           # 注：enable= 用 GHA 表达式 ${{ ... }}，不是 metadata-action 模板 {{ }}
+          # 关键：latest 必须在 main push *和* 正式版 tag 推送时都打
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-'))) }}
             type=raw,value=latest-prerelease,enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-') }}
           labels: |
             org.opencontainers.image.title=Wan Music
@@ -104,6 +106,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 关闭 SBOM / provenance 工件：避免无用的 metadata 包上传到 GHCR
+          # （公开的小项目不需要 attestation）
+          provenance: false
+          sbom: false
           # 构建缓存：加速重复构建
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -126,7 +132,11 @@ jobs:
 
       - name: Compute version (strip v prefix)
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        # 用 heredoc 而非 echo，新版 GHA 推荐多行 delimiter 写法（防注入）
+        run: |
+          {
+            echo "version=${GITHUB_REF_NAME#v}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -141,10 +151,13 @@ jobs:
             镜像已推送到 GitHub Container Registry：
 
             ```bash
-              # 一键启动（匿名拉取）
+              # 拉取并启动（公开镜像，匿名拉取）
               docker run -d \
                 --name wan-music \
                 -p 6005:6005 \
+                -v $(pwd)/cookie:/app/cookie \
+                -v $(pwd)/downloads:/app/downloads \
+                -v $(pwd)/logs:/app/logs \
                 --restart unless-stopped \
                 ghcr.io/${{ github.repository_owner }}/wan-music:${{ steps.version.outputs.version }}
 
@@ -153,7 +166,7 @@ jobs:
                 docker compose up -d
             ```
 
-            > 💡 首次拉取需登录：`echo ${{ github.token }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin`
-            > （仅对私有仓库，公开镜像可直接拉取）
+            > 💡 首次拉取需登录（仅私有仓库需要）：
+            > `docker login ghcr.io -u <username>` 然后用上面命令拉取
 
             **访问地址**：`http://localhost:6005`
