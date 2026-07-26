@@ -10,7 +10,9 @@
 
 services:
   wan-music:
-    image: ethanwwan/wan-music:latest
+    # 镜像源已迁移到 GitHub Container Registry（公开镜像，可匿名拉取）
+    # 如需锁定版本：image: ghcr.io/ethanwwan/wan-music:1.4.5
+    image: ghcr.io/ethanwwan/wan-music:latest
     container_name: wan-music
     restart: always
     user: "1000:1000"                   # 与镜像内 wanmusic 用户对齐
@@ -19,4 +21,3 @@ services:
     volumes:
       - ./cookie:/app/cookie            # 持久化 cookie（VIP 登录状态）
       - ./logs:/app/logs                # 持久化日志（容器内 logs/ 目录映射到宿主机）
-
