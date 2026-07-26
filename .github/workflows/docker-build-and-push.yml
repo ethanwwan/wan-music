@@ -55,18 +55,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # ============================================================
-      # 从 tag 提取版本号（去除 v 前缀）
-      # 例如 v1.2.3 → version=1.2.3
-      # 如果是 main 分支推送 → version=main
+      # 从 ref 提取版本号：
+      #   tag (refs/tags/vX.Y.Z) → version=X.Y.Z
+      #   main 分支推送          → version=main-<7位sha>
       # ============================================================
       - name: Compute version from ref
         id: version
         run: |
-          if startsWith(github.ref, 'refs/tags/'); then
-            TAG=${GITHUB_REF#refs/tags/}
-            VERSION=${TAG#v}
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # tag：去掉 refs/tags/v 前缀
+            VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            # main 分支用短 commit SHA，便于追溯
+            # main 分支：用短 commit SHA 标识
             VERSION="main-${GITHUB_SHA::7}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
