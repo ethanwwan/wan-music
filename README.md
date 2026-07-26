@@ -3,6 +3,8 @@
 > 多平台音乐搜索、解析、下载工具
 
 [![GitHub Container Registry](https://ghcr.io/ethanwwan/wan-music)](https://github.com/ethanwwan/wan-music/pkgs/container/wan-music)
+[![Latest Release](https://img.shields.io/github/v/release/ethanwwan/wan-music?sort=semver)](https://github.com/ethanwwan/wan-music/releases/latest)
+[![Build Status](https://github.com/ethanwwan/wan-music/actions/workflows/docker-build-and-push.yml/badge.svg)](https://github.com/ethanwwan/wan-music/actions/workflows/docker-build-and-push.yml)
 
 ## ✨ 特性
 
