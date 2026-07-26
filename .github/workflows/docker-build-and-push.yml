@@ -102,7 +102,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
+          # 多架构支持：x86_64 (普通服务器 / 桌面) + arm64 (Apple Silicon / AWS Graviton)
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

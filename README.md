@@ -211,7 +211,7 @@ open http://localhost:6005
 | `git push origin v1.2.3-rc1` | 构建并推送 `:1.2.3-rc1` + `:latest-prerelease` |
 | `git push origin main` | 构建并推送 `:main-<7位sha>`（不动 latest） |
 
-镜像支持 `linux/amd64`。首次拉取无需登录（公开镜像）。
+镜像支持 `linux/amd64` + `linux/arm64`（Apple Silicon / AWS Graviton 原生支持）。首次拉取无需登录（公开镜像）。
 
 ### 常用命令
 
