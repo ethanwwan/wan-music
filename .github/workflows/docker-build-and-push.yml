@@ -68,3 +68,20 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            ## 🐳 Docker 镜像 (GHCR)
+
+            镜像已推送到 GitHub Container Registry：
+
+            ```bash
+              docker run -d \
+                --name wan-music \
+                -p 6005:6005 \
+                -v $(pwd)/cookie:/app/cookie \
+                -v $(pwd)/downloads:/app/downloads \
+                -v $(pwd)/logs:/app/logs \
+                --restart unless-stopped \
+                ghcr.io/${{ github.repository_owner }}/wan-music:${{ github.ref_name }}
+            ```
+
+            **访问地址**：`http://localhost:6005`
