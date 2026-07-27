@@ -18,7 +18,7 @@
   "dependencies": {
     "ant-design-vue": "^4.2.6",
     "playwright": "^1.61.1",
-    "vue": "^3.5.18"
+    "vue": "^3.5.40"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.1.4",
