@@ -161,18 +161,19 @@ def search_sse():
     source = request.args.get('source', 'netease')
     timeout = int(request.args.get('timeout', 20))
     quality = request.args.get('quality', 'lossless')
+    line = request.args.get('line', '1')
 
     if not keyword:
         return jsonify(APIResponse.error("请输入搜索关键词", 400))
 
-    logger.info(f"/search/sse 请求: keyword={keyword!r}, source={source}, timeout={timeout}")
+    logger.info(f"/search/sse 请求: keyword={keyword!r}, source={source}, line={line} (musicdl), timeout={timeout}")
 
-    from sources.musicdl_source.streaming import search_stream
+    from sources.musicdl_source.streaming import search_stream_concurrent
 
     @stream_with_context
     def generate():
         yield 'retry: 10000\n\n'
-        for event in search_stream(keyword, source, timeout=timeout, quality=quality):
+        for event in search_stream_concurrent(keyword, source, timeout=timeout, quality=quality):
             yield f'event: {event["type"]}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n'
 
     return Response(

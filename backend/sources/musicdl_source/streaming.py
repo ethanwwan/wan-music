@@ -9,7 +9,9 @@
 import contextlib
 import json
 import logging
+import queue
 import sys
+import threading
 import time
 
 from . import converter
@@ -506,3 +508,228 @@ def search_stream(keyword: str, source: str, timeout: int = PER_SOURCE_TIMEOUT, 
             pass
 
     yield {'type': 'done', 'count': len(songs)}
+
+
+# ---------------------------------------------------------------------------
+# 参考 https://github.com/CharlesPikachu/musicdl/tree/master/examples/claudeai-modern-web-music-player
+# 的 search_stream 改写：
+#   - 每个 page URL 一个后台 daemon 线程
+#   - 主线程以 120ms 节奏轮询共享队列，emit 每一首新结果
+#   - 全局 hard timeout（默认 PER_SOURCE_TIMEOUT=20s）作 watchdog，
+#     防止某个平台触发反爬拖死 worker（Gunicorn 默认 worker_timeout=30s）
+#   - 共享 threadsafe queue.Queue：跨线程通讯，避免锁复杂度
+# ---------------------------------------------------------------------------
+
+def _fetch_one_page(platform_client, is_get, page_url, extra_kwargs, page_no,
+                    out_queue, seen_ids, seen_lock):
+    """单 page 后台线程：拉一页搜索结果、把每一首歌推入 out_queue。
+
+    异常一律 swallow（参考项目 _safe_search 同款兜底），不让一个失败 page 杀死整个搜索。
+    """
+    try:
+        client_name = platform_client.__class__.__name__
+        for attempt in range(3):
+            try:
+                # 重置 session headers/cookies（避免上一页 stale 状态污染本页）
+                platform_client.default_headers = platform_client.default_search_headers
+                if hasattr(platform_client, 'default_search_cookies'):
+                    platform_client.default_cookies = platform_client.default_search_cookies
+                platform_client._initsession()
+
+                if is_get:
+                    resp = platform_client.get(page_url, **extra_kwargs)
+                else:
+                    resp = platform_client.post(page_url, **extra_kwargs)
+
+                if resp.status_code != 200:
+                    logger.warning(f"page {page_no} 状态码 {resp.status_code} (attempt {attempt+1})")
+                    continue
+
+                raw_data = resp.json()
+                songs = _parse_songs(raw_data, client_name)
+                logger.info(f"search_via_http page {page_no}: 返回 {len(songs)} 条结果 (attempt {attempt+1})")
+
+                # 元数据缓存（与原 search_via_http 保持一致，供后续 _find_in_cache 使用）
+                try:
+                    cache_key = f'{source}:{keyword}'
+                    cache_entries = []
+                    for s in songs:
+                        sid_str = str(_get_ci(s, 'id', 'ID', 'mid', 'MUSICRID', 'songmid') or '')
+                        if not sid_str:
+                            continue
+                        if source == 'kuwo' and sid_str.startswith('MUSIC_'):
+                            sid_str = sid_str.removeprefix('MUSIC_')
+                        song_name = str(_get_ci(s, 'name', 'NAME', 'SongName', 'title', 'songname', 'SONGNAME') or '')
+                        if not song_name:
+                            continue
+                        cache_entries.append({
+                            'identifier': str(sid_str),
+                            'song_name': song_name,
+                            'singers': _extract_singers(s, source),
+                            'album': _extract_album(s),
+                            'ext': 'mp3',
+                            'file_size_bytes': 0,
+                            'duration_s': _get_ci_int(s, 'duration', 'DURATION', 'dt', 'interval') / 1000 or 0,
+                            'bitrate': 0,
+                            'lyric': '',
+                            'cover_url': _extract_cover(s, source),
+                            'source': source,
+                            'download_url': '',
+                            'root_source': '',
+                        })
+                        # 原始响应缓存：供 _parsewiththirdpartapis 快速 URL 解析
+                        _raw_search_cache[f'{source}:{sid_str}'] = s
+                    if cache_entries:
+                        _search_cache[cache_key] = cache_entries
+                except Exception:
+                    pass
+
+                for s in songs:
+                    sid = str(_get_ci(s, 'id', 'ID', 'mid', 'MUSICRID', 'songmid') or '')
+                    if not sid:
+                        continue
+                    if source_is_kuwo(platform_client, sid):
+                        sid = sid.removeprefix('MUSIC_')
+                    with seen_lock:
+                        if sid in seen_ids:
+                            continue
+                        seen_ids.add(sid)
+                    # 平台 client 没有 .source 属性；搜索 keyword/sid 都从 raw dict 已经能拿到
+                    out_queue.put(('result', s))
+                return  # 这一页成功，退出重试
+            except Exception as e:
+                logger.warning(f"page {page_no} 异常 (attempt {attempt+1}): {e}")
+                continue
+        # 三次都失败：emit 一个空 page_done 让主线程知道这条 page 结束了
+        out_queue.put(('page_done', page_no))
+    except Exception:
+        # 参考项目 _safe_search 的兜底：任何未捕获异常一律静默
+        out_queue.put(('page_done', page_no))
+
+
+def source_is_kuwo(platform_client, sid):
+    """轻微工具：判断是不是 kuwo 的 MUSIC_ 前缀 ID。"""
+    return sid.startswith('MUSIC_') and 'Kuwo' in platform_client.__class__.__name__
+
+
+def search_stream_concurrent(keyword: str, source: str, timeout: int = PER_SOURCE_TIMEOUT,
+                              quality: str = 'lossless', poll_interval: float = 0.12):
+    """真·流式搜索：参考 claudeai-modern-web-music-player 的并发轮询模型。
+
+    Args:
+        keyword:    搜索词
+        source:     'netease'/'qq'/'kugou'/'kuwo'
+        timeout:    硬性总超时（默认 PER_SOURCE_TIMEOUT=20s）
+        quality:    给音质标记传给 _raw_to_search_song（默认 lossless）
+        poll_interval:  主线程轮询 out_queue 的间隔（秒，默认 0.12）
+    """
+    client_name = PLATFORM_MAP.get(source)
+    if not client_name:
+        logger.warning(f"search_stream_concurrent: 未知 source={source!r}")
+        yield {'type': 'source_done', 'count': 0, 'timed_out': False}
+        yield {'type': 'done', 'count': 0}
+        return
+
+    client = _get_client(source)
+    if not client:
+        yield {'type': 'source_done', 'count': 0, 'timed_out': False}
+        yield {'type': 'done', 'count': 0}
+        return
+
+    platform_client = client.music_clients.get(client_name)
+    if not platform_client:
+        yield {'type': 'source_done', 'count': 0, 'timed_out': False}
+        yield {'type': 'done', 'count': 0}
+        return
+
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            search_urls = platform_client._constructsearchurls(
+                keyword=keyword, rule={}, request_overrides={}
+            )
+    except Exception as e:
+        logger.error(f"构造搜索 URL 失败: {e}")
+        yield {'type': 'source_done', 'count': 0, 'timed_out': False}
+        yield {'type': 'done', 'count': 0}
+        return
+
+    if not search_urls:
+        yield {'type': 'source_done', 'count': 0, 'timed_out': False}
+        yield {'type': 'done', 'count': 0}
+        return
+
+    logger.info(f"search_stream_concurrent: {len(search_urls)} 个 page URL, keyword={keyword!r}, source={source}, timeout={timeout}s")
+
+    out_queue = queue.Queue()
+    seen_ids = set()
+    seen_lock = threading.Lock()
+
+    # 启动每个 page 的后台线程
+    threads = []
+    for idx, url_info in enumerate(search_urls):
+        if isinstance(url_info, str):
+            page_url = url_info
+            page_no = idx + 1
+            is_get = True
+            extra_kwargs = {}
+        else:
+            page_url = url_info.pop('url', '')
+            page_no = url_info.pop('page', url_info.pop('page_no', idx + 1))
+            is_get = False
+            extra_kwargs = url_info
+
+        logger.info(f"search_stream_concurrent URL {idx+1}: {page_url}")
+        t = threading.Thread(
+            target=_fetch_one_page,
+            args=(platform_client, is_get, page_url, extra_kwargs, page_no,
+                  out_queue, seen_ids, seen_lock),
+            daemon=True,
+        )
+        t.start()
+        threads.append(t)
+
+    deadline = time.time() + timeout
+    total = 0
+    pages_done = 0
+    total_pages = len(threads)
+    timed_out = False
+
+    while True:
+        # 非阻塞轮询 out_queue
+        try:
+            while True:
+                kind, payload = out_queue.get_nowait()
+                if kind == 'result':
+                    raw_song = payload
+                    try:
+                        song = _raw_to_search_song(raw_song, source, quality=quality)
+                    except Exception:
+                        continue
+                    total += 1
+                    yield {'type': 'result', 'song': song}
+                elif kind == 'page_done':
+                    pages_done += 1
+                    logger.info(f"search_stream_concurrent: page_done {payload}/{total_pages} (累计 {total} 条)")
+        except queue.Empty:
+            pass
+
+        alive = any(t.is_alive() for t in threads)
+        if (pages_done >= total_pages and not alive) or time.time() > deadline:
+            if time.time() > deadline and alive:
+                timed_out = True
+                logger.warning(
+                    f"search_stream_concurrent watchdog 超时 {timeout}s，发出 {total} 条"
+                )
+            break
+
+        time.sleep(poll_interval)
+
+    yield {'type': 'source_done', 'count': total, 'timed_out': timed_out}
+
+    # 清理 musicdl 自动创建的输出目录
+    try:
+        _cleanup_output(client)
+    except Exception:
+        pass
+
+    yield {'type': 'done', 'count': total}
