@@ -572,6 +572,7 @@ def _fetch_one_page(platform_client, is_get, page_url, extra_kwargs, page_no,
                         seen_ids.add(sid)
                     # 平台 client 没有 .source 属性；搜索 keyword/sid 都从 raw dict 已经能拿到
                     out_queue.put(('result', s))
+                out_queue.put(('page_done', page_no))  # ← 新增：成功 page 也通知主线程
                 return  # 这一页成功，退出重试
             except Exception as e:
                 logger.warning(f"page {page_no} 异常 (attempt {attempt+1}): {e}")
