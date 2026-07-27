@@ -168,6 +168,7 @@ def search_sse():
 
     logger.info(f"/search/sse 请求: keyword={keyword!r}, source={source}, line={line} (musicdl), timeout={timeout}")
 
+    # 真·并发流式 (每个 page URL 一个 daemon 线程，主线程轮询 emit + 20s hard watchdog)
     from sources.musicdl_source.streaming import search_stream_concurrent
 
     @stream_with_context

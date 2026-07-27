@@ -486,30 +486,6 @@ def search_via_http(keyword: str, source: str, quality: str = 'lossless') -> lis
     return results[:SEARCH_SIZE]
 
 
-def search_stream(keyword: str, source: str, timeout: int = PER_SOURCE_TIMEOUT, quality: str = 'lossless'):
-    """流式搜索结果，逐条 yield（基于 HTTP 直接搜索，不解析 URL）"""
-    try:
-        songs = search_via_http(keyword, source, quality=quality)
-    except Exception as e:
-        logger.error(f"search_via_http 异常: {e}", exc_info=True)
-        songs = []
-
-    for s in songs:
-        yield {'type': 'result', 'song': s}
-
-    yield {'type': 'source_done', 'count': len(songs)}
-
-    # 清理 musicdl 自动创建的输出目录
-    client = _get_client(source)
-    if client:
-        try:
-            _cleanup_output(client)
-        except Exception:
-            pass
-
-    yield {'type': 'done', 'count': len(songs)}
-
-
 # ---------------------------------------------------------------------------
 # 参考 https://github.com/CharlesPikachu/musicdl/tree/master/examples/claudeai-modern-web-music-player
 # 的 search_stream 改写：
