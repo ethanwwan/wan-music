@@ -211,7 +211,7 @@ open http://localhost:6005
 |------|---------|
 | `git push origin v1.2.3` | 构建并推送 `:1.2.3` + `:latest` |
 | `git push origin v1.2.3-rc1` | 构建并推送 `:1.2.3-rc1` + `:latest-prerelease` |
-| `git push origin main` | 构建并推送 `:main-<7位sha>`（不动 latest） |
+| Actions 页面 → Run workflow | 手动重跑指定 tag（可选填 `tag` 输入） |
 
 镜像支持 `linux/amd64` + `linux/arm64`（Apple Silicon / AWS Graviton 原生支持）。首次拉取无需登录（公开镜像）。
 

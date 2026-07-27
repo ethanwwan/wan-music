@@ -1,43 +1,10 @@
 version: 2
 updates:
-  # ============================================================
-  # GitHub Actions：自动更新 workflow 里 pinned 的 action 版本
-  #   - group: 合并同 update_type，避免每晚 5 个 PR
-  #   - schedule: 周一早上 6 点（北京时间 14 点）
-  # ============================================================
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Asia/Shanghai"
-    labels:
-      - "dependencies"
-      - "ci"
-    groups:
-      github-actions:
-        patterns:
-          - "*"
-
-  # ============================================================
-  # Frontend npm deps：保持 Vue / Vite / Ant Design 等不过时
-  # ============================================================
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Asia/Shanghai"
-    labels:
-      - "dependencies"
-      - "frontend"
-    # 排除掉锁文件：依赖我们自己跑 npm install 维护
-    # （避免 per-PR 重新生成 lock 后 merge 冲突）
-    open-pull-requests-limit: 5
-    groups:
-      patch-and-minor:
-        update-types:
-          - "minor"
-          - "patch"
