@@ -10,7 +10,7 @@
 
 services:
   wan-music:
-    image: ghcr.io/ethanwwan/wan-music:1.4.8
+    image: ghcr.1ms.run/ethanwwan/wan-music:latest
     container_name: wan-music
     restart: always
     user: "1000:1000"                   # 与镜像内 wanmusic 用户对齐
