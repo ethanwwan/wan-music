@@ -78,25 +78,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # GHCR package 首次 push 默认 private (官方文档明确).
-      # visibility 是 package 级别的, 不跟 tag 走, 改一次永久生效.
-      # 但 GITHUB_TOKEN 没有 admin permission on the package, 改不了 visibility
-      # (PATCH /user/packages/container/{name} 会返回 404), 所以这里只验证不修改.
-      # 真要改: GitHub web UI → Packages → wan-music → Package settings →
-      #         Danger Zone → Change package visibility → Public (一次性).
-      - name: Verify GHCR package visibility
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VISIBILITY=$(gh api /user/packages/container/wan-music --jq '.visibility // "unknown"' 2>/dev/null || echo "api_error")
-          if [ "$VISIBILITY" = "public" ]; then
-            echo "✓ GHCR package visibility=public (anonymous pull OK)"
-          else
-            echo "::warning::GHCR package visibility=$VISIBILITY — 匿名 docker pull 会失败"
-            echo "::warning::请到 GitHub → Packages → wan-music → Package settings → Danger Zone → Change package visibility → Public"
-          fi
-
   release:
     needs: build
     if: github.event_name == 'push'
