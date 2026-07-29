@@ -368,11 +368,13 @@ export const unifiedSearch = async (keyword, sources = [getCurrentDataSource()],
 // ==================== 批量下载（异步 + SSE） ====================
 
 export const startBatchTask = async (items, name = 'songs', opts = {}) => {
-  const resp = await fetch('/download/batch/start', {
+  // 用 fetchWithTimeout (10s) 兜底, 避免后端 hang 导致按钮永久 loading
+  // 后端 /download/batch/start 应在 thread.start() 后立刻 return, 正常 100-500ms
+  const resp = await fetchWithTimeout('/download/batch/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items, name, settings: opts, line: settings.musicLine ?? 0 })
-  })
+  }, 10000)
   if (!resp.ok) {
     let msg = '启动批量下载失败'
     try { const err = await resp.json(); msg = err.message || msg } catch { /* 非 JSON */ }

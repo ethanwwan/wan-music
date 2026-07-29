@@ -169,7 +169,29 @@ class MusicService:
         # line=1: 走 musicdl 适配器
         if line == 1:
             sid = song_id if isinstance(song_id, str) else song_id.get('id', '')
-            return musicdl_adapter.get_song(sid, platform or 'netease', quality=quality)
+            plat = platform or 'netease'
+
+            # musicdl 每次解析 URL 都跑一遍 _parsewiththirdpartapis/_parsewithofficialapiv1，
+            # 多次调用浪费网络。按"请求档→降级链"只解一次，再选 level 标签：
+            # 1) 第一次用请求档解析（驱动 musicdl 写出 quality_map + download_url）
+            info = musicdl_adapter.get_song(sid, plat, quality=quality)
+            if info and info.get('url'):
+                return info
+
+            # 2) 解析失败：按降级链重试其他档位的截断索引（部分平台 hires 截断=不解析）
+            _FALLBACK_CHAIN = ('hires', 'lossless', 'exhigh', 'standard')
+            requested = quality if quality in _FALLBACK_CHAIN else 'lossless'
+            for q in _FALLBACK_CHAIN:
+                if q == requested:
+                    continue
+                info = musicdl_adapter.get_song(sid, plat, quality=q)
+                if info and info.get('url'):
+                    # 标记降级信息，方便上层展示 & 前端识别
+                    info['requested_level'] = requested
+                    info['level_fallback'] = True
+                    return info
+            # 全档都拿不到 URL：返回 None，让上层走 _build_detailed_error
+            return None
 
         return get_song(song_id, quality, platform, quality_map=quality_map, with_lyric=with_lyric)
 
