@@ -78,6 +78,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # GHCR package 默认 visibility 取决于历史 push 设置, 这里强制设为 public
+      # 公共镜像(repo 是 public)才允许匿名拉取
+      - name: Make GHCR package public
+        if: github.event_name == 'push'  # 仅 tag push 设 public, workflow_dispatch 可选
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1.4.2 等老镜像也是 private, 改一次全局生效
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/wan-music \
+            -f visibility=public \
+            || echo "::warning::Failed to set package visibility (可能 workflow 缺 packages scope, 需要 repo admin 在 Settings 加)"
+          # 验证
+          gh api /user/packages/container/wan-music --jq '.visibility // "unknown"'
+
   release:
     needs: build
     if: github.event_name == 'push'
