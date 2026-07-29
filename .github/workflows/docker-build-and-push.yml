@@ -35,9 +35,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # 单 tag (push: tag 名称；workflow_dispatch: 手动输入)
-          # latest: 仅非 prerelease (ref name 不含 '-')
-          # latest-prerelease: 仅 prerelease
+          # 镜像 tag: 去掉 ref name / 输入 tag 的 'v' 前缀，与 semver 一致
+          #   push tag v1.4.7 → image tag 1.4.7
+          #   workflow_dispatch tag=v1.4.7 → image tag 1.4.7
           tags: |
             type=raw,value=${{ github.event.inputs.tag || github.ref_name }}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') && !contains(github.event.inputs.tag, '-') }}
