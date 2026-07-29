@@ -10,9 +10,10 @@
 
 services:
   wan-music:
-    # 镜像源已迁移到 GitHub Container Registry（公开镜像，可匿名拉取）
-    # 如需锁定版本：image: ghcr.io/ethanwwan/wan-music:1.4.5
-    image: ghcr.1ms.run/ethanwwan/wan-music:latest
+    # 镜像源在 GitHub Container Registry（公开镜像，可匿名拉取）。
+    # 注意: ghcr.1ms.run 是第三方代理, 新 tag 可能未及时同步. 推荐直接用源头 ghcr.io.
+    # 锁定到 1.4.8 (含 kugou retry-on-empty + SSE 4-平台 E2E 修复)
+    image: ghcr.io/ethanwwan/wan-music:1.4.8
     container_name: wan-music
     restart: always
     user: "1000:1000"                   # 与镜像内 wanmusic 用户对齐
