@@ -30,20 +30,32 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     FLASK_APP=main.py
 
-# 安装系统依赖（curl 用于健康检查 + gcc 用于编译含 C 扩展的 pip 包）
+# 单独复制 requirements.txt 利用 Docker 缓存（必须在 RUN 之前）
+COPY backend/requirements.txt /tmp/requirements.txt
+
+# 安装系统依赖（curl 用于健康检查 + gcc/libffi-dev 用于编译 cryptography 等含 C 扩展的包）
+# 注意：gcc 只在 pip install 阶段需要，装完依赖后立即清理，最终镜像不再保留
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         gcc \
-    && rm -rf /var/lib/apt/lists/*
+        libffi-dev \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    # 精简：musicdl 装了一堆项目用不到的传递依赖
+    # nodejs-wheel-binaries (197M): 内嵌的 Node.js 二进制，仅 youtubeutils.py 在解析 YouTube 时才用
+    # av (44M, PyAV+ffmpeg): 仅 tidalutils.py 在 TYPE_CHECKING 中引用，运行时不需要
+    # 项目平台仅 netease/qq/kugou/kuwo，YouTube/Apple/Tidal 均不用 → 可安全删除
+    # 保留 ytmusicapi + pywidevine 是因为 musicdl.modules.sources 在 import 时会拉 apple/youtube 模块
+    # 仅删元数据 + 实际二进制目录，保留包目录占位让 import 不报错（已在本地测试过）
+    && pip uninstall -y nodejs-wheel-binaries av \
+    && rm -rf /usr/local/lib/python3.11/site-packages/nodejs_wheel \
+    && apt-get purge -y --auto-remove gcc libffi-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /root/.cache /tmp/requirements.txt
 
 # 创建非 root 用户 wanmusic（固定 UID=1000，便于 host 挂载 volume 时对齐）
 RUN groupadd -r -g 1000 wanmusic && useradd -rm -u 1000 -g wanmusic wanmusic
 
 WORKDIR /app
-
-# 单独复制 requirements.txt 利用 Docker 缓存
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制后端代码
 COPY backend/ ./
